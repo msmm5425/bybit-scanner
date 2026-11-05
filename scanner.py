@@ -152,4 +152,25 @@ def analyze_symbol(t):
     symbol = t["symbol"]
     df15 = get_klines(symbol, "15", 300)
     df5 = get_klines(symbol, "5", 300)
-    if len(df15
+    if len(df15) < 300 or len(df5) < 300: return None
+
+    df15 = calc_indicators(df15)
+    df5 = calc_indicators(df5)
+    last15 = df15.iloc[-1]
+    last5 = df5.iloc[-1]
+    price = t["lastPrice"]
+
+    oi_chg = get_oi_change_24h(symbol)
+    ob_ratio = get_orderbook_imbalance(symbol)
+
+    score = 60
+    if last15["ma5"] > last15["ma20"] > last15["ma50"]: score += 8
+    if last15["ma50"] > last15["ma120"] > last15["ma200"]: score += 5
+    if last5["ma5"] > last5["ma20"] > last5["ma50"]: score += 5
+    if last15["obv"] > last15["obv_ma10"]: score += 4
+    if oi_chg >= 5.0: score += 6
+    elif oi_chg > 0: score += 2
+    if t["fundingRate"] <= 0.01: score += 5
+    if t["fundingRate"] < 0: score += 3
+    if (df5["volume"].iloc[-15:] > (df5["vma20"].iloc[-15:] * 3.5)).any(): score += 4
+    if (last5["volume"] < last5["vma5"]) or (last15["volume"] < last
