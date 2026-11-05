@@ -214,7 +214,71 @@ def analyze_symbol(t):
         "oi_chg": oi_chg, "status": status, "entry_low": entry_low, "entry_high": entry_high,
         "avg_entry": avg_entry, "stop_price": stop_price, "sl_pct": sl_pct, "tps": tps
     }
-send_telegram("🔔 [테스트 알림] 바이비트 30분 스캐너 텔레그램 연동이 완벽하게 성공했습니다!")
+
 def main():
+    # 텔레그램 연동 테스트 메시지 강제 발송
+    send_telegram("🔔 [테스트] 바이비트 30분 스캐너 텔레그램 연동이 성공했습니다!")
+
     kst = datetime.timezone(datetime.timedelta(hours=9))
-    now_dt
+    now_dt = datetime.datetime.now(kst)
+    now_str = now_dt.strftime("%Y.%m.%d")
+    time_str = now_dt.strftime("%Y-%m-%d %H:%M KST")
+
+    state = load_state()
+    binance_map = get_binance_futures_map()
+    tickers = get_active_bybit_tickers(binance_map)
+
+    current_qualified = {}
+    for t in tickers:
+        try:
+            r = analyze_symbol(t)
+            if r:
+                current_qualified[r["symbol"]] = r
+        except Exception:
+            continue
+
+    if not current_qualified:
+        print("90점 이상 포착된 종목 없음. 알림 생략.")
+        return
+
+    new_state = {}
+    lines = [f"🚨 [바이비트 90점 이상 실시간 포착 브리핑] ({time_str})\n"]
+
+    for symbol, r in current_qualified.items():
+        old_data = state.get(symbol, {})
+        notified_pullback = old_data.get("notified_pullback", False)
+        notified_sl = old_data.get("notified_sl", False)
+
+        if old_data and not notified_sl and r["price"] <= r["stop_price"]:
+            send_telegram(f"🛑 [손절가 도달 경고]\n${r['ticker']} ({symbol}) 현재가 {fmt_price(r['price'], r['price'])} USDT가 설정된 손절가({fmt_price(r['stop_price'], r['price'])})에 도달했습니다! 즉시 대응하세요.")
+            notified_sl = True
+
+        is_pullback_now = "즉시 분할 진입 구간" in r["status"]
+        if old_data and not notified_pullback and is_pullback_now:
+            send_telegram(f"🎯 [눌림목 컨펌 완료 알림]\n${r['ticker']} ({symbol}) 요청하신 지점의 눌림목이 진행·완료되었습니다! (현재가: {fmt_price(r['price'], r['price'])} USDT)")
+            notified_pullback = True
+
+        if not old_data:
+            lines.append(f"■ ${r['ticker']} ({r['symbol']} 신규 포착) — [전략 점수: {r['score']}점]")
+            lines.append(f"- 현황 진단: {r['status']}")
+            lines.append(f"- 현재가: {fmt_price(r['price'], r['price'])} USDT ({r['chg']:+.2f}%) | 펀딩비: {r['funding']:+.4f}% | 24h OI: {r['oi_chg']:+.2f}%")
+            lines.append(f"- 분할 진입가: {fmt_price(r['entry_low'], r['price'])}~{fmt_price(r['entry_high'], r['price'])} USDT")
+            lines.append(f"- 동적 손절가: {fmt_price(r['stop_price'], r['price'])} USDT (예상 약 -{r['sl_pct']}%)")
+            for idx, (tp_val, tp_pct, reason) in enumerate(r["tps"], 1):
+                lines.append(f"- {idx}차 목표가: {fmt_price(tp_val, r['price'])} USDT (예상 약 +{tp_pct}% / {reason})")
+            lines.append("")
+
+        new_state[symbol] = {
+            "notified_initial": True,
+            "notified_pullback": notified_pullback,
+            "notified_sl": notified_sl,
+            "stop_price": r["stop_price"]
+        }
+
+    if len(new_state) > 0 and len(lines) > 1:
+        send_telegram("\n".join(lines))
+
+    save_state(new_state)
+
+if __name__ == "__main__":
+    main()
