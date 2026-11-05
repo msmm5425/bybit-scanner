@@ -1,32 +1,13 @@
 import os
-import json
 import datetime
 import requests
 import pandas as pd
 import numpy as np
 
 BYBIT_URL = "https://api.bybit.com"
-BINANCE_URL = "https://fapi.binance.com"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-STATE_FILE = "bot_state.json"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-
-def load_state():
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
-
-def save_state(state):
-    try:
-        with open(STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(state, f)
-    except Exception:
-        pass
 
 def send_telegram(text):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -48,23 +29,12 @@ def fmt_price(val, ref):
     elif ref >= 0.01: return f"{val:.5f}"
     else: return f"{val:.6f}"
 
-def get_binance_map():
-    try:
-        res = requests.get(f"{BINANCE_URL}/fapi/v1/ticker/24hr", headers=HEADERS, timeout=10)
-        data = res.json()
-        if isinstance(data, list):
-            return {x["symbol"]: float(x.get("quoteVolume", 0)) for x in data if isinstance(x, dict) and "symbol" in x}
-    except Exception:
-        pass
-    return {}
-
 def get_bybit_tickers():
     try:
         url = f"{BYBIT_URL}/v5/market/tickers?category=linear"
         res = requests.get(url, headers=HEADERS, timeout=10)
-        data = res.json()
         lst = []
-        for x in data.get("result", {}).get("list", []):
+        for x in res.json().get("result", {}).get("list", []):
             sym = x["symbol"]
             if not sym.endswith("USDT") or sym.startswith("1000000"): continue
             turnover = float(x.get("turnover24h", 0))
@@ -76,17 +46,16 @@ def get_bybit_tickers():
                 "symbol": sym, "lastPrice": price,
                 "price24hPcnt": float(x.get("price24hPcnt", 0)) * 100,
                 "fundingRate": float(x.get("fundingRate", 0)) * 100,
-                "highPrice24h": float(x.get("highPrice24h", 0)),
-                "lowPrice24h": low, "turnover24h": turnover
+                "turnover24h": turnover
             })
         lst.sort(key=lambda k: k["turnover24h"], reverse=True)
-        return lst[:65]
+        return lst[:50]
     except Exception:
         return []
 
 def get_klines(symbol):
     try:
-        url = f"{BYBIT_URL}/v5/market/kline?category=linear&symbol={symbol}&interval=15&limit=300"
+        url = f"{BYBIT_URL}/v5/market/kline?category=linear&symbol={symbol}&interval=15&limit=200"
         res = requests.get(url, headers=HEADERS, timeout=10)
         rows = res.json().get("result", {}).get("list", [])
         if not rows: return pd.DataFrame()
@@ -97,38 +66,21 @@ def get_klines(symbol):
     except Exception:
         return pd.DataFrame()
 
-def get_oi_chg(symbol):
-    try:
-        url = f"{BYBIT_URL}/v5/market/open-interest?category=linear&symbol={symbol}&intervalTime=1h&limit=25"
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        lst = res.json().get("result", {}).get("list", [])
-        if len(lst) >= 24:
-            now_oi = float(lst[0]["openInterest"])
-            old_oi = float(lst[-1]["openInterest"])
-            if old_oi > 0: return ((now_oi - old_oi) / old_oi) * 100
-    except Exception:
-        pass
-    return 0.0
-
 def analyze(t):
     sym = t["symbol"]
     df = get_klines(sym)
-    if len(df) < 200: return None
+    if len(df) < 100: return None
 
-    for m in [5, 20, 50, 120, 200]: df[f"ma{m}"] = df["close"].rolling(m).mean()
+    for m in [5, 20, 50]: df[f"ma{m}"] = df["close"].rolling(m).mean()
     df["vma5"] = df["volume"].rolling(5).mean()
-    df["vma10"] = df["volume"].rolling(10).mean()
     
     last = df.iloc[-1]
     price = t["lastPrice"]
-    oi = get_oi_chg(sym)
 
     score = 65
-    if last["ma5"] > last["ma20"] > last["ma50"]: score += 10
-    if oi >= 5.0: score += 8
-    elif oi > 0: score += 3
-    if t["fundingRate"] <= 0.01: score += 5
-    if last["volume"] < last["vma5"]: score += 7
+    if last["ma5"] > last["ma20"] > last["ma50"]: score += 15
+    if t["fundingRate"] <= 0.01: score += 10
+    if last["volume"] < last["vma5"]: score += 10
 
     score = min(int(round(score)), 98)
     if score < 90: return None
@@ -138,14 +90,38 @@ def analyze(t):
     if abs(price - ma20) / ma20 <= 0.015:
         status = f"즉시 분할 진입 구간 (MA 20선 지지 및 거래량 건조)"
 
-    sl_price = price * 0.97
-    tp1 = price * 1.06
-    tp2 = price * 1.09
-    tp3 = price * 1.12
-    tp4 = price * 1.16
-
     return {
         "symbol": sym, "ticker": sym.replace("USDT", ""), "score": score,
-        "price": price, "chg": t["price24hPcnt"], "funding": t["fundingRate"],
-        "oi_chg": oi, "status": status, "stop_price": sl_price,
-        "tps
+        "price": price, "chg": t["price24hPcnt"], "funding": t["fundingRate"], "status": status
+    }
+
+def main():
+    send_telegram("🔔 [테스트] 바이비트 30분 자동 감시 스캐너가 성공적으로 가동되었습니다!")
+    
+    kst = datetime.timezone(datetime.timedelta(hours=9))
+    time_str = datetime.datetime.now(kst).strftime("%Y-%m-%d %H:%M KST")
+
+    tickers = get_bybit_tickers()
+    qualified = []
+    for t in tickers:
+        try:
+            r = analyze(t)
+            if r: qualified.append(r)
+        except Exception:
+            continue
+
+    if not qualified:
+        print("90점 이상 포착된 종목 없음. 대기 중.")
+        return
+
+    lines = [f"🚨 [바이비트 90점 이상 실시간 포착 브리핑] ({time_str})\n"]
+    for r in qualified:
+        lines.append(f"■ ${r['ticker']} — [전략 점수: {r['score']}점]")
+        lines.append(f"- 현황 진단: {r['status']}")
+        lines.append(f"- 현재가: {fmt_price(r['price'], r['price'])} USDT ({r['chg']:+.2f}%) | 펀딩비: {r['funding']:+.4f}%")
+        lines.append("")
+
+    send_telegram("\n".join(lines))
+
+if __name__ == "__main__":
+    main()
