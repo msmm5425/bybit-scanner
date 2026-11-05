@@ -52,7 +52,8 @@ def get_top5_bybit_gainers():
             sym = x.get("symbol", "")
             if not sym.endswith("USDT") or sym.startswith("1000000"):
                 continue
-            chg = float(x.get("priceChangePercent", 0)) * 100
+            pcnt_str = x.get("price24hPcnt", "0")
+            chg = float(pcnt_str) * 100 if pcnt_str else 0.0
             last_p = float(x.get("lastPrice", 0))
             turnover = float(x.get("turnover24h", 0))
             if last_p <= 0:
@@ -62,10 +63,9 @@ def get_top5_bybit_gainers():
                 "price": last_p,
                 "chg": chg,
                 "turnover": turnover,
-                "funding": float(x.get("fundingRate", 0)) * 100,
-                "oi_val": float(x.get("openInterestValue", 0))
+                "funding": float(x.get("fundingRate", 0)) * 100 if x.get("fundingRate") else 0.0,
+                "oi_val": float(x.get("openInterestValue", 0)) if x.get("openInterestValue") else 0.0
             })
-        # 상승률(chg) 기준 Top 5 추출
         valid.sort(key=lambda k: k["chg"], reverse=True)
         return valid[:5]
     except Exception as e:
@@ -90,18 +90,23 @@ def get_bybit_klines(symbol):
             df[c] = df[c].astype(float)
         df["ts"] = df["ts"].astype(int)
         return df
-    except Exception:
+    except Exception as e:
+        print(f"Kline error for {symbol}: {e}")
         return pd.DataFrame()
 
 
 def analyze_pre_surge(item):
     sym = item["symbol"]
     df = get_bybit_klines(sym)
-    if len(df) < 150:
+    if len(df) < 50:
         return None
 
     for m in [5, 20, 50]:
-        df[f"ma{m}"] = df["close"].rolling(m).mean()
+        if len(df) >= m:
+            df[f"ma{m}"] = df["close"].rolling(m).mean()
+        else:
+            df[f"ma{m}"] = df["close"]
+
     df["vma20"] = df["volume"].rolling(20).mean()
 
     diff = df["close"].diff()
@@ -112,11 +117,13 @@ def analyze_pre_surge(item):
     df["ret"] = (df["close"] - df["open"]) / (df["open"] + 1e-9) * 100
     df["vol_ratio"] = df["volume"] / (df["vma20"].shift(1) + 1e-9)
 
-    search_zone = df.iloc[-200:].copy()
+    search_zone = df.iloc[-min(len(df), 200):].copy()
+    if len(search_zone) == 0:
+        return None
     ig_idx = (search_zone["ret"] * search_zone["vol_ratio"]).idxmax()
 
     ig_candle = df.loc[ig_idx]
-    pre_idx = max(50, ig_idx - 1)
+    pre_idx = max(0, ig_idx - 1)
     pre_candle = df.loc[pre_idx]
 
     kst = datetime.timezone(datetime.timedelta(hours=9))
@@ -128,13 +135,13 @@ def analyze_pre_surge(item):
     post_high = float(df.loc[ig_idx:, "high"].max())
     surge_after_ig = ((post_high - ig_open) / (ig_open + 1e-9)) * 100
 
-    ma_short_ok = pre_candle["ma5"] > pre_candle["ma20"] > pre_candle["ma50"]
+    ma_short_ok = bool(pre_candle.get("ma5", 0) > pre_candle.get("ma20", 0) > pre_candle.get("ma50", 0))
     box_zone = df.loc[max(0, pre_idx - 24): pre_idx]
     box_high = float(box_zone["high"].max())
     box_low = float(box_zone["low"].min())
     box_range_pct = ((box_high - box_low) / (box_low + 1e-9)) * 100
 
-    vol_mult = float(ig_candle["vol_ratio"])
+    vol_mult = float(ig_candle["vol_ratio"]) if not np.isnan(ig_candle["vol_ratio"]) else 1.0
 
     return {
         "symbol": sym,
@@ -145,7 +152,7 @@ def analyze_pre_surge(item):
         "ig_time": ig_time,
         "ig_price": ig_open,
         "surge_after_ig": surge_after_ig,
-        "ma_short_ok": bool(ma_short_ok),
+        "ma_short_ok": ma_short_ok,
         "box_range_pct": box_range_pct,
         "vol_mult": vol_mult,
         "funding": item["funding"],
@@ -170,7 +177,7 @@ def main():
             if r:
                 results.append(r)
         except Exception as e:
-            print(f"Analyze error: {e}")
+            print(f"Analyze error for {item['symbol']}: {e}")
 
     if not results:
         send_telegram("⚠️ [전략 분석] 분석 가능한 종목 결과가 없습니다.")
