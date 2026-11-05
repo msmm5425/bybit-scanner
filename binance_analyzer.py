@@ -79,15 +79,45 @@ def get_top5_bybit_gainers():
 
 
 def get_bybit_klines(symbol):
-    url = (
-        f"{BYBIT_URL}/v5/market/kline?category=linear"
-        f"&symbol={symbol}&interval=5&limit=200"
-    )
+    url = f"{BYBIT_URL}/v5/market/kline?category=linear&symbol={symbol}&interval=5&limit=200"
+    res = requests.get(url, headers=HEADERS, timeout=10)
+    data = res.json()
+    rows = data.get("result", {}).get("list", [])
+    if not rows:
+        return pd.DataFrame()
+    cols = ["ts", "open", "high", "low", "close", "volume", "turnover"]
+    df = pd.DataFrame(rows, columns=cols)
+    df = df.iloc[::-1].reset_index(drop=True)
+    for c in ["open", "high", "low", "close", "volume", "turnover"]:
+        df[c] = df[c].astype(float)
+    df["ts"] = df["ts"].astype(int)
+    return df
+
+
+def analyze_pre_surge(item):
+    sym = item["symbol"]
     try:
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        rows = res.json().get("result", {}).get("list", [])
-        if not rows:
-            return pd.DataFrame()
-        cols = ["ts", "open", "high", "low", "close", "volume", "turnover"]
-        df = pd.DataFrame(rows, columns=cols)
-        df = df.iloc[::-1].reset_index(drop=True)
+        df = get_bybit_klines(sym)
+    except Exception:
+        return None
+
+    if len(df) < 30:
+        return None
+
+    for m in [5, 20]:
+        if len(df) >= m:
+            df[f"ma{m}"] = df["close"].rolling(m).mean()
+        else:
+            df[f"ma{m}"] = df["close"]
+
+    df["vma20"] = df["volume"].rolling(20).mean()
+
+    diff = df["close"].diff()
+    direction = np.where(diff > 0, 1, np.where(diff < 0, -1, 0))
+    df["obv"] = (direction * df["volume"]).cumsum()
+
+    df["ret"] = (df["close"] - df["open"]) / (df["open"] + 1e-9) * 100
+    df["vol_ratio"] = df["volume"] / (df["vma20"].shift(1) + 1e-9)
+
+    search_zone = df.iloc[-min(len(df), 120):].copy()
+    if len(search_
