@@ -7,17 +7,16 @@ import numpy as np
 
 BYBIT_URL = "https://api.bybit.com"
 BINANCE_URL = "https://fapi.binance.com"
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-REPO = os.environ.get("GITHUB_REPOSITORY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 STATE_FILE = "bot_state.json"
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 def load_state():
     if os.path.exists(STATE_FILE):
         try:
-            with open(STATE_FILE, "r") as f:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
@@ -25,7 +24,7 @@ def load_state():
 
 def save_state(state):
     try:
-        with open(STATE_FILE, "w") as f:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f)
     except Exception:
         pass
@@ -37,7 +36,10 @@ def send_telegram(text):
     chunk_size = 3500
     for i in range(0, len(text), chunk_size):
         chunk = text[i:i + chunk_size]
-        requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk}, timeout=15)
+        try:
+            requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk}, timeout=15)
+        except Exception:
+            pass
 
 def fmt_price(val, ref_price):
     if ref_price >= 1000: return f"{val:.2f}"
@@ -48,48 +50,61 @@ def fmt_price(val, ref_price):
 
 def get_binance_futures_map():
     try:
-        res = requests.get(f"{BINANCE_URL}/fapi/v1/ticker/24hr", timeout=10).json()
-        return {item["symbol"]: float(item.get("quoteVolume", 0)) for item in res if isinstance(item, dict) and "symbol" in item}
+        res = requests.get(f"{BINANCE_URL}/fapi/v1/ticker/24hr", headers=HEADERS, timeout=10)
+        data = res.json()
+        if isinstance(data, list):
+            return {item["symbol"]: float(item.get("quoteVolume", 0)) for item in data if isinstance(item, dict) and "symbol" in item}
     except Exception:
-        return {}
+        pass
+    return {}
 
 def get_active_bybit_tickers(binance_map):
-    url = f"{BYBIT_URL}/v5/market/tickers?category=linear"
-    res = requests.get(url, timeout=10).json()
-    tickers = []
-    for item in res["result"]["list"]:
-        symbol = item["symbol"]
-        if not symbol.endswith("USDT") or symbol.startswith("1000000"): continue
-        turnover = float(item.get("turnover24h", 0))
-        last_price = float(item.get("lastPrice", 0))
-        low_24h = float(item.get("lowPrice24h", 0))
-        high_24h = float(item.get("highPrice24h", 0))
-        if turnover < 5_000_000 or last_price <= 0 or low_24h <= 0: continue
-        if ((last_price - low_24h) / low_24h) * 100 < 1.5: continue
-        tickers.append({
-            "symbol": symbol, "lastPrice": last_price,
-            "price24hPcnt": float(item.get("price24hPcnt", 0)) * 100,
-            "fundingRate": float(item.get("fundingRate", 0)) * 100,
-            "openInterestValue": float(item.get("openInterestValue", 0)),
-            "highPrice24h": high_24h, "lowPrice24h": low_24h, "turnover24h": turnover
-        })
-    tickers.sort(key=lambda x: x["turnover24h"], reverse=True)
-    return tickers[:65]
+    try:
+        url = f"{BYBIT_URL}/v5/market/tickers?category=linear"
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        data = res.json()
+        tickers = []
+        for item in data.get("result", {}).get("list", []):
+            symbol = item["symbol"]
+            if not symbol.endswith("USDT") or symbol.startswith("1000000"): continue
+            turnover = float(item.get("turnover24h", 0))
+            last_price = float(item.get("lastPrice", 0))
+            low_24h = float(item.get("lowPrice24h", 0))
+            high_24h = float(item.get("highPrice24h", 0))
+            if turnover < 5_000_000 or last_price <= 0 or low_24h <= 0: continue
+            if ((last_price - low_24h) / low_24h) * 100 < 1.5: continue
+            tickers.append({
+                "symbol": symbol, "lastPrice": last_price,
+                "price24hPcnt": float(item.get("price24hPcnt", 0)) * 100,
+                "fundingRate": float(item.get("fundingRate", 0)) * 100,
+                "openInterestValue": float(item.get("openInterestValue", 0)),
+                "highPrice24h": high_24h, "lowPrice24h": low_24h, "turnover24h": turnover
+            })
+        tickers.sort(key=lambda x: x["turnover24h"], reverse=True)
+        return tickers[:65]
+    except Exception:
+        return []
 
 def get_klines(symbol, interval="15", limit=300):
-    url = f"{BYBIT_URL}/v5/market/kline?category=linear&symbol={symbol}&interval={interval}&limit={limit}"
-    res = requests.get(url, timeout=10).json()
-    rows = res.get("result", {}).get("list", [])
-    df = pd.DataFrame(rows, columns=["ts", "open", "high", "low", "close", "volume", "turnover"])
-    df = df.iloc[::-1].reset_index(drop=True)
-    for col in ["open", "high", "low", "close", "volume"]: df[col] = df[col].astype(float)
-    return df
+    try:
+        url = f"{BYBIT_URL}/v5/market/kline?category=linear&symbol={symbol}&interval={interval}&limit={limit}"
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        data = res.json()
+        rows = data.get("result", {}).get("list", [])
+        if not rows: return pd.DataFrame()
+        df = pd.DataFrame(rows, columns=["ts", "open", "high", "low", "close", "volume", "turnover"])
+        df = df.iloc[::-1].reset_index(drop=True)
+        for col in ["open", "high", "low", "close", "volume"]: df[col] = df[col].astype(float)
+        return df
+    except Exception:
+        return pd.DataFrame()
 
 def get_oi_change_24h(symbol):
     try:
         url = f"{BYBIT_URL}/v5/market/open-interest?category=linear&symbol={symbol}&intervalTime=1h&limit=25"
-        res = requests.get(url, timeout=10).json()
-        lst = res.get("result", {}).get("list", [])
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        data = res.json()
+        lst = data.get("result", {}).get("list", [])
         if len(lst) >= 24:
             oi_now = float(lst[0]["openInterest"])
             oi_24h_ago = float(lst[-1]["openInterest"])
@@ -100,9 +115,10 @@ def get_oi_change_24h(symbol):
 def get_orderbook_imbalance(symbol):
     try:
         url = f"{BYBIT_URL}/v5/market/orderbook?category=linear&symbol={symbol}&limit=25"
-        res = requests.get(url, timeout=10).json()
-        bids = sum(float(b[1]) for b in res["result"]["b"])
-        asks = sum(float(a[1]) for a in res["result"]["a"])
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        data = res.json()
+        bids = sum(float(b[1]) for b in data["result"]["b"])
+        asks = sum(float(a[1]) for a in data["result"]["a"])
         return bids / (asks + 1e-9)
     except Exception: return 1.0
 
@@ -159,7 +175,7 @@ def analyze_symbol(t):
     if ob_ratio >= 1.12: score += 5
 
     score = min(int(round(score)), 98)
-    if score < 90: return None  # 90점 미만은 아예 감시 대상 제외
+    if score < 90: return None
 
     ma20_15 = last15["ma20"]
     support_ref = ma20_15
@@ -201,72 +217,4 @@ def analyze_symbol(t):
 
 def main():
     kst = datetime.timezone(datetime.timedelta(hours=9))
-    now_dt = datetime.datetime.now(kst)
-    now_str = now_dt.strftime("%Y.%m.%d")
-    time_str = now_dt.strftime("%Y-%m-%d %H:%M KST")
-
-    state = load_state() # {"BTCUSDT": {"notified_initial": True, "notified_pullback": False, "notified_sl": False, "stop_price": ...}}
-
-    binance_map = get_binance_futures_map()
-    tickers = get_active_bybit_tickers(binance_map)
-
-    current_qualified = {}
-    for t in tickers:
-        try:
-            r = analyze_symbol(t)
-            if r:
-                current_qualified[r["symbol"]] = r
-        except Exception:
-            continue
-
-    # 1. 90점 이상 종목이 전혀 없으면 메시지 발송 안 함 (조용히 종료)
-    if not current_qualified:
-        print("90점 이상 포착된 종목 없음. 알림 생략.")
-        return
-
-    # 2. 신규 포착 또는 상태 변화 감지 및 알림 발송
-    new_state = {}
-    lines = [f"🚨 [바이비트 90점 이상 실시간 포착 브리핑] ({time_str})\n"]
-
-    for symbol, r in current_qualified.items():
-        old_data = state.get(symbol, {})
-        notified_pullback = old_data.get("notified_pullback", False)
-        notified_sl = old_data.get("notified_sl", False)
-
-        # 손절가 도달 체크 (기존에 추적 중이던 종목인 경우)
-        if old_data and not notified_sl and r["price"] <= r["stop_price"]:
-            send_telegram(f"🛑 [손절가 도달 경고]\n${r['ticker']} ({symbol}) 현재가 {fmt_price(r['price'], r['price'])} USDT가 설정된 손절가({fmt_price(r['stop_price'], r['price'])})에 도달했습니다! 즉시 대응하세요.")
-            notified_sl = True
-
-        # 눌림목 진행 중 상태 체크 (대기중 상태에서 진입 구간으로 바뀐 순간 1회)
-        is_pullback_now = "즉시 분할 진입 구간" in r["status"]
-        if old_data and not notified_pullback and is_pullback_now:
-            send_telegram(f"🎯 [눌림목 컨펌 완료 알림]\n${r['ticker']} ({symbol}) 요청하신 지점의 눌림목이 진행·완료되었습니다! (현재가: {fmt_price(r['price'], r['price'])} USDT)")
-            notified_pullback = True
-
-        # 최초 90점 포착 안내
-        if not old_data:
-            lines.append(f"■ ${r['ticker']} ({r['symbol']} 신규 포착) — [전략 점수: {r['score']}점]")
-            lines.append(f"- 현황 진단: {r['status']}")
-            lines.append(f"- 현재가: {fmt_price(r['price'], r['price'])} USDT ({r['chg']:+.2f}%) | 펀딩비: {r['funding']:+.4f}% | 24h OI: {r['oi_chg']:+.2f}%")
-            lines.append(f"- 분할 진입가: {fmt_price(r['entry_low'], r['price'])}~{fmt_price(r['entry_high'], r['price'])} USDT")
-            lines.append(f"- 동적 손절가: {fmt_price(r['stop_price'], r['price'])} USDT (예상 약 -{r['sl_pct']}%)")
-            for idx, (tp_val, tp_pct, reason) in enumerate(r["tps"], 1):
-                lines.append(f"- {idx}차 목표가: {fmt_price(tp_val, r['price'])} USDT (예상 약 +{tp_pct}% / {reason})")
-            lines.append("")
-
-        new_state[symbol] = {
-            "notified_initial": True,
-            "notified_pullback": notified_pullback,
-            "notified_sl": notified_sl,
-            "stop_price": r["stop_price"]
-        }
-
-    # 신규 90점 종목이 있을 때만 전체 리포트 전송
-    if len(new_state) > 0 and len(lines) > 1:
-        send_telegram("\n".join(lines))
-
-    save_state(new_state)
-
-if __name__ == "__main__":
-    main()
+    now_dt
