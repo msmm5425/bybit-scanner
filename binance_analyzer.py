@@ -4,7 +4,7 @@ import requests
 import pandas as pd
 import numpy as np
 
-BINANCE_URL = "https://fapi.binance.com"
+BYBIT_URL = "https://api.bybit.com"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -28,43 +28,44 @@ def send_telegram(text):
             print(f"Telegram error: {e}")
 
 
-def fmt_price(val):
-    if val >= 1000:
+def fmt_price(val, ref):
+    if ref >= 1000:
         return f"{val:.2f}"
-    elif val >= 10:
+    elif ref >= 10:
         return f"{val:.3f}"
-    elif val >= 1:
+    elif ref >= 1:
         return f"{val:.4f}"
-    elif val >= 0.01:
+    elif ref >= 0.01:
         return f"{val:.5f}"
     else:
         return f"{val:.6f}"
 
 
-def get_top5_binance_gainers():
+def get_top5_bybit_gainers():
     try:
-        res = requests.get(
-            f"{BINANCE_URL}/fapi/v1/ticker/24hr",
-            headers=HEADERS,
-            timeout=10
-        )
+        url = f"{BYBIT_URL}/v5/market/tickers?category=linear"
+        res = requests.get(url, headers=HEADERS, timeout=10)
         data = res.json()
+        raw_list = data.get("result", {}).get("list", [])
         valid = []
-        for x in data:
+        for x in raw_list:
             sym = x.get("symbol", "")
-            if not sym.endswith("USDT"):
+            if not sym.endswith("USDT") or sym.startswith("1000000"):
                 continue
-            chg = float(x.get("priceChangePercent", 0))
+            chg = float(x.get("priceChangePercent", 0)) * 100
             last_p = float(x.get("lastPrice", 0))
+            turnover = float(x.get("turnover24h", 0))
             if last_p <= 0:
                 continue
             valid.append({
                 "symbol": sym,
                 "price": last_p,
                 "chg": chg,
-                "volume_usdt": float(x.get("quoteVolume", 0))
+                "turnover": turnover,
+                "funding": float(x.get("fundingRate", 0)) * 100,
+                "oi_val": float(x.get("openInterestValue", 0))
             })
-        # 거래대금 조건 없이 오직 상승률(chg) 기준 Top 5 추출
+        # 상승률(chg) 기준 Top 5 추출
         valid.sort(key=lambda k: k["chg"], reverse=True)
         return valid[:5]
     except Exception as e:
@@ -72,23 +73,20 @@ def get_top5_binance_gainers():
         return []
 
 
-def get_binance_klines(symbol, interval="5m", limit=300):
+def get_bybit_klines(symbol):
     try:
         url = (
-            f"{BINANCE_URL}/fapi/v1/klines?symbol={symbol}"
-            f"&interval={interval}&limit={limit}"
+            f"{BYBIT_URL}/v5/market/kline?category=linear"
+            f"&symbol={symbol}&interval=5&limit=300"
         )
         res = requests.get(url, headers=HEADERS, timeout=10)
-        rows = res.json()
-        if not rows or not isinstance(rows, list):
+        rows = res.json().get("result", {}).get("list", [])
+        if not rows:
             return pd.DataFrame()
-        cols = [
-            "ts", "open", "high", "low", "close", "volume",
-            "close_ts", "turnover", "trades", "taker_buy_vol",
-            "taker_buy_quote", "ignore"
-        ]
+        cols = ["ts", "open", "high", "low", "close", "volume", "turnover"]
         df = pd.DataFrame(rows, columns=cols)
-        for c in ["open", "high", "low", "close", "volume", "taker_buy_vol"]:
+        df = df.iloc[::-1].reset_index(drop=True)
+        for c in ["open", "high", "low", "close", "volume", "turnover"]:
             df[c] = df[c].astype(float)
         df["ts"] = df["ts"].astype(int)
         return df
@@ -96,46 +94,15 @@ def get_binance_klines(symbol, interval="5m", limit=300):
         return pd.DataFrame()
 
 
-def get_funding_and_oi(symbol):
-    funding = 0.0
-    oi_chg_24h = 0.0
-    try:
-        r1 = requests.get(
-            f"{BINANCE_URL}/fapi/v1/premiumIndex?symbol={symbol}",
-            headers=HEADERS,
-            timeout=10
-        ).json()
-        funding = float(r1.get("lastFundingRate", 0)) * 100
-    except Exception:
-        pass
-
-    try:
-        r2 = requests.get(
-            f"{BINANCE_URL}/futures/data/openInterestHist"
-            f"?symbol={symbol}&period=1h&limit=25",
-            headers=HEADERS,
-            timeout=10
-        ).json()
-        if isinstance(r2, list) and len(r2) >= 2:
-            oi_start = float(r2[0].get("sumOpenInterest", 0))
-            oi_now = float(r2[-1].get("sumOpenInterest", 0))
-            if oi_start > 0:
-                oi_chg_24h = ((oi_now - oi_start) / oi_start) * 100
-    except Exception:
-        pass
-    return funding, oi_chg_24h
-
-
 def analyze_pre_surge(item):
     sym = item["symbol"]
-    df = get_binance_klines(sym, "5m", 300)
+    df = get_bybit_klines(sym)
     if len(df) < 150:
         return None
 
     for m in [5, 20, 50]:
         df[f"ma{m}"] = df["close"].rolling(m).mean()
     df["vma20"] = df["volume"].rolling(20).mean()
-    df["vma5"] = df["volume"].rolling(5).mean()
 
     diff = df["close"].diff()
     direction = np.where(diff > 0, 1, np.where(diff < 0, -1, 0))
@@ -168,26 +135,21 @@ def analyze_pre_surge(item):
     box_range_pct = ((box_high - box_low) / (box_low + 1e-9)) * 100
 
     vol_mult = float(ig_candle["vol_ratio"])
-    taker_ratio = (
-        float(ig_candle["taker_buy_vol"]) / (float(ig_candle["volume"]) + 1e-9)
-    ) * 100
-
-    funding, oi_chg_24h = get_funding_and_oi(sym)
 
     return {
         "symbol": sym,
+        "ticker": sym.replace("USDT", ""),
         "price": item["price"],
         "chg": item["chg"],
-        "vol_usdt_m": item["volume_usdt"] / 1_000_000,
+        "turnover_m": item["turnover"] / 1_000_000,
         "ig_time": ig_time,
         "ig_price": ig_open,
         "surge_after_ig": surge_after_ig,
         "ma_short_ok": bool(ma_short_ok),
         "box_range_pct": box_range_pct,
         "vol_mult": vol_mult,
-        "taker_ratio": taker_ratio,
-        "funding": funding,
-        "oi_chg_24h": oi_chg_24h
+        "funding": item["funding"],
+        "oi_val_m": item["oi_val"] / 1_000_000
     }
 
 
@@ -195,10 +157,10 @@ def main():
     kst = datetime.timezone(datetime.timedelta(hours=9))
     now_str = datetime.datetime.now(kst).strftime("%Y-%m-%d %H:%M KST")
 
-    top5 = get_top5_binance_gainers()
+    top5 = get_top5_bybit_gainers()
     if not top5:
         print("Top 5 데이터를 가져오지 못했습니다.")
-        send_telegram("⚠️ [바이낸스 분석] 상승률 Top 5 데이터를 수집하지 못했습니다.")
+        send_telegram("⚠️ [전략 분석] 바이비트 상승률 Top 5 데이터를 수집하지 못했습니다.")
         return
 
     results = []
@@ -211,38 +173,36 @@ def main():
             print(f"Analyze error: {e}")
 
     if not results:
+        send_telegram("⚠️ [전략 분석] 분석 가능한 종목 결과가 없습니다.")
         return
 
     lines = [
-        f"📊 [바이낸스 상승률 Top 5 발화점(Pre-Surge) 정밀 해부 리포트]\n"
+        f"📊 [바이비트 실시간 상승률 Top 5 발화점 정밀 해부 리포트]\n"
         f"({now_str} 기준)\n"
     ]
 
     for idx, r in enumerate(results, 1):
         s_tag = "✅정배열 완성" if r["ma_short_ok"] else "❌혼조 돌파"
+        p = r["price"]
         lines.append("━━━━━━━━━━━━━━")
         lines.append(
-            f"{idx}️⃣ ${r['symbol']} (+{r['chg']:.1f}% | 현재가 {fmt_price(r['price'])} USDT)"
+            f"{idx}️⃣ ${r['ticker']} ({r['symbol']} | +{r['chg']:.1f}% | 현재가 {fmt_price(p, p)} USDT)"
         )
         lines.append(
-            f"• 24h 거래대금: {r['vol_usdt_m']:,.1f}M USDT | "
-            f"펀딩비: {r['funding']:+.4f}% | 24h OI: {r['oi_chg_24h']:+.1f}%"
+            f"• 24h 거래대금: {r['turnover_m']:,.1f}M USDT | 미결제약정: {r['oi_val_m']:,.1f}M USDT | 펀딩비: {r['funding']:+.4f}%"
         )
         lines.append(
             f"• [초동 발화 시점]: {r['ig_time']} KST "
-            f"(발화가 {fmt_price(r['ig_price'])} → 고점까지 +{r['surge_after_ig']:.1f}% 폭발)"
+            f"(발화가 {fmt_price(r['ig_price'], p)} → 고점까지 +{r['surge_after_ig']:.1f}% 폭발)"
         )
         lines.append("• [급등 직전 컨펌 내역]:")
         lines.append(f"  - 5분봉 이평선(5>20>50): [{s_tag}]")
         lines.append(f"  - 직전 2시간 박스권 변동폭: {r['box_range_pct']:.1f}% 응축")
-        lines.append(
-            f"  - 발화 캔들 수급: 평소 대비 [{r['vol_mult']:.1f}배 폭발] / "
-            f"시장가 매수 비중 [{r['taker_ratio']:.1f}%]"
-        )
+        lines.append(f"  - 발화 캔들 수급: 평소 대비 [{r['vol_mult']:.1f}배 폭발]")
 
     lines.append("━━━━━━━━━━━━━━\n")
     lines.append("💡 [전략 피드백]")
-    lines.append("• 시각 기준 순수 상승률 Top 5 종목의 발화 전 거래량 폭발 패턴과 이평선 정배열 상태 역산 완료.")
+    lines.append("• 바이비트 실시간 상승률 Top 5 종목의 발화 전 5분봉 정배열 및 거래량 폭발 패턴 역산 완료.")
 
     send_telegram("\n".join(lines))
 
