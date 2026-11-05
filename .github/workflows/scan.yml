@@ -2,8 +2,8 @@ name: Bybit 30M Monitor
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
-  workflow_dispatch:
+    - cron: '*/30 * * * *'  # 매 30분마다 자동 실행
+  workflow_dispatch:       # 수동 테스트 버튼 활성화
 
 permissions:
   contents: write
