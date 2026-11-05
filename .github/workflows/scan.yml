@@ -1,0 +1,33 @@
+name: Bybit 30M Monitor
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # 매 30분마다 자동 실행
+  workflow_dispatch:       # 수동 테스트 버튼 활성화
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install packages
+        run: pip import requests pandas numpy || pip install requests pandas numpy
+
+      - name: Run 30M Scanner & Telegram Bot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scanner.py
