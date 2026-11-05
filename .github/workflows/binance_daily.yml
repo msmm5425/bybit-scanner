@@ -1,0 +1,30 @@
+name: Binance Pre-Surge Analyzer
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # 매일 낮 12:00 KST (UTC 03:00) 자동 실행
+  workflow_dispatch:     # 수동 즉시 테스트 버튼 활성화
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install packages
+        run: pip install requests pandas numpy
+
+      - name: Run Binance Top 5 Pre-Surge Analysis
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python binance_analyzer.py
