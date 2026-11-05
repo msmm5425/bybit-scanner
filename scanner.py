@@ -214,7 +214,7 @@ def analyze_symbol(t):
         "oi_chg": oi_chg, "status": status, "entry_low": entry_low, "entry_high": entry_high,
         "avg_entry": avg_entry, "stop_price": stop_price, "sl_pct": sl_pct, "tps": tps
     }
-
+send_telegram("🔔 [테스트 알림] 바이비트 30분 스캐너 텔레그램 연동이 완벽하게 성공했습니다!")
 def main():
     kst = datetime.timezone(datetime.timedelta(hours=9))
     now_dt
