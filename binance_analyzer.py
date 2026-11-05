@@ -52,10 +52,15 @@ def get_top5_bybit_gainers():
             sym = x.get("symbol", "")
             if not sym.endswith("USDT") or sym.startswith("1000000"):
                 continue
-            pcnt_str = x.get("price24hPcnt", "0")
-            chg = float(pcnt_str) * 100 if pcnt_str else 0.0
-            last_p = float(x.get("lastPrice", 0))
-            turnover = float(x.get("turnover24h", 0))
+            try:
+                chg = float(x.get("price24hPcnt", 0)) * 100
+                last_p = float(x.get("lastPrice", 0))
+                turnover = float(x.get("turnover24h", 0))
+                funding = float(x.get("fundingRate", 0)) * 100 if x.get("fundingRate") else 0.0
+                oi_val = float(x.get("openInterestValue", 0)) if x.get("openInterestValue") else 0.0
+            except Exception:
+                continue
+
             if last_p <= 0:
                 continue
             valid.append({
@@ -63,8 +68,8 @@ def get_top5_bybit_gainers():
                 "price": last_p,
                 "chg": chg,
                 "turnover": turnover,
-                "funding": float(x.get("fundingRate", 0)) * 100 if x.get("fundingRate") else 0.0,
-                "oi_val": float(x.get("openInterestValue", 0)) if x.get("openInterestValue") else 0.0
+                "funding": funding,
+                "oi_val": oi_val
             })
         valid.sort(key=lambda k: k["chg"], reverse=True)
         return valid[:5]
@@ -77,7 +82,7 @@ def get_bybit_klines(symbol):
     try:
         url = (
             f"{BYBIT_URL}/v5/market/kline?category=linear"
-            f"&symbol={symbol}&interval=5&limit=300"
+            f"&symbol={symbol}&interval=5&limit=200"
         )
         res = requests.get(url, headers=HEADERS, timeout=10)
         rows = res.json().get("result", {}).get("list", [])
@@ -98,10 +103,10 @@ def get_bybit_klines(symbol):
 def analyze_pre_surge(item):
     sym = item["symbol"]
     df = get_bybit_klines(sym)
-    if len(df) < 50:
+    if len(df) < 30:
         return None
 
-    for m in [5, 20, 50]:
+    for m in [5, 20]:
         if len(df) >= m:
             df[f"ma{m}"] = df["close"].rolling(m).mean()
         else:
@@ -112,12 +117,11 @@ def analyze_pre_surge(item):
     diff = df["close"].diff()
     direction = np.where(diff > 0, 1, np.where(diff < 0, -1, 0))
     df["obv"] = (direction * df["volume"]).cumsum()
-    df["obv_ma10"] = df["obv"].rolling(10).mean()
 
     df["ret"] = (df["close"] - df["open"]) / (df["open"] + 1e-9) * 100
     df["vol_ratio"] = df["volume"] / (df["vma20"].shift(1) + 1e-9)
 
-    search_zone = df.iloc[-min(len(df), 200):].copy()
+    search_zone = df.iloc[-min(len(df), 120):].copy()
     if len(search_zone) == 0:
         return None
     ig_idx = (search_zone["ret"] * search_zone["vol_ratio"]).idxmax()
@@ -135,8 +139,8 @@ def analyze_pre_surge(item):
     post_high = float(df.loc[ig_idx:, "high"].max())
     surge_after_ig = ((post_high - ig_open) / (ig_open + 1e-9)) * 100
 
-    ma_short_ok = bool(pre_candle.get("ma5", 0) > pre_candle.get("ma20", 0) > pre_candle.get("ma50", 0))
-    box_zone = df.loc[max(0, pre_idx - 24): pre_idx]
+    ma_short_ok = bool(pre_candle.get("ma5", 0) > pre_candle.get("ma20", 0))
+    box_zone = df.loc[max(0, pre_idx - 12): pre_idx]
     box_high = float(box_zone["high"].max())
     box_low = float(box_zone["low"].min())
     box_range_pct = ((box_high - box_low) / (box_low + 1e-9)) * 100
@@ -146,73 +150,3 @@ def analyze_pre_surge(item):
     return {
         "symbol": sym,
         "ticker": sym.replace("USDT", ""),
-        "price": item["price"],
-        "chg": item["chg"],
-        "turnover_m": item["turnover"] / 1_000_000,
-        "ig_time": ig_time,
-        "ig_price": ig_open,
-        "surge_after_ig": surge_after_ig,
-        "ma_short_ok": ma_short_ok,
-        "box_range_pct": box_range_pct,
-        "vol_mult": vol_mult,
-        "funding": item["funding"],
-        "oi_val_m": item["oi_val"] / 1_000_000
-    }
-
-
-def main():
-    kst = datetime.timezone(datetime.timedelta(hours=9))
-    now_str = datetime.datetime.now(kst).strftime("%Y-%m-%d %H:%M KST")
-
-    top5 = get_top5_bybit_gainers()
-    if not top5:
-        print("Top 5 데이터를 가져오지 못했습니다.")
-        send_telegram("⚠️ [전략 분석] 바이비트 상승률 Top 5 데이터를 수집하지 못했습니다.")
-        return
-
-    results = []
-    for item in top5:
-        try:
-            r = analyze_pre_surge(item)
-            if r:
-                results.append(r)
-        except Exception as e:
-            print(f"Analyze error for {item['symbol']}: {e}")
-
-    if not results:
-        send_telegram("⚠️ [전략 분석] 분석 가능한 종목 결과가 없습니다.")
-        return
-
-    lines = [
-        f"📊 [바이비트 실시간 상승률 Top 5 발화점 정밀 해부 리포트]\n"
-        f"({now_str} 기준)\n"
-    ]
-
-    for idx, r in enumerate(results, 1):
-        s_tag = "✅정배열 완성" if r["ma_short_ok"] else "❌혼조 돌파"
-        p = r["price"]
-        lines.append("━━━━━━━━━━━━━━")
-        lines.append(
-            f"{idx}️⃣ ${r['ticker']} ({r['symbol']} | +{r['chg']:.1f}% | 현재가 {fmt_price(p, p)} USDT)"
-        )
-        lines.append(
-            f"• 24h 거래대금: {r['turnover_m']:,.1f}M USDT | 미결제약정: {r['oi_val_m']:,.1f}M USDT | 펀딩비: {r['funding']:+.4f}%"
-        )
-        lines.append(
-            f"• [초동 발화 시점]: {r['ig_time']} KST "
-            f"(발화가 {fmt_price(r['ig_price'], p)} → 고점까지 +{r['surge_after_ig']:.1f}% 폭발)"
-        )
-        lines.append("• [급등 직전 컨펌 내역]:")
-        lines.append(f"  - 5분봉 이평선(5>20>50): [{s_tag}]")
-        lines.append(f"  - 직전 2시간 박스권 변동폭: {r['box_range_pct']:.1f}% 응축")
-        lines.append(f"  - 발화 캔들 수급: 평소 대비 [{r['vol_mult']:.1f}배 폭발]")
-
-    lines.append("━━━━━━━━━━━━━━\n")
-    lines.append("💡 [전략 피드백]")
-    lines.append("• 바이비트 실시간 상승률 Top 5 종목의 발화 전 5분봉 정배열 및 거래량 폭발 패턴 역산 완료.")
-
-    send_telegram("\n".join(lines))
-
-
-if __name__ == "__main__":
-    main()
