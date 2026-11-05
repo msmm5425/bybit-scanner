@@ -2,8 +2,8 @@ name: Bybit 30M Monitor
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # 매 30분마다 자동 실행
-  workflow_dispatch:       # 수동 테스트 버튼 활성화
+    - cron: '0,30 * * * *'  # 매시 정각(00분) 및 30분 정각 실행
+  workflow_dispatch:        # 수동 실행 버튼
 
 permissions:
   contents: write
@@ -29,3 +29,13 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python scanner.py
+
+      - name: Save Bot State
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f bot_state.json ]; then
+            git add bot_state.json
+            git diff --staged --quiet || git commit -m "Update bot_state.json [skip ci]"
+            git push
+          fi
