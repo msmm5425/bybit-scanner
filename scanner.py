@@ -32,7 +32,7 @@ def save_state(state):
 
 def send_telegram(text):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("ERROR: 텔레그램 토큰 또는 채팅 ID가 없습니다.")
+        print("ERROR: 텔레그램 설정 누락")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     for i in range(0, len(text), 3500):
@@ -81,9 +81,8 @@ def get_bybit_tickers():
             if price <= 0 or low <= 0:
                 continue
             bounce = ((price - low) / low) * 100
-            if bounce < 1.2:
+            if bounce < 1.0:
                 continue
-            # 회전율(평소 OI 대비 거래대금 폭발 비율) + 단기 반등 탄력 결합
             surge_ratio = turnover / (oi_val + 1.0)
             priority = (surge_ratio * 10) + bounce
             tickers.append({
@@ -102,7 +101,7 @@ def get_bybit_tickers():
         return [], {}
 
 
-def get_klines(symbol, interval="15", limit=350):
+def get_klines(symbol, interval="5", limit=350):
     try:
         url = (
             f"{BYBIT_URL}/v5/market/kline?category=linear"
@@ -187,38 +186,40 @@ def calc_indicators(df):
 
 def analyze_symbol(t):
     sym = t["symbol"]
-    df15 = get_klines(sym, "15", 350)
     df5 = get_klines(sym, "5", 350)
-    if len(df15) < 310 or len(df5) < 310:
+    df15 = get_klines(sym, "15", 150)
+    if len(df5) < 310 or len(df15) < 60:
         return None
 
-    df15 = calc_indicators(df15)
     df5 = calc_indicators(df5)
+    df15 = calc_indicators(df15)
 
-    # 미완성 현재봉(iloc[-1]) 왜곡 방지를 위해 직전 완성봉(iloc[-2]) 사용
-    c15 = df15.iloc[-2]
+    # 직전 완성봉(iloc[-2]) 기준 판별
     c5 = df5.iloc[-2]
+    c15 = df15.iloc[-2]
     price = t["lastPrice"]
 
     oi_24h, oi_1h = get_oi_metrics(sym)
     ob_ratio = get_orderbook_delta(sym)
 
-    score = 52
-    # 1. 15분봉 및 5분봉 6개 이평선 정배열 검증
-    if c15["ma5"] > c15["ma20"] > c15["ma50"]:
-        score += 8
-    if c15["ma50"] > c15["ma120"] > c15["ma200"] > c15["ma300"]:
-        score += 6
-    elif c15["ma50"] > c15["ma120"] > c15["ma200"]:
-        score += 4
+    score = 50
+    # 1. 5분봉 중심 정배열 검증 (핵심 가중치)
     if c5["ma5"] > c5["ma20"] > c5["ma50"]:
+        score += 10
+    if c5["ma50"] > c5["ma120"] > c5["ma200"] > c5["ma300"]:
+        score += 8
+    elif c5["ma50"] > c5["ma120"] > c5["ma200"]:
         score += 5
 
-    # 2. 박스권 OBV 우상향 매집
-    if c15["obv"] > c15["obv_ma10"] and c15["obv"] > df15["obv"].iloc[-12]:
+    # 15분봉은 후행성을 배제하고 단기 추세 지지 여부만 확인
+    if c15["ma5"] > c15["ma20"]:
+        score += 4
+
+    # 2. 5분봉 박스권 OBV 우상향 선행 매집
+    if c5["obv"] > c5["obv_ma10"] and c5["obv"] > df5["obv"].iloc[-15]:
         score += 6
 
-    # 3. 미결제약정(OI) 급증 (24h +5% 이상 및 최근 1시간 가속도)
+    # 3. OI 급증 (24h +5% 이상 또는 최근 1시간 단기 급증)
     if oi_24h >= 5.0:
         score += 7
     elif oi_24h >= 2.0:
@@ -232,7 +233,7 @@ def analyze_symbol(t):
     if t["fundingRate"] < 0:
         score += 4
 
-    # 5. 직전 구간 거래량 5배 폭발 전조 & 눌림목 거래량 건조(Volume Dry-up)
+    # 5. 5분봉 거래량 폭발 전조 & 눌림목 거래량 건조
     recent_5m_vol = df5["volume"].iloc[-20:-2]
     recent_5m_vma = df5["vma20"].iloc[-20:-2]
     if (recent_5m_vol >= (recent_5m_vma * 5.0)).any():
@@ -240,7 +241,7 @@ def analyze_symbol(t):
     elif (recent_5m_vol >= (recent_5m_vma * 3.0)).any():
         score += 4
 
-    vol_dry = (c5["volume"] < c5["vma5"]) or (c15["volume"] < c15["vma10"])
+    vol_dry = (c5["volume"] < c5["vma5"]) or (c5["volume"] < c5["vma10"])
     if vol_dry:
         score += 5
 
@@ -249,32 +250,39 @@ def analyze_symbol(t):
         score += 5
     elif ob_ratio >= 1.05:
         score += 2
-    if c15["macd"] > 0 and 50 <= c15["rsi12"] <= 78:
-        score += 4
+    if c5["macd"] > 0 and 48 <= c5["rsi12"] <= 78:
+        score += 3
 
     score = min(int(round(score)), 98)
-    if score < 90:
+    # 급등 전 초동 포착을 위해 커트라인 85점으로 하향
+    if score < 85:
         return None
 
-    # 직전 스윙고점 및 15분봉 MA 20선 리테스트 타점 계산
-    ma20_15 = float(c15["ma20"])
-    swing_high = float(df15["high"].iloc[-25:-3].max())
-    support_ref = ma20_15
+    # 5분봉 MA 20선 및 직전 스윙고점 리테스트 기준 설정
+    ma20_5 = float(c5["ma20"])
+    swing_high = float(df5["high"].iloc[-30:-3].max())
+    support_ref = ma20_5
     support_str = fmt_price(support_ref, price)
 
     dist_to_support = abs(price - support_ref) / support_ref
-    is_pullback_ready = (dist_to_support <= 0.012) and vol_dry and (price >= support_ref * 0.993)
+    is_pullback_ready = (
+        (dist_to_support <= 0.012)
+        and vol_dry
+        and (price >= support_ref * 0.993)
+    )
+
+    grade_tag = "핵심 수급과 5분봉 정배열 완성" if score >= 90 else "급등 전 초동 수급·5분봉 정배열 포착"
 
     if is_pullback_ready:
         status = (
-            f"핵심 수급과 정배열 완성 / 즉시 분할 진입 구간"
-            f"(15분봉 MA 20선 및 직전 스윙고점 돌파 리테스트 구간인 "
+            f"{grade_tag} / 즉시 분할 진입 구간"
+            f"(5분봉 MA 20선 및 직전 스윙고점 돌파 리테스트 구간인 "
             f"{support_str} USDT 지지·거래량 건조 컨펌 완료)"
         )
     else:
         status = (
-            f"핵심 수급과 정배열 완성 / 눌림목 컨펌대기중"
-            f"(15분봉 MA 20선 및 직전 스윙고점 리테스트 구간인 "
+            f"{grade_tag} / 눌림목 컨펌대기중"
+            f"(5분봉 MA 20선 및 직전 스윙고점 리테스트 구간인 "
             f"{support_str} USDT에 눌림목이 완성되면 진입)"
         )
 
@@ -282,14 +290,14 @@ def analyze_symbol(t):
     entry_high = max(price, support_ref) * 1.001
     avg_entry = (entry_low + entry_high) / 2.0
 
-    atr15 = float(c15["atr14"])
+    atr15 = float(c15["atr14"]) if not np.isnan(c15["atr14"]) else (price * 0.02)
     sl_pct = max(2, min(6, int(round((1.5 * atr15 / avg_entry) * 100))))
     stop_price = avg_entry * (1.0 - sl_pct / 100.0)
 
     min_tp1_pct = sl_pct * 2
     swing_range = max(
         t["highPrice24h"] - t["lowPrice24h"],
-        swing_high - float(df15["low"].iloc[-25:-3].min()),
+        swing_high - float(df5["low"].iloc[-30:-3].min()),
         avg_entry * (min_tp1_pct / 100.0)
     )
     fib_levels = [
@@ -344,24 +352,22 @@ def check_existing_tracked(state, all_ticker_map):
         notified_sl = info.get("notified_sl", False)
         ticker = sym.replace("USDT", "")
 
-        # 1. 손절가 도달 시 1회 경고 발송 후 추적 종료
         if not notified_sl and stop_price > 0 and price <= stop_price:
             msg = (
                 f"🛑 [손절가 도달 경고]\n"
                 f"${ticker} ({sym}) 현재가 {fmt_price(price, price)} USDT가 "
                 f"동적 손절가({fmt_price(stop_price, price)} USDT)에 도달했습니다. "
-                f"리스크 관리 원칙에 따라 즉시 대응하세요."
+                f"즉시 대응하세요."
             )
             send_telegram(msg)
             continue
 
-        # 2. 눌림목 대기 종목이 타점 구간 진입 시 1회 컨펌 알림
         if not notified_pullback and support_ref > 0:
             dist = abs(price - support_ref) / support_ref
             if dist <= 0.012 and price >= stop_price * 1.005:
                 msg = (
                     f"🎯 [눌림목 컨펌 완료 알림]\n"
-                    f"${ticker} ({sym}) 15분봉 MA 20선 및 리테스트 지지 구간"
+                    f"${ticker} ({sym}) 5분봉 MA 20선 및 리테스트 지지 구간"
                     f"({fmt_price(support_ref, price)} USDT) 눌림목이 진행 중입니다!\n"
                     f"- 현재가: {fmt_price(price, price)} USDT\n"
                     f"- 동적 손절가: {fmt_price(stop_price, price)} USDT"
@@ -369,7 +375,6 @@ def check_existing_tracked(state, all_ticker_map):
                 send_telegram(msg)
                 notified_pullback = True
 
-        # 1차 목표가 달성 종목은 상태 목록에서 자동 졸업 처리
         if price >= tp1_price:
             continue
 
@@ -388,12 +393,9 @@ def main():
 
     state = load_state()
     candidates, all_ticker_map = get_bybit_tickers()
-
-    # 기존 포착 종목의 눌림목 도달 및 손절가 이탈 우선 점검
     new_state = check_existing_tracked(state, all_ticker_map)
 
-    # 신규 90점 이상 종목 정밀 스캔
-    new_lines = [f"🚨 [바이비트 90점 이상 신규 포착 브리핑] ({time_str})\n"]
+    new_lines = [f"🚨 [바이비트 85점+ 급등 전 포착 브리핑] ({time_str})\n"]
     has_new = False
 
     for t in candidates:
@@ -438,7 +440,7 @@ def main():
     if has_new:
         send_telegram("\n".join(new_lines))
     else:
-        print("신규 90점 이상 포착 종목 없음. 조용히 대기.")
+        print("신규 85점 이상 포착 종목 없음.")
 
     save_state(new_state)
 
