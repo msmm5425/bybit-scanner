@@ -79,11 +79,11 @@ def get_top5_bybit_gainers():
 
 
 def get_bybit_klines(symbol):
+    url = (
+        f"{BYBIT_URL}/v5/market/kline?category=linear"
+        f"&symbol={symbol}&interval=5&limit=200"
+    )
     try:
-        url = (
-            f"{BYBIT_URL}/v5/market/kline?category=linear"
-            f"&symbol={symbol}&interval=5&limit=200"
-        )
         res = requests.get(url, headers=HEADERS, timeout=10)
         rows = res.json().get("result", {}).get("list", [])
         if not rows:
@@ -91,5 +91,3 @@ def get_bybit_klines(symbol):
         cols = ["ts", "open", "high", "low", "close", "volume", "turnover"]
         df = pd.DataFrame(rows, columns=cols)
         df = df.iloc[::-1].reset_index(drop=True)
-        for c in ["open", "high", "low", "close", "volume", "turnover"]:
-            df[c] = df[c].astype(float)
