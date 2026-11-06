@@ -1,17 +1,21 @@
-name: Bybit 30M Monitor
+name: Bybit 5m Crypto Scanner
 
 on:
   schedule:
-    - cron: '0,30 * * * *'  # 매시 정각(00분) 및 30분 정각 실행
-  workflow_dispatch:        # 수동 실행 버튼
+    - cron: '*/5 * * * *'  # 5분마다 자동 감시
+  workflow_dispatch:
+
+concurrency:
+  group: bybit-scanner-state
+  cancel-in-progress: false
 
 permissions:
   contents: write
-  issues: write
 
 jobs:
-  monitor:
+  scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 4
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,22 +24,27 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install packages
-        run: pip install requests pandas numpy
+      - name: Install dependencies
+        run: |
+          pip install requests pandas numpy
 
-      - name: Run 30M Scanner & Telegram Bot
+      - name: Run scanner.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scanner.py
-
-      - name: Save Bot State
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [ -f bot_state.json ]; then
-            git add bot_state.json
-            git diff --staged --quiet || git commit -m "Update bot_state.json [skip ci]"
+          python scanner.py
+
+      - name: Save and push bot_state.json
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add bot_state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update bot_state.json [skip ci]"
+            git pull --rebase origin main || true
             git push
           fi
