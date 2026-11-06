@@ -314,7 +314,7 @@
         24
       ],
       "breakout_alerted": true,
-      "sl_alerted": false
+      "sl_alerted": true
     },
     "COHRUSDT": {
       "created_at": 1793979594,
@@ -336,7 +336,7 @@
         26,
         38
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "SPCXUSDT": {
@@ -359,7 +359,7 @@
         16,
         24
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "TRUMPUSDT": {
