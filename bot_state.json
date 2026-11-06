@@ -499,6 +499,52 @@
       ],
       "breakout_alerted": false,
       "sl_alerted": false
+    },
+    "ETHFIUSDT": {
+      "created_at": 1793993939,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.5916,
+      "entry_low": 0.5773152,
+      "entry_high": 0.5819616,
+      "stop_price": 0.568045632,
+      "sl_pct": 2,
+      "tps": [
+        0.60862032,
+        0.6376022400000001,
+        0.6723805439999999,
+        0.718751616
+      ],
+      "tp_pcts": [
+        5,
+        10,
+        16,
+        24
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "MRNAUSDT": {
+      "created_at": 1793993939,
+      "track_type": "TRACK_A",
+      "swing_high_line": 266.27509999999995,
+      "entry_low": 260.76595999999995,
+      "entry_high": 262.86467999999996,
+      "stop_price": 256.57901359999994,
+      "sl_pct": 2,
+      "tps": [
+        274.90608599999996,
+        287.99685199999993,
+        303.7057711999999,
+        324.6509967999999
+      ],
+      "tp_pcts": [
+        5,
+        10,
+        16,
+        24
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
     }
   }
 }
