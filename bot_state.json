@@ -1,3 +1,67 @@
 {
-  "tracked": {}
+  "tracked": {
+    "BIRBUSDT": {
+      "created_at": 1793948081,
+      "entry_low": 0.10167949999999999,
+      "entry_high": 0.10262,
+      "stop_price": 0.09704226249999999,
+      "sl_pct": 5,
+      "tps": [
+        0.11236472500000001,
+        0.12462269499999999,
+        0.1379021625,
+        0.153224625
+      ],
+      "tp_pcts": [
+        10,
+        22,
+        35,
+        50
+      ],
+      "pullback_alerted": true,
+      "sl_alerted": false
+    },
+    "APPSTOCKUSDT": {
+      "created_at": 1793948081,
+      "entry_low": 350.95950000000005,
+      "entry_high": 351.75,
+      "stop_price": 344.327655,
+      "sl_pct": 2,
+      "tps": [
+        372.43603500000006,
+        404.0579625,
+        432.16634250000004,
+        463.78827000000007
+      ],
+      "tp_pcts": [
+        6,
+        15,
+        23,
+        32
+      ],
+      "pullback_alerted": true,
+      "sl_alerted": false
+    },
+    "PARTIUSDT": {
+      "created_at": 1793948081,
+      "entry_low": 0.04718944,
+      "entry_high": 0.04757,
+      "stop_price": 0.0464321256,
+      "sl_pct": 2,
+      "tps": [
+        0.050222503200000004,
+        0.054486678,
+        0.0582770556,
+        0.06254123040000001
+      ],
+      "tp_pcts": [
+        6,
+        15,
+        23,
+        32
+      ],
+      "pullback_alerted": true,
+      "sl_alerted": false
+    }
+  }
 }
