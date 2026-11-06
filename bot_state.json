@@ -19,7 +19,7 @@
         50
       ],
       "pullback_alerted": true,
-      "sl_alerted": false
+      "sl_alerted": true
     },
     "APPSTOCKUSDT": {
       "created_at": 1793948081,
@@ -313,7 +313,7 @@
         16,
         24
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "COHRUSDT": {
@@ -404,6 +404,29 @@
         16,
         26,
         38
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "NBISUSDT": {
+      "created_at": 1793982540,
+      "track_type": "TRACK_A",
+      "swing_high_line": 137.1,
+      "entry_low": 129.16036,
+      "entry_high": 130.19988,
+      "stop_price": 125.78971639999999,
+      "sl_pct": 3,
+      "tps": [
+        137.4609272,
+        145.2417344,
+        154.3193428,
+        167.2873548
+      ],
+      "tp_pcts": [
+        6,
+        12,
+        19,
+        29
       ],
       "breakout_alerted": false,
       "sl_alerted": false
