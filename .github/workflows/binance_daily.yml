@@ -2,16 +2,13 @@ name: Binance Pre-Surge Analyzer
 
 on:
   schedule:
-    # 한국시간(KST) 매일 오전 08:00(UTC 23시), 오후 15:00(UTC 6시), 오후 20:00(UTC 11시) 실행
-    - cron: '0 6,11,23 * * *'
+    - cron: '0 4 * * *'  # 매일 오후 1시 (13:00 KST / 04:00 UTC) 1회 실행
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,12 +17,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install packages
-        run: pip install requests pandas numpy ccxt
+      - name: Install dependencies
+        run: |
+          pip install requests pandas numpy
 
-      - name: Run Binance Top 5 Pre-Surge Analysis
+      - name: Run binance_analyzer.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python binance_analyzer.py
+        run: |
+          python binance_analyzer.py
