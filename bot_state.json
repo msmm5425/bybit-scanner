@@ -106,24 +106,26 @@
       "sl_alerted": false
     },
     "BTWUSDT": {
-      "created_at": 1793952685,
-      "entry_low": 1.1065585,
-      "entry_high": 1.10761,
-      "stop_price": 1.084942565,
+      "created_at": 1793956046,
+      "track_type": "TRACK_A",
+      "swing_high_line": 1.11339,
+      "entry_low": 1.0966643999999999,
+      "entry_high": 1.10678916,
+      "stop_price": 1.0796922444,
       "sl_pct": 2,
       "tps": [
-        1.173509305,
-        1.2731468874999998,
-        1.3617136275,
-        1.4613512100000001
+        1.156813119,
+        1.211899458,
+        1.2780030647999998,
+        1.3661412071999999
       ],
       "tp_pcts": [
-        6,
-        15,
-        23,
-        32
+        5,
+        10,
+        16,
+        24
       ],
-      "pullback_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "BEATUSDT": {
@@ -145,6 +147,29 @@
         40
       ],
       "pullback_alerted": true,
+      "sl_alerted": false
+    },
+    "ARBUSDT": {
+      "created_at": 1793956046,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.16666,
+      "entry_low": 0.1653519,
+      "entry_high": 0.1666827,
+      "stop_price": 0.16269695399999998,
+      "sl_pct": 2,
+      "tps": [
+        0.174318165,
+        0.18261903,
+        0.19258006799999997,
+        0.20586145199999997
+      ],
+      "tp_pcts": [
+        5,
+        10,
+        16,
+        24
+      ],
+      "breakout_alerted": false,
       "sl_alerted": false
     }
   }
