@@ -7,7 +7,7 @@ import pandas as pd
 from urllib.parse import urlencode, quote
 from datetime import datetime, timedelta, timezone
 
-# 1. 텔레그램 환경변수 (TELEGRAM_TOKEN / TELEGRAM_BOT_TOKEN 모두 호환)
+# 1. 텔레그램 환경변수 (TELEGRAM_TOKEN / TELEGRAM_BOT_TOKEN 모두 자동 호환)
 TELEGRAM_BOT_TOKEN = (
     os.getenv("TELEGRAM_TOKEN")
     or os.getenv("TELEGRAM_BOT_TOKEN")
@@ -32,7 +32,7 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
 }
 
-# 바이비트 TradFi Perps (주식/ETF/원자재/외환) 제외 목록 -> 순수 코인만 남김
+# 바이비트 TradFi Perps (주식/ETF/원자재/외환) 제외 목록 -> 순수 코인만 분석
 TRADFI_BLACKLIST = {
     "SOXL", "SOXS", "TQQQ", "SQQQ", "SPY", "QQQ", "IWM", "DIA", "TLT",
     "GLD", "SLV", "USO", "UNG", "UVXY", "VIX", "ARKK", "SMH", "XLF",
@@ -58,7 +58,7 @@ TRADFI_BLACKLIST = {
     "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD", "CNH", "HKD", "SGD"
 }
 
-PREFERRED_ROUTE_IDX = None
+ROUTE_COUNTER = 0
 
 
 def to_float(value, default=0.0):
@@ -72,7 +72,6 @@ def to_float(value, default=0.0):
 
 
 def parse_bybit_payload(resp, mode):
-    """응답 텍스트에서 Bybit JSON result 추출 및 빈 리스트 방어"""
     text = resp.text.strip()
     if not text:
         return None
@@ -88,7 +87,6 @@ def parse_bybit_payload(resp, mode):
 
     if isinstance(data, dict) and data.get("retCode") == 0:
         result = data.get("result", {})
-        # list가 비어 있는 더미 응답은 실패로 간주하고 다음 프록시로 이동
         if isinstance(result, dict) and result.get("list"):
             return result
     return None
@@ -96,29 +94,29 @@ def parse_bybit_payload(resp, mode):
 
 def fetch_bybit(path, params=None):
     """
-    모든 프록시에 완전 인코딩된 URL(encoded_bybit)을 전달하여
-    &symbol=...&interval=5 등의 다중 파라미터가 잘리지 않도록 보장
+    프록시 서버 Rate Limit(요청 제한)으로 인해 2~3번째 종목에서 끊기는 현상을 방지하기 위해
+    매 요청마다 다중 프록시를 라운드로빈(Round-Robin)으로 회전하며 분산 호출
     """
-    global PREFERRED_ROUTE_IDX
+    global ROUTE_COUNTER
 
     query_str = f"?{urlencode(params)}" if params else ""
     target_bybit = f"https://api.bybit.com{path}{query_str}"
     encoded_bybit = quote(target_bybit, safe="")
 
     routes = [
-        ("raw", f"https://api.codetabs.com/v1/proxy?quest={encoded_bybit}"),
         ("allorigins_get", f"https://api.allorigins.win/get?url={encoded_bybit}"),
+        ("raw", f"https://api.codetabs.com/v1/proxy?quest={encoded_bybit}"),
         ("raw", f"https://api.allorigins.win/raw?url={encoded_bybit}"),
         ("raw", f"https://api.cors.lol/?url={encoded_bybit}"),
-        ("raw", f"https://thingproxy.freeboard.io/fetch/{target_bybit}"),
         ("raw", f"https://api.bytick.com{path}{query_str}"),
         ("raw", target_bybit),
     ]
 
-    order = list(range(len(routes)))
-    if PREFERRED_ROUTE_IDX is not None and PREFERRED_ROUTE_IDX in order:
-        order.remove(PREFERRED_ROUTE_IDX)
-        order.insert(0, PREFERRED_ROUTE_IDX)
+    start_idx = ROUTE_COUNTER % 4
+    ROUTE_COUNTER += 1
+    order = [
+        (start_idx + i) % 4 for i in range(4)
+    ] + [4, 5]
 
     for idx in order:
         mode, url = routes[idx]
@@ -127,50 +125,19 @@ def fetch_bybit(path, params=None):
             if resp.status_code == 200:
                 result = parse_bybit_payload(resp, mode)
                 if result is not None:
-                    PREFERRED_ROUTE_IDX = idx
-                    # 프록시 초당 호출 제한(Rate Limit) 방지를 위해 1.2초 대기
-                    time.sleep(1.2)
+                    time.sleep(0.8)
                     return result
-        except Exception as e:
-            print(f"[프록시 {idx} 전환] {e}")
-        time.sleep(0.5)
+        except Exception:
+            pass
+        time.sleep(0.4)
 
     return {}
 
 
-def refresh_single_bybit_ticker(symbol, fallback_coin):
-    """
-    개별 종목 티커(/v5/market/tickers?category=linear&symbol=XXXUSDT)는
-    500바이트 소형 패킷이므로 프록시에서 100% 성공하며, 바이비트 앱의 정확한 수치를 가져옴
-    """
-    res = fetch_bybit("/v5/market/tickers", {
-        "category": "linear",
-        "symbol": symbol
-    })
-    items = res.get("list", [])
-    if items:
-        t = items[0]
-        last_price = to_float(t.get("lastPrice"), default=fallback_coin["last_price"])
-        change_24h = to_float(t.get("price24hPcnt")) * 100.0
-        turnover_24h = to_float(t.get("turnover24h"), default=fallback_coin["turnover_24h"])
-        oi_val = to_float(t.get("openInterestValue"), default=fallback_coin["oi_value"])
-        funding_rate = to_float(t.get("fundingRate")) * 100.0
-        if change_24h != 0.0 and last_price > 0:
-            return {
-                "symbol": symbol,
-                "change_24h": change_24h,
-                "turnover_24h": turnover_24h,
-                "oi_value": oi_val,
-                "funding_rate": funding_rate,
-                "last_price": last_price
-            }
-    return fallback_coin
-
-
 def get_top_candidates_from_coingecko():
     """
-    미국 IP에서 차단 없이 열리는 CoinGecko Derivatives API에서
-    정확한 h24_percentage_change 필드로 바이비트 선물 상승률 상위 후보 추출
+    대용량 tickers 패킷이 프록시 용량 제한에 걸릴 경우,
+    미국 IP에서 100% 열리는 CoinGecko Derivatives API로 바이비트 선물 상승률 상위 추출
     """
     url = "https://api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=unexpired"
     try:
@@ -193,7 +160,6 @@ def get_top_candidates_from_coingecko():
                 continue
 
             last_price = to_float(t.get("last"))
-            # CoinGecko 공식 필드명: h24_percentage_change
             change_24h = to_float(
                 t.get("h24_percentage_change")
                 if t.get("h24_percentage_change") is not None
@@ -204,7 +170,6 @@ def get_top_candidates_from_coingecko():
             oi_val = to_float(t.get("open_interest_usd"))
             funding_rate = to_float(t.get("funding_rate"))
 
-            # 실제 상승 중인 종목만 필터링
             if last_price <= 0 or change_24h <= 0:
                 continue
 
@@ -218,17 +183,16 @@ def get_top_candidates_from_coingecko():
             })
 
         gainers.sort(key=lambda x: x["change_24h"], reverse=True)
-        return gainers[:8]
+        return gainers[:10]
     except Exception as e:
-        print(f"[CoinGecko 후보 조회 예외] {e}")
+        print(f"[CoinGecko 후보 조회 오류] {e}")
         return []
 
 
 def get_top_bybit_gainer_candidates():
     """
-    1순위: 바이비트 /v5/market/tickers 전체 목록에서 순수 코인 상승률 상위 추출
-    2순위: 대용량 패킷 제한 시 CoinGecko(h24_percentage_change)로 상위 종목 추출 후
-           바이비트 개별 심볼 티커로 정확한 수치 동기화
+    바이비트 Futures -> Gainers 탭 기준 순수 암호화폐 상승률 상위 후보 추출
+    (프록시 호출 횟수를 아끼기 위해 불필요한 사전 개별 티커 루프 제거)
     """
     res = fetch_bybit("/v5/market/tickers", {"category": "linear"})
     tickers = res.get("list", [])
@@ -261,21 +225,16 @@ def get_top_bybit_gainer_candidates():
 
     if len(gainers) >= 5:
         gainers.sort(key=lambda x: x["change_24h"], reverse=True)
-        return gainers[:8]
+        return gainers[:10]
 
-    # 대용량 티커 패킷이 프록시에서 막혔을 때 소형 개별 티커 조회로 전환
-    cg_candidates = get_top_candidates_from_coingecko()
-    refreshed = []
-    for c in cg_candidates:
-        exact_coin = refresh_single_bybit_ticker(c["symbol"], c)
-        refreshed.append(exact_coin)
-
-    refreshed.sort(key=lambda x: x["change_24h"], reverse=True)
-    return refreshed
+    return get_top_candidates_from_coingecko()
 
 
-def get_klines_5m(symbol, limit=200):
-    """5분봉 차트 데이터 수집 및 보조지표 계산"""
+def get_klines_5m(symbol, limit=300):
+    """
+    24시간(288캔들) 전체의 초동 발화점을 놓치지 않도록 300캔들(25시간) 수집 후
+    전 세계 주요 퀀트/프라이스액션 보조지표 일괄 계산
+    """
     res = fetch_bybit("/v5/market/kline", {
         "category": "linear",
         "symbol": symbol,
@@ -297,31 +256,67 @@ def get_klines_5m(symbol, limit=200):
         return pd.DataFrame()
 
     df["timestamp"] = df["timestamp"].astype(np.int64)
-    df = df.sort_values("timestamp").reset_index(drop=True)
+    df = df.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
 
+    # 1. 이동평균선 (MA & EMA)
     df["ma5"] = df["close"].rolling(5, min_periods=3).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=10).mean()
     df["ma50"] = df["close"].rolling(50, min_periods=20).mean()
     df["ma100"] = df["close"].rolling(100, min_periods=40).mean()
     df["ma200"] = df["close"].rolling(200, min_periods=60).mean()
 
+    # 이평선 리본 밀집도 (MA5, MA20, MA50 간 최대 괴리율 %)
+    ribbon_max = df[["ma5", "ma20", "ma50"]].max(axis=1)
+    ribbon_min = df[["ma5", "ma20", "ma50"]].min(axis=1)
+    df["ribbon_spread_pct"] = ((ribbon_max - ribbon_min) / df["ma20"].replace(0, np.nan)) * 100.0
+
+    # 2. 거래량 배수
     df["vol_ma20"] = df["volume"].shift(1).rolling(20, min_periods=5).mean()
     df["vol_mult"] = df["volume"] / df["vol_ma20"].replace(0, np.nan)
 
+    # 3. OBV
     direction = np.sign(df["close"].diff()).fillna(0)
     df["obv"] = (direction * df["volume"]).cumsum()
 
+    # 4. 볼린저밴드(20, 2) & 켈트너 채널(20, 1.5 ATR) -> TTM Squeeze 감지용
     std20 = df["close"].rolling(20, min_periods=10).std()
-    df["bb_upper"] = df["ma20"] + 2 * std20
-    df["bb_lower"] = df["ma20"] - 2 * std20
+    df["bb_upper"] = df["ma20"] + 2.0 * std20
+    df["bb_lower"] = df["ma20"] - 2.0 * std20
     df["bbw"] = ((df["bb_upper"] - df["bb_lower"]) / df["ma20"].replace(0, np.nan)) * 100.0
 
+    prev_close = df["close"].shift(1)
+    tr = pd.concat([
+        (df["high"] - df["low"]).abs(),
+        (df["high"] - prev_close).abs(),
+        (df["low"] - prev_close).abs()
+    ], axis=1).max(axis=1)
+    df["atr14"] = tr.rolling(14, min_periods=5).mean()
+    df["kc_upper"] = df["ma20"] + 1.5 * df["atr14"]
+    df["kc_lower"] = df["ma20"] - 1.5 * df["atr14"]
+    df["ttm_squeeze_on"] = (df["bb_upper"] <= df["kc_upper"]) & (df["bb_lower"] >= df["kc_lower"])
+
+    # 5. 롤링 4시간(48캔들) VWAP
     tp = (df["high"] + df["low"] + df["close"]) / 3.0
     df["vwap48"] = (
         (tp * df["volume"]).rolling(48, min_periods=10).sum()
         / df["volume"].rolling(48, min_periods=10).sum().replace(0, np.nan)
     )
 
+    # 6. RSI(14)
+    delta = df["close"].diff()
+    gain = delta.clip(lower=0).rolling(14, min_periods=5).mean()
+    loss = (-delta.clip(upper=0)).rolling(14, min_periods=5).mean()
+    rs = gain / loss.replace(0, np.nan)
+    df["rsi14"] = (100.0 - (100.0 / (1.0 + rs))).fillna(50.0)
+
+    # 7. MACD (12, 26, 9)
+    ema12 = df["close"].ewm(span=12, adjust=False).mean()
+    ema26 = df["close"].ewm(span=26, adjust=False).mean()
+    df["macd"] = ema12 - ema26
+    df["macd_signal"] = df["macd"].ewm(span=9, adjust=False).mean()
+    df["macd_hist"] = df["macd"] - df["macd_signal"]
+
+    # 8. 캔들 미세구조 (몸통 비율 및 아랫꼬리 스윕 비율)
     candle_range = (df["high"] - df["low"]).replace(0, np.nan)
     df["body_ratio"] = ((df["close"] - df["open"]).abs() / candle_range).fillna(0.0)
     lower_wick = np.minimum(df["open"], df["close"]) - df["low"]
@@ -332,7 +327,6 @@ def get_klines_5m(symbol, limit=200):
 
 
 def get_oi_5m(symbol, limit=200):
-    """5분봉 미결제약정(OI) 조회"""
     res = fetch_bybit("/v5/market/open-interest", {
         "category": "linear",
         "symbol": symbol,
@@ -357,12 +351,66 @@ def get_oi_5m(symbol, limit=200):
     return oi_df.sort_values("timestamp").reset_index(drop=True)
 
 
+def find_true_ignition_index(df):
+    """
+    $CAP처럼 고점 부근의 작은 양봉(+1.5%)을 발화점으로 잘못 잡는 현상을 막기 위해,
+    24시간 전체 구간에서 '발화 이후 최고가까지 상승폭(gain_after) x 거래량 배수' 점수가
+    가장 뛰어난 진짜 대시세 초동 발화 캔들을 역추적
+    """
+    search_df = df.iloc[20:-3].copy()
+    if search_df.empty:
+        return df.index[len(df) // 2]
+
+    global_high = to_float(df["high"].max())
+    global_low = to_float(df["low"].min())
+    total_wave = (global_high - global_low) / global_low if global_low > 0 else 0.1
+
+    candidates = search_df[
+        (search_df["close"] > search_df["open"]) &
+        (search_df["vol_mult"] >= 2.5) &
+        ((search_df["close"] - search_df["open"]) / search_df["open"].replace(0, np.nan) >= 0.01)
+    ]
+
+    if not candidates.empty:
+        # 1순위: 전체 상승 파동의 최소 35% 이상(또는 +7% 이상)이 남아있는 초동 양봉 중 첫 번째 강한 발화점
+        min_required_gain = max(0.06, min(0.12, total_wave * 0.35))
+        for idx in candidates.index:
+            future_max = to_float(df.loc[idx:, "high"].max())
+            ign_close = to_float(df.loc[idx, "close"])
+            if ign_close > 0 and (future_max - ign_close) / ign_close >= min_required_gain:
+                return idx
+
+        # 2순위: (발화 후 상승률 * log(거래량배수)) 복합 점수가 가장 높은 캔들
+        best_idx = None
+        best_score = -1.0
+        for idx in candidates.index:
+            future_max = to_float(df.loc[idx:, "high"].max())
+            ign_close = to_float(df.loc[idx, "close"])
+            v_mult = max(1.0, to_float(df.loc[idx, "vol_mult"], default=1.0))
+            if ign_close > 0:
+                gain_after = (future_max - ign_close) / ign_close
+                score = gain_after * np.log1p(v_mult)
+                if score > best_score:
+                    best_score = score
+                    best_idx = idx
+        if best_idx is not None:
+            return best_idx
+
+    valid_vol = search_df["vol_mult"].dropna()
+    return valid_vol.idxmax() if not valid_vol.empty else search_df.index[0]
+
+
 def analyze_coin(coin):
-    """상위 5개 각 종목의 기존 전략 + 신규 알파 전략 분석"""
+    """상위 5개 각 종목의 기존 전략 + 글로벌 10대 신규 알파 전략 역추적"""
     symbol = coin["symbol"]
-    df = get_klines_5m(symbol, limit=200)
-    if len(df) < 30:
+    df = get_klines_5m(symbol, limit=300)
+    if len(df) < 35:
         return None
+
+    # 5분봉 최신 종가로 현재가 보정
+    latest_close = to_float(df["close"].iloc[-1], default=coin["last_price"])
+    if latest_close > 0:
+        coin["last_price"] = latest_close
 
     oi_df = get_oi_5m(symbol, limit=200)
     if not oi_df.empty:
@@ -376,30 +424,7 @@ def analyze_coin(coin):
     else:
         df["openInterest"] = np.nan
 
-    search_df = df.iloc[24:-2].copy()
-    candidates = search_df[
-        (search_df["close"] > search_df["open"]) &
-        (search_df["vol_mult"] >= 3.0) &
-        ((search_df["close"] - search_df["open"]) / search_df["open"].replace(0, np.nan) >= 0.015)
-    ]
-
-    ign_idx = None
-    if not candidates.empty:
-        for idx in candidates.index:
-            future_max = to_float(df.loc[idx:, "high"].max())
-            ign_close = to_float(df.loc[idx, "close"])
-            if ign_close > 0 and (future_max - ign_close) / ign_close >= 0.08:
-                ign_idx = idx
-                break
-        if ign_idx is None:
-            valid_cand = candidates["vol_mult"].dropna()
-            if not valid_cand.empty:
-                ign_idx = valid_cand.idxmax()
-
-    if ign_idx is None:
-        valid_vol = search_df["vol_mult"].dropna()
-        ign_idx = valid_vol.idxmax() if not valid_vol.empty else search_df.index[0]
-
+    ign_idx = find_true_ignition_index(df)
     ign_row = df.loc[ign_idx]
     pre_df = df.loc[max(0, ign_idx - 24):ign_idx - 1]
     post_df = df.loc[ign_idx + 1:]
@@ -410,6 +435,7 @@ def analyze_coin(coin):
     pump_pct = ((post_high - ign_price) / ign_price) * 100.0 if ign_price > 0 else 0.0
     vol_mult = to_float(ign_row["vol_mult"], default=1.0)
 
+    # 기존 전략 체크
     short_align = bool(ign_row["ma5"] > ign_row["ma20"] > ign_row["ma50"])
     full_align = bool(short_align and (ign_row["ma50"] > ign_row["ma100"] > ign_row["ma200"]))
 
@@ -425,9 +451,12 @@ def analyze_coin(coin):
         except Exception:
             obv_accum = False
 
+    # =========================================================================
+    # 글로벌 10대 신규 알파 전략 역추적 엔진 (World Quantitative Strategy Pool)
+    # =========================================================================
     new_strategies = []
 
-    # [신규 1] OI 선행매집
+    # [전략 1] OI 선행매집 다이버전스 (Stealth OI Accumulation)
     oi_pre_change = 0.0
     oi_ignition_change = 0.0
     if df["openInterest"].notna().any() and ign_idx >= 12:
@@ -439,11 +468,11 @@ def analyze_coin(coin):
         if oi_1c_ago > 0 and oi_now > 0:
             oi_ignition_change = ((oi_now - oi_1c_ago) / oi_1c_ago) * 100.0
 
-    stealth_oi = (oi_pre_change >= 3.0) and (box_range_pct <= 8.0)
+    stealth_oi = (oi_pre_change >= 3.0) and (box_range_pct <= 9.0)
     if stealth_oi:
-        new_strategies.append(f"OI 선행매집(발화전 1시간 OI +{oi_pre_change:.1f}%)")
+        new_strategies.append(f"OI 선행매집(발화전 1h OI +{oi_pre_change:.1f}%)")
 
-    # [신규 2] BB스퀴즈 + VWAP 장악 돌파
+    # [전략 2] BB 스퀴즈 + VWAP 장대양봉 돌파
     pre_bbw = to_float(pre_df["bbw"].iloc[-1], default=-1.0) if not pre_df.empty else -1.0
     bb_squeeze_break = False
     if pre_bbw > 0:
@@ -453,22 +482,22 @@ def analyze_coin(coin):
             vwap_ok = bool(
                 pd.notna(ign_row["vwap48"])
                 and ign_row["close"] > ign_row["vwap48"]
-                and ign_row["body_ratio"] >= 0.65
+                and ign_row["body_ratio"] >= 0.60
             )
             bb_squeeze_break = (bbw_pct <= 35.0) and vwap_ok
             if bb_squeeze_break:
                 new_strategies.append(
-                    f"BB스퀴즈(하위 {bbw_pct:.0f}%)+VWAP 돌파(양봉몸통 {ign_row['body_ratio']*100:.0f}%)"
+                    f"BB스퀴즈(하위 {bbw_pct:.0f}%)+VWAP 돌파(몸통 {ign_row['body_ratio']*100:.0f}%)"
                 )
 
-    # [신규 3] 비정배열 아랫꼬리 스윕(Spring) 반전
+    # [전략 3] 비정배열 유동성 스윕 (Wyckoff Spring 스탑헌팅 후 MA20 돌파)
     recent_6 = df.loc[max(0, ign_idx - 6):ign_idx]
-    had_wick = bool((recent_6["lower_wick_ratio"] >= 1.5).any()) if not recent_6.empty else False
+    had_wick = bool((recent_6["lower_wick_ratio"] >= 1.4).any()) if not recent_6.empty else False
     spring_reversal = bool((not short_align) and had_wick and ign_row["close"] > ign_row["ma20"])
     if spring_reversal:
         new_strategies.append("유동성 스윕(Spring 아랫꼬리 스탑헌팅 후 MA20 돌파)")
 
-    # [신규 4] 발화 직전 거래량 극건조 포켓
+    # [전략 4] 발화 직전 거래량 극건조 포켓 (Volume Dry-up Pocket <= 35%)
     pre_5 = df.loc[max(0, ign_idx - 5):ign_idx - 1]
     pre_vol_pocket = False
     if not pre_5.empty and to_float(ign_row["vol_ma20"]) > 0:
@@ -477,7 +506,39 @@ def analyze_coin(coin):
             pre_vol_pocket = True
             new_strategies.append(f"발화 직전 거래량 극건조 포켓(평소 대비 {min_pre_vol_ratio*100:.0f}% 수축 후 폭발)")
 
-    # [신규 5] 돌파 후 눌림목 패턴 (전고점 S/R Flip vs MA20/50 지지)
+    # [전략 5] TTM 켈트너 스퀴즈 폭발 (BB가 Keltner Channel 내부 압축 후 돌파)
+    ttm_squeeze_fired = False
+    if not pre_5.empty and bool(pre_5["ttm_squeeze_on"].any()) and ign_row["close"] > ign_row["bb_upper"]:
+        ttm_squeeze_fired = True
+        new_strategies.append("TTM 켈트너 스퀴즈 폭발(BB⊂KC 에너지 응축 후 상단 돌파)")
+
+    # [전략 6] 이평선 리본 초밀집 확산 (EMA Ribbon Compression <= 1.8%)
+    ema_ribbon_burst = False
+    if not pre_5.empty:
+        min_ribbon_spread = to_float(pre_5["ribbon_spread_pct"].min(), default=99.0)
+        if min_ribbon_spread <= 1.8 and ign_row["close"] > ign_row["ma50"]:
+            ema_ribbon_burst = True
+            new_strategies.append(f"이평선 리본 초밀집 확산(5·20·50 이격 {min_ribbon_spread:.1f}% 수렴 후 분출)")
+
+    # [전략 7] RSI 과매도 반전 스러스트 (RSI Oversold Thrust)
+    rsi_thrust = False
+    if not pre_df.empty:
+        min_pre_rsi = to_float(pre_df["rsi14"].min(), default=50.0)
+        ign_rsi = to_float(ign_row["rsi14"], default=50.0)
+        if min_pre_rsi <= 38.0 and ign_rsi >= 55.0:
+            rsi_thrust = True
+            new_strategies.append(f"RSI 과매도 스러스트(발화전 RSI {min_pre_rsi:.0f} 침체 후 {ign_rsi:.0f} 급반등)")
+
+    # [전략 8] MACD 제로라인 골든크로스 발화
+    macd_cross = False
+    if not pre_5.empty:
+        prev_hist_min = to_float(pre_5["macd_hist"].min(), default=0.0)
+        now_hist = to_float(ign_row["macd_hist"], default=0.0)
+        if prev_hist_min <= 0 and now_hist > 0 and to_float(ign_row["macd"]) > to_float(ign_row["macd_signal"]):
+            macd_cross = True
+            new_strategies.append("MACD 히스토그램 양전환 골든크로스 발화")
+
+    # [전략 9] 돌파 후 눌림목 패턴 (전고점 S/R Flip vs MA20/50 지지 + 거래량 건조)
     pullback_type = "눌림 없이 직행(Runaway)"
     dryup_ratio = 1.0
     retest_sl_pct = 3
@@ -515,7 +576,7 @@ def analyze_coin(coin):
         raw_sl = ((pb_close - (pb_low * 0.992)) / pb_close * 100.0) if pb_close > 0 else 3.0
         retest_sl_pct = max(2, min(6, int(round(raw_sl))))
 
-    # [신규 6] 숏스퀴즈 발화
+    # [전략 10] 숏스퀴즈 연쇄 발화
     short_squeeze = bool((coin["funding_rate"] <= 0.01) and (oi_ignition_change >= 1.5 or oi_pre_change >= 3.0))
     if short_squeeze:
         new_strategies.append(f"숏스퀴즈 발화(펀딩 {coin['funding_rate']:+.4f}% + 발화OI +{oi_ignition_change:.1f}%)")
@@ -545,6 +606,10 @@ def analyze_coin(coin):
         "bb_squeeze_break": bb_squeeze_break,
         "spring_reversal": spring_reversal,
         "pre_vol_pocket": pre_vol_pocket,
+        "ttm_squeeze_fired": ttm_squeeze_fired,
+        "ema_ribbon_burst": ema_ribbon_burst,
+        "rsi_thrust": rsi_thrust,
+        "macd_cross": macd_cross,
         "sr_flip_hit": sr_flip_hit,
         "ma20_hit": ma20_hit,
         "short_squeeze": short_squeeze,
@@ -557,7 +622,7 @@ def build_report(results):
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
     lines = [
         "📊 [Bybit Futures 급등 Top 5 초동 역추적 & 신규 전략 발굴]",
-        f"🕒 기준 시각: {now_str} (순수 코인 상위 5개)\n"
+        f"🕒 기준 시각: {now_str} (순수 코인 상위 {len(results)}개)\n"
     ]
 
     num_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
@@ -590,6 +655,10 @@ def build_report(results):
     cnt_bb_vwap = sum(1 for r in results if r["bb_squeeze_break"])
     cnt_vol_pocket = sum(1 for r in results if r["pre_vol_pocket"])
     cnt_spring = sum(1 for r in results if r["spring_reversal"])
+    cnt_ttm = sum(1 for r in results if r["ttm_squeeze_fired"])
+    cnt_ribbon = sum(1 for r in results if r["ema_ribbon_burst"])
+    cnt_rsi = sum(1 for r in results if r["rsi_thrust"])
+    cnt_macd = sum(1 for r in results if r["macd_cross"])
     cnt_sr_flip = sum(1 for r in results if r["sr_flip_hit"])
     cnt_ma20 = sum(1 for r in results if r["ma20_hit"])
     cnt_squeeze = sum(1 for r in results if r["short_squeeze"])
@@ -613,22 +682,24 @@ def build_report(results):
     tp3_pct = int(round(max(tp2_pct * 1.4, avg_pump * 0.70)))
     tp4_pct = int(round(max(tp3_pct * 1.3, avg_pump * 0.95)))
 
-    w_ma = 20 if cnt_short_align >= 3 else 10
-    w_obv = 20 if (cnt_obv >= 3 or cnt_vol_pocket >= 2) else 15
-    w_oi = 25 if (cnt_stealth_oi >= 2 or cnt_squeeze >= 2) else 15
-    w_bb_vwap = 20 if cnt_bb_vwap >= 2 else 15
-    w_retest = max(0, 100 - (w_ma + w_obv + w_oi + w_bb_vwap))
+    w_ma_spring = 25 if (cnt_short_align >= 3 or cnt_spring >= 2) else 15
+    w_obv_pocket = 20 if (cnt_obv >= 3 or cnt_vol_pocket >= 2) else 15
+    w_oi_squeeze = 20 if (cnt_stealth_oi >= 2 or cnt_squeeze >= 2) else 15
+    w_bb_ribbon = 15 if (cnt_bb_vwap >= 2 or cnt_ribbon >= 2 or cnt_ttm >= 2) else 15
+    w_retest = max(0, 100 - (w_ma_spring + w_obv_pocket + w_oi_squeeze + w_bb_ribbon))
 
     lines.append(
         "━━━━━━━━━━━━━━━━━━\n"
         "💡 [내 전략(scanner.py) 실시간 업데이트 피드백 (제미나이 복붙용)]\n\n"
-        "[1. 기존 vs 신규 전략 적중률 비교]\n"
+        "[1. 기존 vs 신규 글로벌 알파 전략 적중률 비교]\n"
         f"• 기존 5분봉 단기정배열(5>20>50): {n}종목 중 {cnt_short_align}종목 (완전정배열 {cnt_full_align}종목)\n"
         f"• 기존 박스권 OBV 우상향 매집: {n}종목 중 {cnt_obv}종목\n"
-        f"• [신규] OI 선행매집(발화전 1h OI 급증): {n}종목 중 {cnt_stealth_oi}종목 (평균 {avg_oi_pre:+.1f}%)\n"
-        f"• [신규] BB스퀴즈 + VWAP 장대양봉 돌파: {n}종목 중 {cnt_bb_vwap}종목\n"
-        f"• [신규] 발화 직전 거래량 극건조 포켓(<=35%): {n}종목 중 {cnt_vol_pocket}종목\n"
         f"• [신규] 비정배열 유동성 스윕(Spring) 반전: {n}종목 중 {cnt_spring}종목\n"
+        f"• [신규] 발화 직전 거래량 극건조 포켓(<=35%): {n}종목 중 {cnt_vol_pocket}종목\n"
+        f"• [신규] 이평선 리본 초밀집 확산(<=1.8%): {n}종목 중 {cnt_ribbon}종목\n"
+        f"• [신규] BB스퀴즈 + VWAP 장대양봉 돌파: {n}종목 중 {cnt_bb_vwap}종목 (TTM스퀴즈 {cnt_ttm}종목)\n"
+        f"• [신규] OI 선행매집(발화전 1h OI 급증): {n}종목 중 {cnt_stealth_oi}종목 (평균 {avg_oi_pre:+.1f}%)\n"
+        f"• [신규] RSI 과매도 스러스트: {cnt_rsi}종목 | MACD 양전환 골든크로스: {cnt_macd}종목\n"
         f"• [신규] 숏스퀴즈(펀딩<=0.01% & OI급증): {n}종목 중 {cnt_squeeze}종목\n"
         f"• [신규] 돌파 후 타점: S/R Flip(전고점 지지) {cnt_sr_flip}종목 | MA20 지지 {cnt_ma20}종목\n\n"
         "[2. scanner.py 파라미터 튜닝 권장값]\n"
@@ -636,19 +707,21 @@ def build_report(results):
         f"• PRE_BOX_RANGE_MAX_PCT = {rec_box_max}% (직전 2시간 변동폭 중앙값 {med_box_range:.1f}%)\n"
         f"• PULLBACK_DRYUP_MAX_RATIO = {rec_dryup_max} (발화봉 대비 눌림 거래량 {int(rec_dryup_max*100)}% 이하)\n"
         "• PRE_VOL_POCKET_MAX_RATIO = 0.35 (발화 직전 5캔들 최저거래량 / vol_ma20)\n"
+        "• EMA_RIBBON_MAX_SPREAD_PCT = 1.8% (5·20·50 이평선 밀집 수렴 기준)\n"
         "• OI_PRE_SURGE_MIN_PCT = 3.0% (발화 전 1시간 OI 증가율)\n\n"
         "[3. scanner.py 추가할 신규 파이썬 조건식]\n"
-        f"• cond_stealth_oi = (oi_change_1h_pct >= 3.0) and (box_range_2h_pct <= {rec_box_max})\n"
-        "• cond_bb_vwap = (bbw_percentile_4h <= 35) and (close > vwap48) and (body_ratio >= 0.65)\n"
+        "• cond_spring = (not ma_short_aligned) and (lower_wick_ratio_max6 >= 1.4) and (close > ma20)\n"
         f"• cond_vol_pocket = (pre5_min_vol / vol_ma20 <= 0.35) and (vol_mult >= {rec_vol_mult})\n"
-        "• cond_spring = (not ma_short_aligned) and (lower_wick_ratio_max6 >= 1.5) and (close > ma20)\n"
+        "• cond_ema_ribbon = (pre5_min_ribbon_spread <= 1.8) and (close > ma50)\n"
+        "• cond_bb_vwap = (bbw_percentile_4h <= 35) and (close > vwap48) and (body_ratio >= 0.60)\n"
+        f"• cond_stealth_oi = (oi_change_1h_pct >= 3.0) and (box_range_2h_pct <= {rec_box_max})\n"
         f"• cond_sr_flip_retest = (abs(pullback_low - prev_box_high) / prev_box_high <= 0.012) and (pullback_vol_ratio <= {rec_dryup_max})\n\n"
         "[4. 100점 만점 스코어링 배점 조정안]\n"
-        f"• 이평선 정배열(5>20>50) 또는 Spring 반전: {w_ma}점\n"
-        f"• 박스권 응축 + OBV 우상향 + 발화전 거래량 포켓: {w_obv}점\n"
-        f"• 선물 OI 선행 급증(+3%↑) & 중립/음수 펀딩비: {w_oi}점\n"
-        f"• BB 스퀴즈 돌파 + VWAP 안착 + 거래량({rec_vol_mult}x↑): {w_bb_vwap}점\n"
-        f"• S/R Flip(전고점) 또는 MA20 리테스트 + 거래량 건조: {w_retest}점 (총 100점, 85점↑ 알림)\n\n"
+        f"• 추세/반전(정배열 5>20>50 또는 Spring 유동성 스윕 반전): {w_ma_spring}점\n"
+        f"• 매집/건조(박스권 응축 + OBV 우상향 또는 발화전 거래량 포켓): {w_obv_pocket}점\n"
+        f"• 선물수급(OI 선행 급증 +3%↑ 또는 중립/음수 펀딩 숏스퀴즈): {w_oi_squeeze}점\n"
+        f"• 변동성돌파(BB/TTM 스퀴즈 + 이평선 밀집 + VWAP/거래량 {rec_vol_mult}x↑): {w_bb_ribbon}점\n"
+        f"• 타점컨펌(S/R Flip 전고점 또는 MA20 리테스트 + 거래량 건조): {w_retest}점 (총 100점, 85점↑ 알림)\n\n"
         "[5. 타점 / 손절(SL) / 4단계 익절(TP) 기준]\n"
         f"• 권장 손절폭(SL): -{rec_sl_pct}% (정수형, 리테스트 저점 이탈 기준)\n"
         f"• 권장 4단계 익절(TP): 1차 +{tp1_pct}% (1:2 R:R) / 2차 +{tp2_pct}% / 3차 +{tp3_pct}% / 4차 +{tp4_pct}%"
