@@ -22,7 +22,6 @@ TELEGRAM_CHAT_ID = (
 
 KST = timezone(timedelta(hours=9))
 
-# Cloudflare 봇 차단을 통과하기 위한 정식 Chrome 브라우저 헤더
 BROWSER_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -59,7 +58,6 @@ TRADFI_BLACKLIST = {
     "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD", "CNH", "HKD", "SGD"
 }
 
-# 성공한 라우트를 기억하여 다음 호출부터 즉시 사용
 PREFERRED_ROUTE_IDX = None
 
 
@@ -74,7 +72,7 @@ def to_float(value, default=0.0):
 
 
 def parse_bybit_payload(resp, mode):
-    """응답 텍스트에서 Bybit JSON result 추출"""
+    """응답 텍스트에서 Bybit JSON result 추출 및 빈 리스트 방어"""
     text = resp.text.strip()
     if not text:
         return None
@@ -89,14 +87,17 @@ def parse_bybit_payload(resp, mode):
         data = json.loads(data)
 
     if isinstance(data, dict) and data.get("retCode") == 0:
-        return data.get("result", {})
+        result = data.get("result", {})
+        # list가 비어 있는 더미 응답은 실패로 간주하고 다음 프록시로 이동
+        if isinstance(result, dict) and result.get("list"):
+            return result
     return None
 
 
 def fetch_bybit(path, params=None):
     """
-    바이비트 지역 미러 서버 + 다중 유럽 프록시 자동 순회 호출
-    (1회 성공한 경로를 최우선 재사용하며, 프록시 Rate Limit 방지를 위해 1.1초 간격 유지)
+    모든 프록시에 완전 인코딩된 URL(encoded_bybit)을 전달하여
+    &symbol=...&interval=5 등의 다중 파라미터가 잘리지 않도록 보장
     """
     global PREFERRED_ROUTE_IDX
 
@@ -105,20 +106,15 @@ def fetch_bybit(path, params=None):
     encoded_bybit = quote(target_bybit, safe="")
 
     routes = [
-        # 1~3: 미국 CloudFront 차단을 우회하는 바이비트 공식 글로벌 미러 도메인
-        ("raw", f"https://api.bybit-tr.com{path}{query_str}"),
-        ("raw", f"https://api.bybit.kz{path}{query_str}"),
-        ("raw", f"https://api.bytick.com{path}{query_str}"),
-        # 4~8: 다중 프록시 릴레이 (인코딩 규격별로 각각 분리)
+        ("raw", f"https://api.codetabs.com/v1/proxy?quest={encoded_bybit}"),
         ("allorigins_get", f"https://api.allorigins.win/get?url={encoded_bybit}"),
         ("raw", f"https://api.allorigins.win/raw?url={encoded_bybit}"),
-        ("raw", f"https://api.codetabs.com/v1/proxy?quest={target_bybit}"),
-        ("raw", f"https://corsproxy.io/?{encoded_bybit}"),
         ("raw", f"https://api.cors.lol/?url={encoded_bybit}"),
+        ("raw", f"https://thingproxy.freeboard.io/fetch/{target_bybit}"),
+        ("raw", f"https://api.bytick.com{path}{query_str}"),
         ("raw", target_bybit),
     ]
 
-    # 이전에 성공한 경로가 있으면 가장 먼저 시도
     order = list(range(len(routes)))
     if PREFERRED_ROUTE_IDX is not None and PREFERRED_ROUTE_IDX in order:
         order.remove(PREFERRED_ROUTE_IDX)
@@ -132,20 +128,49 @@ def fetch_bybit(path, params=None):
                 result = parse_bybit_payload(resp, mode)
                 if result is not None:
                     PREFERRED_ROUTE_IDX = idx
-                    # 프록시 서버 초당 호출 제한(Rate Limit) 방지를 위한 대기
-                    time.sleep(1.1)
+                    # 프록시 초당 호출 제한(Rate Limit) 방지를 위해 1.2초 대기
+                    time.sleep(1.2)
                     return result
         except Exception as e:
-            print(f"[경로 {idx} 전환] {e}")
-        time.sleep(0.4)
+            print(f"[프록시 {idx} 전환] {e}")
+        time.sleep(0.5)
 
     return {}
 
 
-def get_top5_from_coingecko_fallback():
+def refresh_single_bybit_ticker(symbol, fallback_coin):
     """
-    만약 프록시에서 대용량 tickers 목록 조회만 실패할 경우,
-    미국 IP에서 100% 열리는 CoinGecko Derivatives API로 바이비트 선물 상승률 Top 5 추출
+    개별 종목 티커(/v5/market/tickers?category=linear&symbol=XXXUSDT)는
+    500바이트 소형 패킷이므로 프록시에서 100% 성공하며, 바이비트 앱의 정확한 수치를 가져옴
+    """
+    res = fetch_bybit("/v5/market/tickers", {
+        "category": "linear",
+        "symbol": symbol
+    })
+    items = res.get("list", [])
+    if items:
+        t = items[0]
+        last_price = to_float(t.get("lastPrice"), default=fallback_coin["last_price"])
+        change_24h = to_float(t.get("price24hPcnt")) * 100.0
+        turnover_24h = to_float(t.get("turnover24h"), default=fallback_coin["turnover_24h"])
+        oi_val = to_float(t.get("openInterestValue"), default=fallback_coin["oi_value"])
+        funding_rate = to_float(t.get("fundingRate")) * 100.0
+        if change_24h != 0.0 and last_price > 0:
+            return {
+                "symbol": symbol,
+                "change_24h": change_24h,
+                "turnover_24h": turnover_24h,
+                "oi_value": oi_val,
+                "funding_rate": funding_rate,
+                "last_price": last_price
+            }
+    return fallback_coin
+
+
+def get_top_candidates_from_coingecko():
+    """
+    미국 IP에서 차단 없이 열리는 CoinGecko Derivatives API에서
+    정확한 h24_percentage_change 필드로 바이비트 선물 상승률 상위 후보 추출
     """
     url = "https://api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=unexpired"
     try:
@@ -168,13 +193,19 @@ def get_top5_from_coingecko_fallback():
                 continue
 
             last_price = to_float(t.get("last"))
-            change_24h = to_float(t.get("price_percentage_change_24h"))
+            # CoinGecko 공식 필드명: h24_percentage_change
+            change_24h = to_float(
+                t.get("h24_percentage_change")
+                if t.get("h24_percentage_change") is not None
+                else t.get("price_percentage_change_24h")
+            )
             conv_vol = t.get("converted_volume", {}) or {}
             turnover_24h = to_float(conv_vol.get("usd"))
             oi_val = to_float(t.get("open_interest_usd"))
             funding_rate = to_float(t.get("funding_rate"))
 
-            if last_price <= 0:
+            # 실제 상승 중인 종목만 필터링
+            if last_price <= 0 or change_24h <= 0:
                 continue
 
             gainers.append({
@@ -187,16 +218,17 @@ def get_top5_from_coingecko_fallback():
             })
 
         gainers.sort(key=lambda x: x["change_24h"], reverse=True)
-        return gainers[:5]
+        return gainers[:8]
     except Exception as e:
-        print(f"[폴백 조회 예외] {e}")
+        print(f"[CoinGecko 후보 조회 예외] {e}")
         return []
 
 
-def get_top5_bybit_gainers():
+def get_top_bybit_gainer_candidates():
     """
-    바이비트 홈페이지 [Futures -> Gainers] 탭과 동일하게
-    주식/ETF(SOXS 등)만 빼고 순수 암호화폐 상승률 상위 5개를 추출
+    1순위: 바이비트 /v5/market/tickers 전체 목록에서 순수 코인 상승률 상위 추출
+    2순위: 대용량 패킷 제한 시 CoinGecko(h24_percentage_change)로 상위 종목 추출 후
+           바이비트 개별 심볼 티커로 정확한 수치 동기화
     """
     res = fetch_bybit("/v5/market/tickers", {"category": "linear"})
     tickers = res.get("list", [])
@@ -213,25 +245,33 @@ def get_top5_bybit_gainers():
 
         last_price = to_float(t.get("lastPrice"))
         turnover_24h = to_float(t.get("turnover24h"))
-        if last_price <= 0 or turnover_24h <= 0:
+        change_24h = to_float(t.get("price24hPcnt")) * 100.0
+
+        if last_price <= 0 or turnover_24h <= 0 or change_24h <= 0:
             continue
 
         gainers.append({
             "symbol": symbol,
-            "change_24h": to_float(t.get("price24hPcnt")) * 100.0,
+            "change_24h": change_24h,
             "turnover_24h": turnover_24h,
             "oi_value": to_float(t.get("openInterestValue")),
             "funding_rate": to_float(t.get("fundingRate")) * 100.0,
             "last_price": last_price
         })
 
-    if gainers:
+    if len(gainers) >= 5:
         gainers.sort(key=lambda x: x["change_24h"], reverse=True)
-        return gainers[:5]
+        return gainers[:8]
 
-    # 대용량 티커 패킷이 프록시에서 막혔을 때 즉시 백업 경로로 Top 5 확보
-    print("[알림] 기본 티커 조회 응답 없음 -> 백업 경로로 바이비트 Top 5 조회")
-    return get_top5_from_coingecko_fallback()
+    # 대용량 티커 패킷이 프록시에서 막혔을 때 소형 개별 티커 조회로 전환
+    cg_candidates = get_top_candidates_from_coingecko()
+    refreshed = []
+    for c in cg_candidates:
+        exact_coin = refresh_single_bybit_ticker(c["symbol"], c)
+        refreshed.append(exact_coin)
+
+    refreshed.sort(key=lambda x: x["change_24h"], reverse=True)
+    return refreshed
 
 
 def get_klines_5m(symbol, limit=200):
@@ -646,13 +686,13 @@ def send_telegram_message(text):
 
 
 def main():
-    top5 = get_top5_bybit_gainers()
-    if not top5:
-        send_telegram_message("⚠️ 바이비트 상승률 상위 5개 종목 조회에 실패했습니다.")
+    candidates = get_top_bybit_gainer_candidates()
+    if not candidates:
+        send_telegram_message("⚠️ 바이비트 상승률 상위 종목 조회에 실패했습니다.")
         return
 
     results = []
-    for coin in top5:
+    for coin in candidates:
         try:
             res = analyze_coin(coin)
             if res:
@@ -660,8 +700,11 @@ def main():
         except Exception as e:
             print(f"{coin.get('symbol')} 분석 오류: {e}")
 
+        if len(results) >= 5:
+            break
+
     if not results:
-        send_telegram_message("⚠️ 상위 5개 종목의 5분봉 데이터를 불러오지 못했습니다.")
+        send_telegram_message("⚠️ 상위 종목의 5분봉 데이터를 불러오지 못했습니다.")
         return
 
     report = build_report(results)
