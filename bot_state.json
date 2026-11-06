@@ -405,7 +405,7 @@
         26,
         38
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "NBISUSDT": {
@@ -467,6 +467,29 @@
         50.82814,
         53.60058399999999,
         57.29717599999999
+      ],
+      "tp_pcts": [
+        5,
+        10,
+        16,
+        24
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "PIEVERSEUSDT": {
+      "created_at": 1793988149,
+      "track_type": "TRACK_A",
+      "swing_high_line": 1.4153870499999999,
+      "entry_low": 1.38610318,
+      "entry_high": 1.3972589400000002,
+      "stop_price": 1.3638474388000001,
+      "sl_pct": 2,
+      "tps": [
+        1.4612651130000003,
+        1.5308491660000003,
+        1.6143500296000002,
+        1.7256845144000004
       ],
       "tp_pcts": [
         5,
