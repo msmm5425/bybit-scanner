@@ -125,7 +125,7 @@
         16,
         24
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "BEATUSDT": {
@@ -170,6 +170,29 @@
         24
       ],
       "breakout_alerted": true,
+      "sl_alerted": false
+    },
+    "CLUSDT": {
+      "created_at": 1793960992,
+      "track_type": "TRACK_A",
+      "swing_high_line": 90.253,
+      "entry_low": 89.679674,
+      "entry_high": 90.401442,
+      "stop_price": 88.23974684000001,
+      "sl_pct": 2,
+      "tps": [
+        94.5425859,
+        99.04461380000001,
+        104.44704727999999,
+        111.65029192
+      ],
+      "tp_pcts": [
+        5,
+        10,
+        16,
+        24
+      ],
+      "breakout_alerted": false,
       "sl_alerted": false
     }
   }
