@@ -4,7 +4,7 @@ on:
   schedule:
     # 한국시간(KST) 매일 오전 08:00(UTC 23시), 오후 15:00(UTC 6시), 오후 20:00(UTC 11시) 실행
     - cron: '0 6,11,23 * * *'
-  workflow_dispatch:  # 수동 즉시 테스트 버튼 활성화
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,7 +22,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install packages
-        run: pip install requests pandas numpy
+        run: pip install requests pandas numpy ccxt
 
       - name: Run Binance Top 5 Pre-Surge Analysis
         env:
