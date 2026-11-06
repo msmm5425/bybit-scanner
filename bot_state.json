@@ -590,6 +590,98 @@
         24
       ],
       "breakout_alerted": false,
+      "sl_alerted": true
+    },
+    "LYNUSDT": {
+      "created_at": 1794001406,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.02422,
+      "entry_low": 0.0237069,
+      "entry_high": 0.0238977,
+      "stop_price": 0.023326253999999998,
+      "sl_pct": 2,
+      "tps": [
+        0.024992415,
+        0.02618253,
+        0.027610667999999998,
+        0.029514851999999998
+      ],
+      "tp_pcts": [
+        5,
+        10,
+        16,
+        24
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "KORUUSDT": {
+      "created_at": 1794001406,
+      "track_type": "TRACK_A",
+      "swing_high_line": 7.055264999999999,
+      "entry_low": 6.909293999999999,
+      "entry_high": 6.9649019999999995,
+      "stop_price": 6.798356039999999,
+      "sl_pct": 2,
+      "tps": [
+        7.283952899999999,
+        7.6308077999999995,
+        8.047033679999998,
+        8.602001519999998
+      ],
+      "tp_pcts": [
+        5,
+        10,
+        16,
+        24
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "FLOCKUSDT": {
+      "created_at": 1794001406,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.04114809999999999,
+      "entry_low": 0.04029676,
+      "entry_high": 0.04062108,
+      "stop_price": 0.039649741599999996,
+      "sl_pct": 2,
+      "tps": [
+        0.042481866,
+        0.044504812,
+        0.04693234719999999,
+        0.05016906079999999
+      ],
+      "tp_pcts": [
+        5,
+        10,
+        16,
+        24
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "MUUUSDT": {
+      "created_at": 1794001406,
+      "track_type": "TRACK_A",
+      "swing_high_line": 14.100379999999998,
+      "entry_low": 13.808648,
+      "entry_high": 13.919784,
+      "stop_price": 13.58693168,
+      "sl_pct": 2,
+      "tps": [
+        14.5574268,
+        15.2506376,
+        16.082490559999997,
+        17.19162784
+      ],
+      "tp_pcts": [
+        5,
+        10,
+        16,
+        24
+      ],
+      "breakout_alerted": false,
       "sl_alerted": false
     }
   }
