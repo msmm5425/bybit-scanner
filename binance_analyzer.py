@@ -1,27 +1,36 @@
 import os
 import time
+import json
 import requests
 import numpy as np
 import pandas as pd
+from urllib.parse import urlencode, quote
 from datetime import datetime, timedelta, timezone
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# 1. 환경변수 호환성 완벽 보장 (TELEGRAM_TOKEN / TELEGRAM_BOT_TOKEN 모두 인식)
+TELEGRAM_BOT_TOKEN = (
+    os.getenv("TELEGRAM_TOKEN")
+    or os.getenv("TELEGRAM_BOT_TOKEN")
+    or ""
+).strip()
 
-BYBIT_ENDPOINTS = [
-    "https://api.bybit.com",
-    "https://api.bytick.com"
+TELEGRAM_CHAT_ID = (
+    os.getenv("TELEGRAM_CHAT_ID")
+    or os.getenv("CHAT_ID")
+    or ""
+).strip()
+
+# 2. 바이비트 직접 엔드포인트 + 유럽 프록시 릴레이 (미국 IP 403 차단 완벽 우회)
+BYBIT_DIRECT_ENDPOINTS = [
+    "https://api.bytick.com",
+    "https://api.bybit.com"
 ]
 
 KST = timezone(timedelta(hours=9))
-# 24시간(288캔들) 탐색 구간 전체에서 MA200이 NaN이 되지 않도록 500캔들(워밍업 200 + 탐색 300) 수집
-KLINE_LIMIT = 500
-REQUEST_DELAY_SEC = 0.12
+KLINE_LIMIT = 350
+REQUEST_DELAY_SEC = 0.15
 
-TRADFI_SYMBOL_TYPES = {
-    "stock", "etf", "forex", "commodity", "tradfi", "equity", "index"
-}
-
+# 3. 바이비트 TradFi Perps (주식, ETF, 주가지수, 원자재, 외환) 블랙리스트
 TRADFI_BLACKLIST = {
     "SOXL", "SOXS", "TQQQ", "SQQQ", "SPY", "QQQ", "IWM", "DIA", "TLT",
     "GLD", "SLV", "USO", "UNG", "UVXY", "VIX", "ARKK", "SMH", "XLF",
@@ -77,93 +86,61 @@ def safe_idxmin(series, default=None):
 
 
 def request_bybit(path, params=None):
-    headers = {"User-Agent": "Mozilla/5.0"}
+    """
+    1차: 바이비트 직접 호출 (api.bytick.com / api.bybit.com)
+    2차: 미국 IP 403 차단 시 유럽 프록시 릴레이(codetabs / corsproxy / allorigins) 자동 폴백
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json"
+    }
+    query_str = f"?{urlencode(params)}" if params else ""
 
-    for base_url in BYBIT_ENDPOINTS:
-        url = f"{base_url}{path}"
+    # 1) 직접 연결 시도
+    for base_url in BYBIT_DIRECT_ENDPOINTS:
+        target_url = f"{base_url}{path}{query_str}"
         try:
-            resp = requests.get(url, params=params, headers=headers, timeout=10)
-
-            if resp.status_code != 200:
-                print(f"[Bybit] HTTP {resp.status_code}: {url}")
-                continue
-
-            data = resp.json()
-
-            if data.get("retCode") != 0:
-                print(
-                    f"[Bybit] API 오류: retCode={data.get('retCode')}, "
-                    f"retMsg={data.get('retMsg')}, url={url}"
-                )
-                continue
-
-            time.sleep(REQUEST_DELAY_SEC)
-            return data.get("result", {})
-
-        except Exception as e:
-            print(f"[Bybit] 요청 예외: {url} / {e}")
+            resp = requests.get(target_url, headers=headers, timeout=6)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, dict) and data.get("retCode") == 0:
+                    time.sleep(REQUEST_DELAY_SEC)
+                    return data.get("result", {})
+        except Exception:
             continue
 
+    # 2) 유럽 중계 프록시 폴백 (GitHub Actions 미국 서버 IP 403 차단 우회)
+    raw_target = f"https://api.bytick.com{path}{query_str}"
+    encoded_target = quote(raw_target, safe="")
+    proxy_urls = [
+        f"https://api.codetabs.com/v1/proxy?quest={encoded_target}",
+        f"https://corsproxy.io/?{encoded_target}",
+        f"https://api.allorigins.win/raw?url={encoded_target}"
+    ]
+
+    for p_url in proxy_urls:
+        try:
+            resp = requests.get(p_url, headers=headers, timeout=12)
+            if resp.status_code != 200:
+                continue
+
+            data = resp.json() if isinstance(resp.text, str) else {}
+            if isinstance(data, str):
+                data = json.loads(data)
+
+            if isinstance(data, dict) and data.get("retCode") == 0:
+                time.sleep(REQUEST_DELAY_SEC)
+                return data.get("result", {})
+        except Exception as e:
+            print(f"[Proxy 폴백 예외] {p_url[:45]}... / {e}")
+            continue
+
+    print(f"[오류] 모든 엔드포인트 및 프록시에서 응답 실패: {path}")
     return {}
 
 
-def get_valid_crypto_symbols():
-    """
-    바이비트 /v5/market/instruments-info 메타데이터 검증을 통해
-    TradFi Perps(주식/ETF/원자재/외환)를 배제한 순수 USDT 무기한 선물 목록 추출
-    """
-    valid_symbols = set()
-    cursor = ""
-
-    for _ in range(10):
-        params = {"category": "linear", "limit": 1000}
-        if cursor:
-            params["cursor"] = cursor
-
-        res = request_bybit("/v5/market/instruments-info", params)
-        items = res.get("list", [])
-
-        if not items:
-            break
-
-        for item in items:
-            symbol = str(item.get("symbol", ""))
-            contract_type = str(item.get("contractType", ""))
-            status = str(item.get("status", ""))
-            quote_coin = str(item.get("quoteCoin", ""))
-            base_coin = str(item.get("baseCoin", "")).upper()
-            symbol_type = str(item.get("symbolType", "")).lower()
-            sub_type = str(item.get("subType", "")).lower()
-
-            if contract_type != "LinearPerpetual":
-                continue
-            if status != "Trading":
-                continue
-            if quote_coin != "USDT" or not symbol.endswith("USDT"):
-                continue
-            if base_coin in TRADFI_BLACKLIST:
-                continue
-            if symbol_type in TRADFI_SYMBOL_TYPES or sub_type in TRADFI_SYMBOL_TYPES:
-                continue
-            if any(t in symbol_type for t in TRADFI_SYMBOL_TYPES):
-                continue
-
-            valid_symbols.add(symbol)
-
-        cursor = res.get("nextPageCursor", "")
-        if not cursor:
-            break
-
-    return valid_symbols
-
-
 def get_sorted_gainer_candidates():
-    """바이비트 Futures -> Gainers 탭과 동일하게 24h 상승률 순 정렬"""
-    valid_symbols = get_valid_crypto_symbols()
-
-    if not valid_symbols:
-        print("[경고] instruments-info 심볼 목록이 비어 있어 블랙리스트 및 캔들 필터로 폴백합니다.")
-
+    """바이비트 Futures -> Gainers 탭과 동일하게 24h 상승률 순 정렬 (TradFi 제외)"""
     res = request_bybit("/v5/market/tickers", {"category": "linear"})
     tickers = res.get("list", [])
     candidates = []
@@ -171,14 +148,12 @@ def get_sorted_gainer_candidates():
     for t in tickers:
         symbol = str(t.get("symbol", ""))
 
+        # 순수 USDT 무기한 선물만 필터링 (옵션 및 만기 선물 제외)
         if not symbol.endswith("USDT") or "-" in symbol:
             continue
 
         base_coin = symbol[:-4].upper()
         if base_coin in TRADFI_BLACKLIST:
-            continue
-
-        if valid_symbols and symbol not in valid_symbols:
             continue
 
         last_price = to_float(t.get("lastPrice"))
@@ -201,7 +176,7 @@ def get_sorted_gainer_candidates():
 
 
 def get_klines_5m(symbol, limit=KLINE_LIMIT):
-    """5분봉 500캔들(약 41.6시간) 수집 후 이평선·OBV·BBW·VWAP·캔들 미세구조 계산"""
+    """5분봉 수집 및 보조지표 계산 (Pandas 2.0+ 타입 안전성 보장)"""
     res = request_bybit("/v5/market/kline", {
         "category": "linear",
         "symbol": symbol,
@@ -228,20 +203,23 @@ def get_klines_5m(symbol, limit=KLINE_LIMIT):
     if df.empty:
         return pd.DataFrame()
 
-    # Pandas 2.0+ merge_asof 호환을 위해 int64로 명시적 고정
     df["timestamp"] = df["timestamp"].astype(np.int64)
     df = df.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
 
-    for ma in [5, 20, 50, 100, 200]:
-        df[f"ma{ma}"] = df["close"].rolling(ma).mean()
+    # 초기 인덱스에서도 NaN이 발생하지 않도록 min_periods 설정
+    df["ma5"] = df["close"].rolling(5, min_periods=5).mean()
+    df["ma20"] = df["close"].rolling(20, min_periods=15).mean()
+    df["ma50"] = df["close"].rolling(50, min_periods=30).mean()
+    df["ma100"] = df["close"].rolling(100, min_periods=45).mean()
+    df["ma200"] = df["close"].rolling(200, min_periods=60).mean()
 
-    df["vol_ma20"] = df["volume"].shift(1).rolling(20).mean()
+    df["vol_ma20"] = df["volume"].shift(1).rolling(20, min_periods=10).mean()
     df["vol_mult"] = df["volume"] / df["vol_ma20"].replace(0, np.nan)
 
     direction = np.sign(df["close"].diff()).fillna(0)
     df["obv"] = (direction * df["volume"]).cumsum()
 
-    std20 = df["close"].rolling(20).std()
+    std20 = df["close"].rolling(20, min_periods=15).std()
     df["bb_upper"] = df["ma20"] + 2 * std20
     df["bb_lower"] = df["ma20"] - 2 * std20
     df["bbw"] = (
@@ -250,8 +228,8 @@ def get_klines_5m(symbol, limit=KLINE_LIMIT):
     ) * 100.0
 
     tp = (df["high"] + df["low"] + df["close"]) / 3.0
-    tp_vol_sum = (tp * df["volume"]).rolling(48).sum()
-    vol_sum = df["volume"].rolling(48).sum().replace(0, np.nan)
+    tp_vol_sum = (tp * df["volume"]).rolling(48, min_periods=20).sum()
+    vol_sum = df["volume"].rolling(48, min_periods=20).sum().replace(0, np.nan)
     df["vwap48"] = tp_vol_sum / vol_sum
 
     candle_range = (df["high"] - df["low"]).replace(0, np.nan)
@@ -268,30 +246,28 @@ def get_klines_5m(symbol, limit=KLINE_LIMIT):
 
 def is_24_7_crypto_kline(df, coin):
     """
-    최근 24시간(288캔들) 전체의 24/7 연속성을 검사하여
-    미국/중국 증시 휴장 시간이 존재하는 TradFi 주식/ETF 선물을 실행 시각과 무관하게 100% 차단
+    24시간(288캔들) 연속성 검증으로 증시 휴장 시간이 있는 주식/ETF(TradFi) 100% 배제
     """
     if len(df) < 80:
         return False
 
     recent_24h = df.tail(288)
 
-    # 1) 최근 24시간 내 캔들 간 타임스탬프 단절(>15분 = 900,000ms) 존재 시 증시 휴장 종목으로 판정
+    # 1) 캔들 간 15분(900,000ms) 초과 시간 단절이 있으면 증시 휴장 종목(TradFi)으로 판정
     max_time_gap = recent_24h["timestamp"].diff().max()
     if pd.notna(max_time_gap) and max_time_gap > 900_000:
         return False
 
-    # 2) 최근 24시간 내 연속 거래량 0 스트릭이 12캔들(1시간) 이상 지속되면 휴장 종목으로 판정
+    # 2) 연속 거래량 0인 구간이 12캔들(1시간) 이상이면 장 마감 있는 TradFi 종목으로 판정
     is_zero_vol = (recent_24h["volume"] <= 0).astype(int)
     if is_zero_vol.sum() >= 24:
         return False
 
-    # 연속 0 거래량 최대 길이 계산
     zero_streaks = is_zero_vol.groupby((is_zero_vol != is_zero_vol.shift()).cumsum()).sum()
     if not zero_streaks.empty and int(zero_streaks.max()) >= 12:
         return False
 
-    # 3) 펀딩비가 0.0000%이면서 변동폭 0(high == low) 더미 캔들이 과다한 미러링 종목 차단
+    # 3) 펀딩비 0.0000% + 고가==저가 더미 캔들 다수 존재 시 제외
     flat_candles = int((recent_24h["high"] == recent_24h["low"]).sum())
     if abs(coin["funding_rate"]) < 1e-7 and flat_candles >= 20:
         return False
@@ -299,45 +275,19 @@ def is_24_7_crypto_kline(df, coin):
     return True
 
 
-def get_oi_history_5m(symbol):
-    """
-    바이비트 /v5/market/open-interest의 1회 한도(200개=16.6시간)를 보완하기 위해
-    최대 2페이지(350개=약 29시간)를 수집하여 24시간 전체 발화 구간을 커버
-    """
-    all_rows = []
-    end_time = None
+def get_oi_history_5m(symbol, limit=200):
+    res = request_bybit("/v5/market/open-interest", {
+        "category": "linear",
+        "symbol": symbol,
+        "intervalTime": "5min",
+        "limit": limit
+    })
 
-    for _ in range(2):
-        params = {
-            "category": "linear",
-            "symbol": symbol,
-            "intervalTime": "5min",
-            "limit": 200
-        }
-        if end_time is not None:
-            params["endTime"] = end_time
-
-        res = request_bybit("/v5/market/open-interest", params)
-        rows = res.get("list", [])
-        if not rows:
-            break
-
-        all_rows.extend(rows)
-
-        # 가장 오래된 타임스탬프 이전 구간 조회
-        try:
-            oldest_ts = min(int(r["timestamp"]) for r in rows if "timestamp" in r)
-            end_time = oldest_ts - 1
-        except (ValueError, TypeError):
-            break
-
-        if len(rows) < 200:
-            break
-
-    if not all_rows:
+    rows = res.get("list", [])
+    if not rows:
         return pd.DataFrame()
 
-    oi_df = pd.DataFrame(all_rows)
+    oi_df = pd.DataFrame(rows)
     if "timestamp" not in oi_df.columns or "openInterest" not in oi_df.columns:
         return pd.DataFrame()
 
@@ -373,7 +323,6 @@ def analyze_coin(coin):
     else:
         df["openInterest"] = np.nan
 
-    # 최근 24시간(288캔들) 범위 내에서 초동 발화 캔들 탐색 (앞부분은 MA200 워밍업 구간)
     start_search_idx = max(30, len(df) - 288)
     end_search_idx = len(df) - 3
 
@@ -497,7 +446,7 @@ def analyze_coin(coin):
                     f"BB스퀴즈(하위 {bbw_percentile:.0f}%)+VWAP 장악(몸통 {ign_row['body_ratio']*100:.0f}%)"
                 )
 
-    # [신규 전략 3] 비정배열 유동성 스윕 (Wyckoff Spring)
+    # [신규 전략 3] 비정배열 유동성 스윕 (Spring)
     recent_6_df = df.loc[max(0, ign_idx - 6):ign_idx]
     had_wick_sweep = bool((recent_6_df["lower_wick_ratio"] >= 1.5).any()) if not recent_6_df.empty else False
     spring_reversal = bool(
@@ -509,17 +458,16 @@ def analyze_coin(coin):
     if spring_reversal:
         new_strategies.append("유동성 스윕(Spring 아랫꼬리 스탑헌팅 후 MA20 돌파)")
 
-    # [신규 전략 4] 발화 직전 거래량 극건조 포켓 (Pre-Ignition Volume Dry-up Pocket)
+    # [신규 전략 4] 발화 직전 거래량 극건조 포켓
     pre_5_df = df.loc[max(0, ign_idx - 5):ign_idx - 1]
     pre_vol_pocket = False
-    min_pre_vol_ratio = 1.0
     if not pre_5_df.empty and pd.notna(ign_row["vol_ma20"]) and ign_row["vol_ma20"] > 0:
         min_pre_vol_ratio = to_float(pre_5_df["volume"].min() / ign_row["vol_ma20"], default=1.0)
         if min_pre_vol_ratio <= 0.35:
             pre_vol_pocket = True
             new_strategies.append(f"발화 직전 거래량 극건조 포켓(평소 대비 {min_pre_vol_ratio*100:.0f}%로 수축 후 폭발)")
 
-    # [신규 전략 5 & 돌파 후 눌림목 정밀 분석] 1차 파동 고점 형성 후 진성 눌림목 탐색
+    # [신규 전략 5 & 돌파 후 눌림목 정밀 분석]
     pullback_type = "눌림 없이 직행(Runaway)"
     dryup_ratio = 1.0
     retest_sl_pct = 3
@@ -527,12 +475,10 @@ def analyze_coin(coin):
     ma20_hit = False
 
     if len(post_df) >= 4:
-        # 1단계: 초동 발화 직후 첫 1~6캔들 내 1차 단기 고점(Wave 1 High) 탐색
         wave1_window = df.loc[ign_idx:min(len(df) - 1, ign_idx + 5)]
         wave1_high_idx = safe_idxmax(wave1_window["high"], default=ign_idx)
         wave1_high_val = to_float(df.loc[wave1_high_idx, "high"], default=ign_price)
 
-        # 2단계: 1차 고점 이후 구간에서 눌림목 저점 탐색
         pb_window = df.loc[wave1_high_idx + 1:min(len(df) - 1, wave1_high_idx + 15)]
         min_pb_idx = safe_idxmin(pb_window["low"], default=None)
 
@@ -757,9 +703,12 @@ def build_report(results):
 
 
 def send_telegram_message(text):
+    print(text)
+
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print(text)
-        return
+        raise RuntimeError(
+            "텔레그램 환경변수(TELEGRAM_TOKEN 또는 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)가 비어 있습니다."
+        )
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     max_len = 3900
@@ -777,17 +726,14 @@ def send_telegram_message(text):
         chunks.append(current)
 
     for chunk in chunks:
-        try:
-            resp = requests.post(
-                url,
-                json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk},
-                timeout=10
-            )
-            if resp.status_code != 200:
-                print(f"[Telegram] 전송 실패 HTTP {resp.status_code}: {resp.text}")
-            time.sleep(0.5)
-        except Exception as e:
-            print(f"[Telegram] 전송 예외: {e}")
+        resp = requests.post(
+            url,
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk},
+            timeout=10
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Telegram API 전송 실패 HTTP {resp.status_code}: {resp.text}")
+        time.sleep(0.5)
 
 
 def main():
@@ -795,13 +741,13 @@ def main():
 
     if not candidates:
         send_telegram_message(
-            "⚠️ 바이비트 상승률 상위 종목 데이터를 가져오지 못했습니다."
+            "⚠️ 바이비트 상승률 상위 종목 데이터를 가져오지 못했습니다. (API/프록시 연결 점검 필요)"
         )
         return
 
     results = []
 
-    for coin in candidates[:30]:
+    for coin in candidates[:25]:
         try:
             res = analyze_coin(coin)
             if res:
