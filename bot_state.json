@@ -544,7 +544,7 @@
         24
       ],
       "breakout_alerted": false,
-      "sl_alerted": false
+      "sl_alerted": true
     },
     "XTZUSDT": {
       "created_at": 1793996700,
@@ -674,6 +674,29 @@
         15.2506376,
         16.082490559999997,
         17.19162784
+      ],
+      "tp_pcts": [
+        5,
+        10,
+        16,
+        24
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "CBRSUSDT": {
+      "created_at": 1794003761,
+      "track_type": "TRACK_A",
+      "swing_high_line": 91.28909999999999,
+      "entry_low": 89.40035999999999,
+      "entry_high": 90.11988,
+      "stop_price": 87.96491759999999,
+      "sl_pct": 2,
+      "tps": [
+        94.248126,
+        98.73613200000001,
+        104.1217392,
+        111.3025488
       ],
       "tp_pcts": [
         5,
