@@ -70,26 +70,24 @@
       "sl_alerted": true
     },
     "TIAUSDT": {
-      "created_at": 1794032845,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.44294599999999995,
-      "entry_low": 0.434218,
-      "entry_high": 0.43770919999999996,
-      "stop_price": 0.427244328,
+      "created_at": 1794049673,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.4486299999999999,
+      "entry_low": 0.43934799999999996,
+      "entry_high": 0.44288399999999994,
+      "stop_price": 0.43229367999999996,
       "sl_pct": 2,
       "tps": [
-        0.45776178,
-        0.48827923200000006,
-        0.52315632,
-        0.56675268
+        0.4701775250169798,
+        0.48832310181933436,
+        0.5781170223192211
       ],
       "tp_pcts": [
-        5,
-        12,
-        20,
-        30
+        6.6,
+        10.7,
+        31.1
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "PIEVERSEUSDT": {
@@ -254,26 +252,24 @@
       "sl_alerted": false
     },
     "HYPEUSDT": {
-      "created_at": 1794021692,
-      "track_type": "TRACK_B",
-      "swing_high_line": 80.68032,
-      "entry_low": 79.09056,
-      "entry_high": 79.72646399999999,
-      "stop_price": 77.82034176,
+      "created_at": 1794049673,
+      "track_type": "TRACK_A",
+      "swing_high_line": 79.37503,
+      "entry_low": 77.732788,
+      "entry_high": 78.358404,
+      "stop_price": 76.48468408,
       "sl_pct": 2,
       "tps": [
-        83.3789376,
-        88.93753344000001,
-        95.2902144,
-        103.23106560000001
+        84.49130824492191,
+        88.47743308910891,
+        96.23940697462315
       ],
       "tp_pcts": [
-        5,
-        12,
-        20,
-        30
+        8.3,
+        13.4,
+        23.3
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "ZROUSDT": {
@@ -490,6 +486,27 @@
         28.2
       ],
       "breakout_alerted": true,
+      "sl_alerted": false
+    },
+    "XRPUSDT": {
+      "created_at": 1794049673,
+      "track_type": "TRACK_A",
+      "swing_high_line": 1.1875499999999999,
+      "entry_low": 1.16298,
+      "entry_high": 1.17234,
+      "stop_price": 1.1443067999999998,
+      "sl_pct": 2,
+      "tps": [
+        1.2537988524590162,
+        1.3376446567622948,
+        1.4552026556557374
+      ],
+      "tp_pcts": [
+        7.4,
+        14.6,
+        24.6
+      ],
+      "breakout_alerted": false,
       "sl_alerted": false
     }
   }
