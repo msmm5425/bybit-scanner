@@ -403,6 +403,69 @@
         26.7
       ],
       "breakout_alerted": true,
+      "sl_alerted": true
+    },
+    "ARIAUSDT": {
+      "created_at": 1794081387,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.16094886151549084,
+      "entry_low": 0.157052,
+      "entry_high": 0.158316,
+      "stop_price": 0.15453032,
+      "sl_pct": 2,
+      "tps": [
+        0.16725844220480282,
+        0.1750676162478536,
+        0.18530406834789104
+      ],
+      "tp_pcts": [
+        6.1,
+        11.0,
+        17.5
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "QUSDT": {
+      "created_at": 1794081387,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.028419999999999997,
+      "entry_low": 0.02786,
+      "entry_high": 0.028083999999999998,
+      "stop_price": 0.027412559999999996,
+      "sl_pct": 2,
+      "tps": [
+        0.029897762653703176,
+        0.03163777008864741,
+        0.033706409191878756
+      ],
+      "tp_pcts": [
+        6.9,
+        13.1,
+        20.5
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
+    },
+    "ESPORTSUSDT": {
+      "created_at": 1794081387,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.011164999999999998,
+      "entry_low": 0.010934,
+      "entry_high": 0.011021999999999999,
+      "stop_price": 0.010758439999999998,
+      "sl_pct": 2,
+      "tps": [
+        0.011578985401459855,
+        0.012210020072992704,
+        0.013101481751824816
+      ],
+      "tp_pcts": [
+        5.5,
+        11.2,
+        19.3
+      ],
+      "breakout_alerted": false,
       "sl_alerted": false
     }
   }
