@@ -498,6 +498,27 @@
         24.5
       ],
       "breakout_alerted": true,
+      "sl_alerted": true
+    },
+    "LITUSDT": {
+      "created_at": 1794039739,
+      "track_type": "TRACK_B",
+      "swing_high_line": 3.5971599999999997,
+      "entry_low": 3.52628,
+      "entry_high": 3.554632,
+      "stop_price": 3.4696468799999995,
+      "sl_pct": 2,
+      "tps": [
+        3.6977261293419934,
+        3.917496116884496,
+        4.48484037443886
+      ],
+      "tp_pcts": [
+        4.4,
+        10.6,
+        26.7
+      ],
+      "breakout_alerted": true,
       "sl_alerted": false
     }
   }
