@@ -1,51 +1,5 @@
 {
   "tracked": {
-    "ARBUSDT": {
-      "created_at": 1794011900,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.1675765,
-      "entry_low": 0.1642745,
-      "entry_high": 0.16559529999999997,
-      "stop_price": 0.16163620199999998,
-      "sl_pct": 2,
-      "tps": [
-        0.173181645,
-        0.184727088,
-        0.19792188,
-        0.21441537
-      ],
-      "tp_pcts": [
-        5,
-        12,
-        20,
-        30
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": false
-    },
-    "WUSDT": {
-      "created_at": 1794011900,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.01156085,
-      "entry_low": 0.01133305,
-      "entry_high": 0.011424169999999999,
-      "stop_price": 0.011151037800000001,
-      "sl_pct": 2,
-      "tps": [
-        0.011947540500000001,
-        0.012744043200000003,
-        0.013654332,
-        0.014792193000000002
-      ],
-      "tp_pcts": [
-        5,
-        12,
-        20,
-        30
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": true
-    },
     "TIAUSDT": {
       "created_at": 1794062117,
       "track_type": "TRACK_A",
@@ -65,29 +19,6 @@
         30.6
       ],
       "breakout_alerted": false,
-      "sl_alerted": false
-    },
-    "BTCUSDT": {
-      "created_at": 1794013200,
-      "track_type": "TRACK_B",
-      "swing_high_line": 77006.832,
-      "entry_low": 75489.456,
-      "entry_high": 76096.40639999999,
-      "stop_price": 74277.07257599999,
-      "sl_pct": 2,
-      "tps": [
-        79582.57776,
-        84888.082944,
-        90951.51743999998,
-        98530.81056
-      ],
-      "tp_pcts": [
-        5,
-        12,
-        20,
-        30
-      ],
-      "breakout_alerted": true,
       "sl_alerted": false
     },
     "HYPEUSDT": {
@@ -286,24 +217,24 @@
       "sl_alerted": false
     },
     "STXUSDT": {
-      "created_at": 1794045057,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.348145,
-      "entry_low": 0.341285,
-      "entry_high": 0.344029,
-      "stop_price": 0.33580386,
+      "created_at": 1794079122,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.35220499999999993,
+      "entry_low": 0.34491799999999995,
+      "entry_high": 0.347694,
+      "stop_price": 0.33937988,
       "sl_pct": 2,
       "tps": [
-        0.3616565760649087,
-        0.3752007437890466,
-        0.44222445612981737
+        0.3652391310384726,
+        0.3942122309933468,
+        0.44109426975527904
       ],
       "tp_pcts": [
         5.5,
-        9.5,
-        29.1
+        13.8,
+        27.4
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "CRVUSDT": {
