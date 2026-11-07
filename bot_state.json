@@ -469,24 +469,24 @@
       "sl_alerted": false
     },
     "PIEVERSEUSDT": {
-      "created_at": 1794083080,
-      "track_type": "TRACK_A",
-      "swing_high_line": 1.4362249999999999,
-      "entry_low": 1.40651,
-      "entry_high": 1.4178300000000001,
-      "stop_price": 1.3839266000000001,
+      "created_at": 1794089311,
+      "track_type": "TRACK_B",
+      "swing_high_line": 1.4392699999999998,
+      "entry_low": 1.4109099999999999,
+      "entry_high": 1.4222539999999997,
+      "stop_price": 1.3882503599999998,
       "sl_pct": 2,
       "tps": [
-        1.4842099793240524,
-        1.5459465728929065,
-        1.6857924027878688
+        1.510083254854281,
+        1.6767361170038912,
+        1.8469666782746363
       ],
       "tp_pcts": [
-        5.1,
-        9.5,
-        19.4
+        6.6,
+        18.4,
+        30.4
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "ETHFIUSDT": {
