@@ -388,7 +388,7 @@
         16,
         24
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": true
     },
     "LYNUSDT": {
@@ -481,6 +481,29 @@
         30
       ],
       "breakout_alerted": true,
+      "sl_alerted": false
+    },
+    "ZROUSDT": {
+      "created_at": 1794024781,
+      "track_type": "TRACK_A",
+      "swing_high_line": 1.6590174999999998,
+      "entry_low": 1.6246930000000002,
+      "entry_high": 1.637769,
+      "stop_price": 1.59860638,
+      "sl_pct": 2,
+      "tps": [
+        1.71279255,
+        1.8269787200000003,
+        1.9574772,
+        2.1206003
+      ],
+      "tp_pcts": [
+        5,
+        12,
+        20,
+        30
+      ],
+      "breakout_alerted": false,
       "sl_alerted": false
     }
   }
