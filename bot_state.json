@@ -90,7 +90,7 @@
         29
       ],
       "breakout_alerted": false,
-      "sl_alerted": false
+      "sl_alerted": true
     },
     "ARBUSDT": {
       "created_at": 1794011900,
@@ -111,52 +111,6 @@
         12,
         20,
         30
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": false
-    },
-    "1000PEPEUSDT": {
-      "created_at": 1793964403,
-      "track_type": "TRACK_A",
-      "swing_high_line": 5.09e-06,
-      "entry_low": 5.0293319999999995e-06,
-      "entry_high": 5.08014e-06,
-      "stop_price": 4.953641279999999e-06,
-      "sl_pct": 2,
-      "tps": [
-        5.307472799999999e-06,
-        5.5602096e-06,
-        5.863493759999999e-06,
-        6.26787264e-06
-      ],
-      "tp_pcts": [
-        5,
-        10,
-        16,
-        24
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": false
-    },
-    "ZECUSDT": {
-      "created_at": 1793964403,
-      "track_type": "TRACK_A",
-      "swing_high_line": 1290.85,
-      "entry_low": 1274.3384,
-      "entry_high": 1287.2193000000002,
-      "stop_price": 1255.1632730000001,
-      "sl_pct": 2,
-      "tps": [
-        1344.8177925000002,
-        1408.8567350000003,
-        1485.7034660000002,
-        1588.1657740000003
-      ],
-      "tp_pcts": [
-        5,
-        10,
-        16,
-        24
       ],
       "breakout_alerted": true,
       "sl_alerted": false
