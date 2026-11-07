@@ -158,24 +158,24 @@
       "sl_alerted": false
     },
     "ARBUSDT": {
-      "created_at": 1793956046,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.16666,
-      "entry_low": 0.1653519,
-      "entry_high": 0.1666827,
-      "stop_price": 0.16269695399999998,
+      "created_at": 1794011900,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.1675765,
+      "entry_low": 0.1642745,
+      "entry_high": 0.16559529999999997,
+      "stop_price": 0.16163620199999998,
       "sl_pct": 2,
       "tps": [
-        0.174318165,
-        0.18261903,
-        0.19258006799999997,
-        0.20586145199999997
+        0.173181645,
+        0.184727088,
+        0.19792188,
+        0.21441537
       ],
       "tp_pcts": [
         5,
-        10,
-        16,
-        24
+        12,
+        20,
+        30
       ],
       "breakout_alerted": true,
       "sl_alerted": false
@@ -296,70 +296,24 @@
       "sl_alerted": false
     },
     "WUSDT": {
-      "created_at": 1793979594,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.01185,
-      "entry_low": 0.01151052,
-      "entry_high": 0.01160316,
-      "stop_price": 0.011325703199999999,
+      "created_at": 1794011900,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.01156085,
+      "entry_low": 0.01133305,
+      "entry_high": 0.011424169999999999,
+      "stop_price": 0.011151037800000001,
       "sl_pct": 2,
       "tps": [
-        0.012134681999999999,
-        0.012712524,
-        0.013405934399999998,
-        0.014330481599999998
+        0.011947540500000001,
+        0.012744043200000003,
+        0.013654332,
+        0.014792193000000002
       ],
       "tp_pcts": [
         5,
-        10,
-        16,
-        24
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": true
-    },
-    "COHRUSDT": {
-      "created_at": 1793979594,
-      "track_type": "TRACK_A",
-      "swing_high_line": 193.44,
-      "entry_low": 185.06292000000002,
-      "entry_high": 186.55236,
-      "stop_price": 178.37533439999999,
-      "sl_pct": 4,
-      "tps": [
-        200.6722512,
-        215.5368624,
-        234.11762639999998,
-        256.41454319999997
-      ],
-      "tp_pcts": [
-        8,
-        16,
-        26,
-        38
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": false
-    },
-    "SPCXUSDT": {
-      "created_at": 1793979594,
-      "track_type": "TRACK_A",
-      "swing_high_line": 133.08679999999998,
-      "entry_low": 130.33328,
-      "entry_high": 131.38224,
-      "stop_price": 128.24060479999997,
-      "sl_pct": 2,
-      "tps": [
-        137.400648,
-        143.943536,
-        151.79500159999998,
-        162.26362239999997
-      ],
-      "tp_pcts": [
-        5,
-        10,
-        16,
-        24
+        12,
+        20,
+        30
       ],
       "breakout_alerted": true,
       "sl_alerted": false
@@ -387,52 +341,6 @@
       "breakout_alerted": false,
       "sl_alerted": false
     },
-    "RKLBUSDT": {
-      "created_at": 1793979594,
-      "track_type": "TRACK_A",
-      "swing_high_line": 49.99889999999999,
-      "entry_low": 48.964439999999996,
-      "entry_high": 49.35852,
-      "stop_price": 47.195020799999995,
-      "sl_pct": 4,
-      "tps": [
-        53.0943984,
-        57.027316799999994,
-        61.943464799999994,
-        67.8428424
-      ],
-      "tp_pcts": [
-        8,
-        16,
-        26,
-        38
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": false
-    },
-    "NBISUSDT": {
-      "created_at": 1793982540,
-      "track_type": "TRACK_A",
-      "swing_high_line": 137.1,
-      "entry_low": 129.16036,
-      "entry_high": 130.19988,
-      "stop_price": 125.78971639999999,
-      "sl_pct": 3,
-      "tps": [
-        137.4609272,
-        145.2417344,
-        154.3193428,
-        167.2873548
-      ],
-      "tp_pcts": [
-        6,
-        12,
-        19,
-        29
-      ],
-      "breakout_alerted": false,
-      "sl_alerted": false
-    },
     "TIAUSDT": {
       "created_at": 1793985559,
       "track_type": "TRACK_A",
@@ -446,29 +354,6 @@
         0.48808188,
         0.5147045279999999,
         0.550201392
-      ],
-      "tp_pcts": [
-        5,
-        10,
-        16,
-        24
-      ],
-      "breakout_alerted": false,
-      "sl_alerted": false
-    },
-    "CRWVUSDT": {
-      "created_at": 1793985559,
-      "track_type": "TRACK_A",
-      "swing_high_line": 46.994499999999995,
-      "entry_low": 46.0222,
-      "entry_high": 46.392599999999995,
-      "stop_price": 45.28325199999999,
-      "sl_pct": 2,
-      "tps": [
-        48.51776999999999,
-        50.82814,
-        53.60058399999999,
-        57.29717599999999
       ],
       "tp_pcts": [
         5,
@@ -524,29 +409,6 @@
       ],
       "breakout_alerted": false,
       "sl_alerted": false
-    },
-    "MRNAUSDT": {
-      "created_at": 1793993939,
-      "track_type": "TRACK_A",
-      "swing_high_line": 266.27509999999995,
-      "entry_low": 260.76595999999995,
-      "entry_high": 262.86467999999996,
-      "stop_price": 256.57901359999994,
-      "sl_pct": 2,
-      "tps": [
-        274.90608599999996,
-        287.99685199999993,
-        303.7057711999999,
-        324.6509967999999
-      ],
-      "tp_pcts": [
-        5,
-        10,
-        16,
-        24
-      ],
-      "breakout_alerted": false,
-      "sl_alerted": true
     },
     "XTZUSDT": {
       "created_at": 1793996700,
@@ -614,30 +476,7 @@
         16,
         24
       ],
-      "breakout_alerted": false,
-      "sl_alerted": false
-    },
-    "KORUUSDT": {
-      "created_at": 1794001406,
-      "track_type": "TRACK_A",
-      "swing_high_line": 7.055264999999999,
-      "entry_low": 6.909293999999999,
-      "entry_high": 6.9649019999999995,
-      "stop_price": 6.798356039999999,
-      "sl_pct": 2,
-      "tps": [
-        7.283952899999999,
-        7.6308077999999995,
-        8.047033679999998,
-        8.602001519999998
-      ],
-      "tp_pcts": [
-        5,
-        10,
-        16,
-        24
-      ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "FLOCKUSDT": {
@@ -653,52 +492,6 @@
         0.044504812,
         0.04693234719999999,
         0.05016906079999999
-      ],
-      "tp_pcts": [
-        5,
-        10,
-        16,
-        24
-      ],
-      "breakout_alerted": false,
-      "sl_alerted": false
-    },
-    "MUUUSDT": {
-      "created_at": 1794001406,
-      "track_type": "TRACK_A",
-      "swing_high_line": 14.100379999999998,
-      "entry_low": 13.808648,
-      "entry_high": 13.919784,
-      "stop_price": 13.58693168,
-      "sl_pct": 2,
-      "tps": [
-        14.5574268,
-        15.2506376,
-        16.082490559999997,
-        17.19162784
-      ],
-      "tp_pcts": [
-        5,
-        10,
-        16,
-        24
-      ],
-      "breakout_alerted": false,
-      "sl_alerted": false
-    },
-    "CBRSUSDT": {
-      "created_at": 1794003761,
-      "track_type": "TRACK_A",
-      "swing_high_line": 91.28909999999999,
-      "entry_low": 89.40035999999999,
-      "entry_high": 90.11988,
-      "stop_price": 87.96491759999999,
-      "sl_pct": 2,
-      "tps": [
-        94.248126,
-        98.73613200000001,
-        104.1217392,
-        111.3025488
       ],
       "tp_pcts": [
         5,
