@@ -205,7 +205,7 @@
         24
       ],
       "breakout_alerted": true,
-      "sl_alerted": false
+      "sl_alerted": true
     },
     "ESPORTSUSDT": {
       "created_at": 1793977066,
@@ -504,6 +504,29 @@
         30
       ],
       "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "ETHUSDT": {
+      "created_at": 1794027510,
+      "track_type": "TRACK_B",
+      "swing_high_line": 2276.9901,
+      "entry_low": 2232.1233,
+      "entry_high": 2250.07002,
+      "stop_price": 2196.2747268000003,
+      "sl_pct": 2,
+      "tps": [
+        2353.1514930000003,
+        2510.0282592000003,
+        2689.3159920000003,
+        2913.425658
+      ],
+      "tp_pcts": [
+        5,
+        12,
+        20,
+        30
+      ],
+      "breakout_alerted": true,
       "sl_alerted": false
     }
   }
