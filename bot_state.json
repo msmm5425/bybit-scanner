@@ -43,7 +43,7 @@
         17,
         24
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "ERAUSDT": {
@@ -389,7 +389,7 @@
         24
       ],
       "breakout_alerted": false,
-      "sl_alerted": false
+      "sl_alerted": true
     },
     "JCTUSDT": {
       "created_at": 1793999277,
