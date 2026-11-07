@@ -529,6 +529,27 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "NEARUSDT": {
+      "created_at": 1794053949,
+      "track_type": "TRACK_B",
+      "swing_high_line": 3.7433199999999998,
+      "entry_low": 3.66956,
+      "entry_high": 3.699064,
+      "stop_price": 3.61062576,
+      "sl_pct": 2,
+      "tps": [
+        3.9195467589114403,
+        4.110923689862984,
+        4.4284796886323825
+      ],
+      "tp_pcts": [
+        6.4,
+        11.6,
+        20.2
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
