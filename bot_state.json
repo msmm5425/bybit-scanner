@@ -486,24 +486,24 @@
       "sl_alerted": false
     },
     "MEGAUSDT": {
-      "created_at": 1794091254,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.050749999999999997,
-      "entry_low": 0.04975,
-      "entry_high": 0.05015,
-      "stop_price": 0.048951,
+      "created_at": 1794095077,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.05075,
+      "entry_low": 0.04970000000000001,
+      "entry_high": 0.05010000000000001,
+      "stop_price": 0.048902000000000015,
       "sl_pct": 2,
       "tps": [
-        0.052645384419800635,
-        0.05591523807814992,
-        0.06368475562200958
+        0.052070394307445964,
+        0.056139078102482,
+        0.06393969859887913
       ],
       "tp_pcts": [
-        5.4,
-        11.9,
-        27.5
+        4.3,
+        12.5,
+        28.1
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     }
   }
