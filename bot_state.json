@@ -457,6 +457,48 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "TAOUSDT": {
+      "created_at": 1794036673,
+      "track_type": "TRACK_B",
+      "swing_high_line": 230.4862,
+      "entry_low": 225.9446,
+      "entry_high": 227.76124,
+      "stop_price": 222.31586159999998,
+      "sl_pct": 2,
+      "tps": [
+        240.0791548607495,
+        257.44923480192443,
+        285.5561602730813
+      ],
+      "tp_pcts": [
+        5.8,
+        13.5,
+        25.9
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
+    },
+    "AIOUSDT": {
+      "created_at": 1794036673,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.04295500725689405,
+      "entry_low": 0.04179,
+      "entry_high": 0.042126,
+      "stop_price": 0.04111884,
+      "sl_pct": 2,
+      "tps": [
+        0.04390330914368651,
+        0.04661693922206094,
+        0.05221756168359942
+      ],
+      "tp_pcts": [
+        4.6,
+        11.1,
+        24.5
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
