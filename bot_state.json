@@ -470,6 +470,27 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "CRVUSDT": {
+      "created_at": 1794047198,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.26897499999999996,
+      "entry_low": 0.263675,
+      "entry_high": 0.265795,
+      "stop_price": 0.2594403,
+      "sl_pct": 2,
+      "tps": [
+        0.28230168939393946,
+        0.30409401739393943,
+        0.33935668406060604
+      ],
+      "tp_pcts": [
+        6.6,
+        14.9,
+        28.2
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
