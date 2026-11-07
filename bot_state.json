@@ -69,29 +69,6 @@
       "breakout_alerted": false,
       "sl_alerted": false
     },
-    "BTWUSDT": {
-      "created_at": 1793956046,
-      "track_type": "TRACK_A",
-      "swing_high_line": 1.11339,
-      "entry_low": 1.0966643999999999,
-      "entry_high": 1.10678916,
-      "stop_price": 1.0796922444,
-      "sl_pct": 2,
-      "tps": [
-        1.156813119,
-        1.211899458,
-        1.2780030647999998,
-        1.3661412071999999
-      ],
-      "tp_pcts": [
-        5,
-        10,
-        16,
-        24
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": false
-    },
     "BEATUSDT": {
       "created_at": 1793979594,
       "track_type": "TRACK_A",
@@ -473,6 +450,29 @@
         84888.082944,
         90951.51743999998,
         98530.81056
+      ],
+      "tp_pcts": [
+        5,
+        12,
+        20,
+        30
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
+    },
+    "HYPEUSDT": {
+      "created_at": 1794021692,
+      "track_type": "TRACK_B",
+      "swing_high_line": 80.68032,
+      "entry_low": 79.09056,
+      "entry_high": 79.72646399999999,
+      "stop_price": 77.82034176,
+      "sl_pct": 2,
+      "tps": [
+        83.3789376,
+        88.93753344000001,
+        95.2902144,
+        103.23106560000001
       ],
       "tp_pcts": [
         5,
