@@ -41,7 +41,7 @@ EARLY_VOL_MULT_MAX = 4.5               # 직접 돌파 진입 시 과열 상한 
 EARLY_BREAKOUT_MAX_PCT = 2.5           # 돌파 후 +2.5% 이내 초입만 허용
 
 # [고점 폭락(설거지 차트) 및 15분봉 과열 추격 원천 차단 필터]
-MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단 ($BIRB -18% 차단)
+MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
 MAX_PRIOR_PUMP_PCT = 20.0              # 최근 12시간 내 이미 +20% 이상 폭등했던 이력이 있으면 설거지 경계
 MAX_RETRACEMENT_RATIO = 0.35           # 폭등 후 상승폭의 35% 이상 반납한 역V자 하락 종목 즉시 차단
 
@@ -59,23 +59,22 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
 }
 
-# 바이비트 symbolType 중 비암호화폐(TradFi/주식/원자재/외환/ETF) 식별자
-NON_CRYPTO_SYMBOL_TYPES = {
-    "stock", "stocks", "xstocks", "mstocks", "commodity", "commodities",
-    "forex", "fx", "etf", "index", "indices", "tradfi", "cfd"
-}
+# 바이비트 symbolType 중 순수 코인으로만 허용되는 값 (그 외 stock, etf, commodity, xstocks 등은 전부 차단)
+ALLOWED_CRYPTO_SYMBOL_TYPES = {"", "innovation", "premarket", "pre-market", "crypto"}
 
-# 토큰화 주식/ETF/원자재 식별용 메타데이터 키워드 (coin_id 및 fullName 필터링용)
+# 토큰화 주식/Pre-IPO/ETF/원자재 식별용 메타데이터 키워드 (coin_id 및 fullName 필터링용)
 NON_CRYPTO_META_KEYWORDS = (
     "xstock", "dinari", "backed", "tokenized", "ondo", "spdr", "ishares",
-    "proshares", "direxion", "vanguard", "invesco", "wisdomtree", "ark-",
+    "proshares", "direxion", "vanguard", "invesco", "wisdomtree", "tradr", "ark-",
     "etf", "shares", "trust", "index", "crude", "brent", "wti", "natural-gas",
     "gold", "silver", "platinum", "palladium", "copper", "forex", "treasury",
-    "inc-", "-inc", "corp-", "-corp", "ltd", "plc", "holdings", "nasdaq", "s&p"
+    "inc", "corp", "ltd", "plc", "holdings", "nasdaq", "s&p", "spacex",
+    "space exploration", "pre-ipo", "sandisk", "hynix", "technologies"
 )
 
-# 최후 방어선 블랙리스트 (레거시 및 신규 TradFi 주식 티커 AKAM 등 포함)
+# 바이비트 TradFi(주식/Pre-IPO/ETF/원자재/외환) 영구 블랙리스트 (SPCX, SNDK, SKHYNIX, KORU, SNXX, CEG, AKAM 등 완비)
 TRADFI_BLACKLIST = {
+    "SPCX", "SPCXX", "SNDK", "SNXX", "SKHYNIX", "KORU", "CEG", "AKAM", "USDBRL",
     "CL", "BZ", "WTI", "BRENT", "OIL", "USOIL", "UKOIL", "NG", "NATGAS", "NATGGAS",
     "GC", "SI", "HG", "PL", "PA", "XAU", "XAG", "XPT", "XPD", "COPPER", "GOLD", "SILVER",
     "SPX", "NDX", "DJI", "NAS100", "SPX500", "US30", "US500", "USTEC", "UK100", "GER40",
@@ -84,7 +83,7 @@ TRADFI_BLACKLIST = {
     "GLD", "SLV", "USO", "UNG", "UVXY", "ARKK", "SMH", "XLF",
     "XLE", "XLK", "XLV", "XLI", "XLP", "XLY", "XLU", "GDX", "HYG",
     "EEM", "FXI", "KWEB", "IBIT", "ETHA", "BITO", "MSTX", "MSTU", "NVDL",
-    "NVDU", "TSLL", "TSLS", "CONL", "AMDL", "AKAM",
+    "NVDU", "TSLL", "TSLS", "CONL", "AMDL",
     "AAPL", "GOOGL", "GOOG", "MSFT", "NVDA", "AMZN", "META", "TSLA",
     "NFLX", "AMD", "INTC", "AVGO", "TSM", "ASML", "ARM", "SMCI", "MU",
     "QCOM", "TXN", "AMAT", "LRCX", "KLAC", "MRVL", "ON", "SNPS", "CDNS",
@@ -101,7 +100,8 @@ TRADFI_BLACKLIST = {
     "NET", "DDOG", "ZS", "MDB", "TEAM", "U", "RBLX", "RDDT",
     "SPOT", "SNAP", "PINS", "DJT", "GME", "AMC", "CVNA", "RIVN", "LCID",
     "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD", "CNH", "HKD", "SGD",
-    "TRY", "MXN", "ZAR", "SEK", "NOK", "PLN", "INR", "BRL", "KRW"
+    "TRY", "MXN", "ZAR", "SEK", "NOK", "PLN", "INR", "BRL", "KRW",
+    "USDJPY", "USDEUR", "USDGBP", "USDCNH", "USDKRW", "USDMXN", "USDTRY", "USDZAR"
 }
 
 
@@ -124,7 +124,7 @@ def strip_multiplier_prefix(base_coin):
 
 
 def strip_tokenized_suffix(base_coin):
-    """NVDAX, TSLAX 등 토큰화 주식 접미사 제거 검사용"""
+    """NVDAX, TSLAX, SPCXX 등 토큰화 주식 접미사 제거 검사용"""
     clean = base_coin.upper()
     if len(clean) >= 4 and clean.endswith("X") and clean[:-1] in TRADFI_BLACKLIST:
         return clean[:-1]
@@ -135,7 +135,12 @@ def is_tradfi_ticker(base_coin):
     b1 = base_coin.upper()
     b2 = strip_multiplier_prefix(b1)
     b3 = strip_tokenized_suffix(b2)
-    return (b1 in TRADFI_BLACKLIST) or (b2 in TRADFI_BLACKLIST) or (b3 in TRADFI_BLACKLIST)
+    if (b1 in TRADFI_BLACKLIST) or (b2 in TRADFI_BLACKLIST) or (b3 in TRADFI_BLACKLIST):
+        return True
+    # 외환 쌍(예: USDBRL, EURUSD 등) 패턴 차단
+    if len(b1) == 6 and (b1.startswith("USD") or b1.endswith("USD")):
+        return True
+    return False
 
 
 def fmt_price(price):
@@ -220,14 +225,13 @@ def parse_bybit_payload(resp, mode):
 def fetch_bybit(path, params=None):
     """
     바이비트 공식 백업 도메인(api.bytick.com) 및 프록시 다중 경로를 통해
-    GitHub Actions(미국 IP) 환경에서도 바이비트 V5 원본 데이터를 안정적으로 조회
+    GitHub Actions(미국 IP) 환경에서도 단일 심볼 메타데이터 및 캔들을 안정적으로 조회
     """
     query_str = f"?{urlencode(params)}" if params else ""
 
-    # 1차: 바이비트 공식 글로벌/대체 엔드포인트 직통 시도
     for host in ["https://api.bytick.com", "https://api.bybit.com"]:
         try:
-            resp = requests.get(f"{host}{path}{query_str}", headers=BROWSER_HEADERS, timeout=6)
+            resp = requests.get(f"{host}{path}{query_str}", headers=BROWSER_HEADERS, timeout=5)
             if resp.status_code == 200:
                 res = parse_bybit_payload(resp, "raw")
                 if res is not None:
@@ -235,7 +239,6 @@ def fetch_bybit(path, params=None):
         except Exception:
             pass
 
-    # 2차: 프록시 우회 호출
     target_bybit = f"https://api.bybit.com{path}{query_str}"
     encoded_bybit = quote(target_bybit, safe="")
     routes = [
@@ -247,7 +250,7 @@ def fetch_bybit(path, params=None):
 
     for mode, url in routes:
         try:
-            resp = requests.get(url, headers=BROWSER_HEADERS, timeout=8)
+            resp = requests.get(url, headers=BROWSER_HEADERS, timeout=7)
             if resp.status_code == 200:
                 result = parse_bybit_payload(resp, mode)
                 if result is not None:
@@ -257,97 +260,135 @@ def fetch_bybit(path, params=None):
     return {}
 
 
-def get_bybit_official_crypto_symbols():
+def get_non_rwa_crypto_bases():
     """
-    [핵심 1] 바이비트 홈페이지가 [Crypto] 탭과 [TradFi/Stocks] 탭을 구분하는 공식 API:
-    /v5/market/instruments-info?category=linear 전체 페이지를 순회하여
-    symbolType, marketRegion, underlyingTicker가 없는 '순수 크립토 선물' 목록만 추출
+    [1차 방어막] 미국 IP에서 프록시 없이 직통 연결되는 Bitget / Gate.io / Binance 현물 API에서
+    공식적으로 RWA/주식(isRwa == 'YES')을 제외한 순수 코인 목록과 RWA 차단 목록을 동시에 확보
     """
-    crypto_symbols = set()
-    tradfi_symbols = set()
-    cursor = ""
+    pure_crypto_bases = set()
+    rwa_blocked_bases = set()
 
-    for _ in range(5):  # 최대 5페이지(5000개) 순회
-        params = {"category": "linear", "status": "Trading", "limit": 1000}
-        if cursor:
-            params["cursor"] = cursor
+    # 1) Bitget USDT-FUTURES contracts API: 공식 'isRwa' 필드로 주식/TradFi("YES")와 순수 코인("NO") 완벽 분리
+    try:
+        r = requests.get(
+            "https://api.bitget.com/api/v2/mix/market/contracts",
+            params={"productType": "USDT-FUTURES"},
+            headers=BROWSER_HEADERS,
+            timeout=8
+        )
+        if r.status_code == 200:
+            for item in r.json().get("data", []):
+                base = str(item.get("baseCoin", "")).upper().strip()
+                is_rwa = str(item.get("isRwa", "NO")).upper().strip()
+                if not base:
+                    continue
+                if is_rwa == "YES" or is_tradfi_ticker(base):
+                    rwa_blocked_bases.add(base)
+                    rwa_blocked_bases.add(strip_multiplier_prefix(base))
+                else:
+                    pure_crypto_bases.add(base)
+                    pure_crypto_bases.add(strip_multiplier_prefix(base))
+    except Exception:
+        pass
 
-        res = fetch_bybit("/v5/market/instruments-info", params)
-        items = res.get("list", [])
-        if not items:
-            break
+    # 2) Gate.io USDT Futures (순수 코인 선물)
+    try:
+        r = requests.get(
+            "https://api.gateio.ws/api/v4/futures/usdt/tickers",
+            headers=BROWSER_HEADERS,
+            timeout=8
+        )
+        if r.status_code == 200:
+            for item in r.json():
+                contract = str(item.get("contract", "")).upper()
+                if contract.endswith("_USDT"):
+                    base = contract[:-5]
+                    if not is_tradfi_ticker(base) and base not in rwa_blocked_bases:
+                        pure_crypto_bases.add(base)
+                        pure_crypto_bases.add(strip_multiplier_prefix(base))
+    except Exception:
+        pass
 
-        for item in items:
-            sym = str(item.get("symbol", "")).upper().strip()
-            if not sym.endswith("USDT"):
-                continue
+    # 3) Binance Spot (현물 상장 순수 코인 - 선물 전용 TradFi 배제)
+    try:
+        r = requests.get(
+            "https://data-api.binance.vision/api/v3/ticker/price",
+            headers=BROWSER_HEADERS,
+            timeout=6
+        )
+        if r.status_code == 200:
+            for item in r.json():
+                sym = str(item.get("symbol", "")).upper()
+                if sym.endswith("USDT"):
+                    base = sym[:-4]
+                    if not is_tradfi_ticker(base) and base not in rwa_blocked_bases:
+                        pure_crypto_bases.add(base)
+                        pure_crypto_bases.add(strip_multiplier_prefix(base))
+    except Exception:
+        pass
 
-            base_coin = str(item.get("baseCoin", sym[:-4])).upper().strip()
-            quote_coin = str(item.get("quoteCoin", "")).upper().strip()
-            contract_type = str(item.get("contractType", "")).strip()
-            symbol_type = str(item.get("symbolType", "")).lower().strip()
-            full_name = str(item.get("fullName", "")).lower().strip()
-
-            # USDT 무기한 선물이 아니면 제외
-            if quote_coin != "USDT" or contract_type != "LinearPerpetual":
-                tradfi_symbols.add(sym)
-                continue
-
-            # 바이비트 공식 TradFi/주식 구분 필드 검사
-            if (
-                symbol_type in NON_CRYPTO_SYMBOL_TYPES
-                or item.get("marketRegion")
-                or item.get("underlyingTicker")
-                or any(k in full_name for k in NON_CRYPTO_META_KEYWORDS)
-                or is_tradfi_ticker(base_coin)
-            ):
-                tradfi_symbols.add(sym)
-                continue
-
-            crypto_symbols.add(sym)
-
-        cursor = str(res.get("nextPageCursor", "")).strip()
-        if not cursor:
-            break
-
-    return crypto_symbols, tradfi_symbols
+    return pure_crypto_bases, rwa_blocked_bases
 
 
-def get_verified_exchange_crypto_bases():
+def verify_bybit_pure_crypto_symbol(symbol, pure_crypto_bases, rwa_blocked_bases):
     """
-    [핵심 2] 코인게코(coins/markets)의 밈코인/주식티커 역오염을 제거하고,
-    바이낸스(현물/선물)에 실제 상장된 순수 암호화폐 베이스 심볼만 수집
+    [2차 핵심 방어막 - FAIL-CLOSED]
+    대용량 전체 조회(1000개) 대신 단일 심볼(/v5/market/instruments-info?category=linear&symbol=XXX, 약 800바이트)을
+    직접 조회하여 Bybit 공식 메타데이터(symbolType, underlyingTicker, marketRegion, fullName)를 검사합니다.
+    * SPCXUSDT 등 모든 TradFi/주식 선물은 여기서 100% 걸러집니다.
     """
-    verified_bases = set()
+    base_coin = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
+    clean_base = strip_multiplier_prefix(base_coin)
 
-    for b_url in [
-        "https://data-api.binance.vision/api/v3/ticker/price",
-        "https://fapi.binance.com/fapi/v1/ticker/price"
-    ]:
-        try:
-            r = requests.get(b_url, headers=BROWSER_HEADERS, timeout=6)
-            if r.status_code == 200:
-                for item in r.json():
-                    sym = str(item.get("symbol", "")).upper()
-                    if sym.endswith("USDT"):
-                        base = sym[:-4]
-                        if not is_tradfi_ticker(base):
-                            verified_bases.add(base)
-                            verified_bases.add(strip_multiplier_prefix(base))
-        except Exception:
-            pass
+    if is_tradfi_ticker(base_coin) or base_coin in rwa_blocked_bases or clean_base in rwa_blocked_bases:
+        return False
 
-    return verified_bases
+    res = fetch_bybit("/v5/market/instruments-info", {
+        "category": "linear",
+        "symbol": symbol
+    })
+    items = res.get("list", [])
+    if items:
+        item = items[0]
+        quote_coin = str(item.get("quoteCoin", "")).upper().strip()
+        contract_type = str(item.get("contractType", "")).strip()
+        symbol_type = str(item.get("symbolType", "")).lower().strip()
+        underlying_ticker = str(item.get("underlyingTicker", "")).strip()
+        market_region = str(item.get("marketRegion", "")).strip()
+        full_name = str(item.get("fullName", "")).lower().strip()
+
+        # 1) 순수 USDT 무기한 선물이 아니면 즉시 차단
+        if quote_coin != "USDT" or contract_type != "LinearPerpetual":
+            return False
+
+        # 2) symbolType이 순수 크립토("" 또는 "innovation")가 아니면 즉시 차단 (stock, etf, commodity, xstocks 등 100% 차단)
+        if symbol_type not in ALLOWED_CRYPTO_SYMBOL_TYPES:
+            return False
+
+        # 3) TradFi 전용 필드(underlyingTicker, marketRegion)에 값이 하나라도 있으면 100% 주식이므로 차단
+        if underlying_ticker or market_region:
+            return False
+
+        # 4) fullName에 SpaceX, Inc, Corp, ETF, Shares 등 기업/주식 키워드가 있으면 차단
+        if any(k in full_name for k in NON_CRYPTO_META_KEYWORDS):
+            return False
+
+        return True
+
+    # [Fail-Closed 원칙] 만약 프록시 일시 오류로 Bybit instruments-info 단일 조회가 실패했다면,
+    # 절대로 그냥 통과시키지 않고 Bitget(isRwa=='NO')/Gate.io/Binance 현물에 실존하는 코인일 때만 허용!
+    if pure_crypto_bases and (base_coin in pure_crypto_bases or clean_base in pure_crypto_bases):
+        return True
+
+    return False
 
 
 def get_scanner_candidates():
     """
-    1단계: 바이비트 공식 instruments-info에서 순수 크립토 선물 목록(crypto_symbols) 및 TradFi 목록 확보
-    2단계: 코인게코 Bybit 파생상품 API의 coin_id 메타데이터로 토큰화 주식/ETF 2차 차단
-    3단계: 눌림/선취매(Track A)와 돌파/S/R Flip(Track B)을 모두 잡도록 스캔 풀을 상위 45개로 확장
+    1단계: Bitget(isRwa=='NO') / Gate.io / Binance 현물 기반 순수 크립토 집합 및 RWA 차단 집합 확보
+    2단계: 코인게코 Bybit 파생상품 목록에서 블랙리스트, RWA 목록, 메타데이터 키워드 1차 필터링
     """
-    bybit_crypto_syms, bybit_tradfi_syms = get_bybit_official_crypto_symbols()
-    binance_crypto_bases = get_verified_exchange_crypto_bases()
+    pure_crypto_bases, rwa_blocked_bases = get_non_rwa_crypto_bases()
     candidates = []
 
     url = "https://api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=unexpired"
@@ -364,23 +405,14 @@ def get_scanner_candidates():
                 base_coin = symbol[:-4]
                 clean_base = strip_multiplier_prefix(base_coin)
                 coin_id = str(t.get("coin_id", "")).lower().strip()
+                target_str = str(t.get("target", "")).lower().strip()
 
-                # 1) 바이비트 공식 instruments-info에서 TradFi로 판명된 심볼 즉시 차단
-                if symbol in bybit_tradfi_syms:
+                # 1) 블랙리스트 및 Bitget RWA('YES') 판정 티커 즉시 차단
+                if is_tradfi_ticker(base_coin) or base_coin in rwa_blocked_bases or clean_base in rwa_blocked_bases:
                     continue
 
-                # 2) 바이비트 공식 크립토 목록이 정상 로드된 경우, 목록에 없는 심볼은 100% 차단
-                if bybit_crypto_syms and (symbol not in bybit_crypto_syms):
-                    continue
-
-                # 3) 블랙리스트 및 토큰화 주식 접미사(NVDAX 등) 차단
-                if is_tradfi_ticker(base_coin):
-                    continue
-
-                # 4) coin_id 메타데이터 검증: 토큰화 주식/ETF 키워드가 있거나 coin_id가 아예 없고 바이낸스에도 없으면 차단
-                if any(k in coin_id for k in NON_CRYPTO_META_KEYWORDS):
-                    continue
-                if not bybit_crypto_syms and not coin_id and (clean_base not in binance_crypto_bases):
+                # 2) coin_id 메타데이터에 주식/ETF/SpaceX 키워드가 포함된 경우 차단
+                if any(k in coin_id for k in NON_CRYPTO_META_KEYWORDS) or any(k in target_str for k in NON_CRYPTO_META_KEYWORDS):
                     continue
 
                 last_price = to_float(t.get("last"))
@@ -391,7 +423,6 @@ def get_scanner_candidates():
                 )
                 turnover_24h = to_float((t.get("converted_volume") or {}).get("usd"))
 
-                # Spring 스탑헌팅 종목(-8%)부터 초동 돌파 종목(+32%)까지 포섭
                 if last_price > 0 and (-8.0 <= change_24h <= 32.0) and turnover_24h >= 3_000_000:
                     candidates.append({
                         "symbol": symbol,
@@ -407,18 +438,18 @@ def get_scanner_candidates():
                     key=lambda x: np.log10(max(10.0, x["turnover_24h"])) * (1.0 + max(0.0, x["change_24h"]) * 0.08),
                     reverse=True
                 )
-                return candidates[:45]
+                return candidates[:45], pure_crypto_bases, rwa_blocked_bases
     except Exception as e:
         print(f"[후보군 수집 예외] {e}")
 
-    return []
+    return [], pure_crypto_bases, rwa_blocked_bases
 
 
 def fetch_raw_5m_rows_multi_source(symbol, limit=150):
     base_coin = symbol[:-4].upper()
     clean_base = strip_multiplier_prefix(base_coin)
 
-    # 1순위: 바이비트 V5 원본 캔들 (바이비트 타점 정밀도 최우선)
+    # 1순위: 바이비트 V5 원본 캔들
     res = fetch_bybit("/v5/market/kline", {
         "category": "linear",
         "symbol": symbol,
@@ -510,7 +541,7 @@ def get_klines_5m_and_15m(symbol, ref_price=0.0, limit=150):
 
     df = df.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
 
-    # [핵심 3: 24/7 암호화폐 캔들 활성도 검증]
+    # 24/7 암호화폐 캔들 활성도 검증
     max_gap = df["timestamp"].diff().max()
     if pd.notna(max_gap) and max_gap > 900_000:
         return pd.DataFrame(), pd.DataFrame()
@@ -520,7 +551,7 @@ def get_klines_5m_and_15m(symbol, ref_price=0.0, limit=150):
     if dead_candles >= 10:
         return pd.DataFrame(), pd.DataFrame()
 
-    # [1000PEPE 등 단위 배수 자동 보정]
+    # 1000PEPE 등 단위 배수 자동 보정
     last_close = to_float(df["close"].iloc[-1])
     if ref_price > 0 and last_close > 0:
         ratio = ref_price / last_close
@@ -594,7 +625,7 @@ def get_klines_5m_and_15m(symbol, ref_price=0.0, limit=150):
     return df, df_15m
 
 
-def analyze_symbol(coin):
+def analyze_symbol(coin, pure_crypto_bases, rwa_blocked_bases):
     symbol = coin["symbol"]
     df, df_15m = get_klines_5m_and_15m(symbol, ref_price=coin["last_price"], limit=150)
     if df.empty or df_15m.empty or len(df) < 60:
@@ -609,30 +640,27 @@ def analyze_symbol(coin):
     coin["last_price"] = current_price
 
     # =================================================================
-    # [신규 방어막] 고점 폭락(Pump & Dump / 설거지 차트) 원천 차단 필터
+    # [방어막 1] 고점 폭락(Pump & Dump / 설거지 차트) 원천 차단 필터
     # =================================================================
     high_12h = to_float(df["high"].max(), default=current_price)
     low_12h = to_float(df["low"].min(), default=current_price)
 
-    # 1) 최근 12시간 최고점 대비 현재가 낙폭(Drawdown) 계산 ($BIRB: 0.12364 -> 0.10140 = -18.0% 즉시 탈락)
     drawdown_from_high_pct = ((high_12h - current_price) / high_12h) * 100.0 if high_12h > 0 else 0.0
     if drawdown_from_high_pct >= MAX_DRAWDOWN_FROM_12H_HIGH_PCT:
         return None
 
-    # 2) 이미 크게 쏜 뒤(+20% 이상) 상승폭의 35% 이상을 반납하며 무너지는 차트 차단
     total_12h_pump_pct = ((high_12h - low_12h) / low_12h) * 100.0 if low_12h > 0 else 0.0
     retracement_ratio = (high_12h - current_price) / (high_12h - low_12h) if (high_12h - low_12h) > 0 else 0.0
     if total_12h_pump_pct >= MAX_PRIOR_PUMP_PCT and retracement_ratio >= MAX_RETRACEMENT_RATIO:
         return None
 
-    # 3) 거시적 계단식 하락(Lower Highs: 12시간 고점 > 4시간 고점 > 75분 고점) 추세 차단
     high_4h = to_float(df.iloc[-48:]["high"].max(), default=current_price)
     high_75m = to_float(df.iloc[-15:]["high"].max(), default=current_price)
     if (high_12h > high_4h * 1.03) and (high_4h > high_75m * 1.02):
         return None
 
     # =================================================================
-    # [Hard Cutoff: 15분봉 과열 및 급등 양봉 꼭대기 추격 원천 차단]
+    # [방어막 2: 15분봉 과열 및 급등 양봉 꼭대기 추격 원천 차단]
     # =================================================================
     rsi6_15m = to_float(curr_15m["rsi6"], default=50.0)
     kdj_j_15m = to_float(curr_15m["kdj_j"], default=50.0)
@@ -677,15 +705,13 @@ def analyze_symbol(coin):
     ma112_5m = to_float(curr["ma112"], default=current_price)
     ma_short_aligned = bool(ma5_5m > ma20_5m > ma50_5m)
 
-    # 15분봉 중심선(MA20)이 우하향 중인지 확인 (하락 추세 데드캣 판별용)
     is_15m_ma20_falling = bool(bb_mid_15m < prev_bb_mid_15m * 0.999)
 
-    # [핵심 버그 수정] 미완성 현재 봉(iloc[-1])을 제외하고 마감 완료된 직전 봉 기준으로 거래량 건조율 계산
+    # 마감 완료된 직전 봉 기준으로 거래량 건조율 계산 (미완성 현재 봉 0% 착시 방지)
     closed_3_min_vol = to_float(df.iloc[-4:-1]["volume"].min(), default=0.0)
     ref_vol_ma20 = to_float(prev["vol_ma20"], default=1.0)
     recent_3_vol_ratio = (closed_3_min_vol / ref_vol_ma20) if ref_vol_ma20 > 0 else 1.0
 
-    # 유동성 스윕(Spring) & RSI 과매도 스러스트
     max_wick_6 = to_float(df.iloc[-6:-1]["lower_wick_ratio"].max(), default=0.0)
     pre8_min_rsi6 = to_float(df.iloc[-9:-1]["rsi6"].min(), default=50.0)
     curr_rsi6 = to_float(curr["rsi6"], default=50.0)
@@ -698,7 +724,6 @@ def analyze_symbol(coin):
         and (obv_accum or cond_rsi_thrust)
     )
 
-    # 이평선 리본 초밀집 확산 & MACD 양전환 발화
     pre5_min_ribbon = to_float(df.iloc[-6:-1]["ribbon_spread_pct"].min(), default=99.0)
     cond_ema_ribbon = bool(pre5_min_ribbon <= EMA_RIBBON_MAX_SPREAD_PCT and current_price > ma50_5m)
     cond_macd_ignition = bool(
@@ -709,7 +734,6 @@ def analyze_symbol(coin):
 
     # =================================================================
     # Track A (1차 선취매 / 유동성 스윕 반전 / 눌림 타점 채점)
-    # * 필수 전제: 15분봉 KDJ J값이 68 이하(데드캣 고점 차단) & 15분봉 MA20 급락 중이 아닐 것
     # =================================================================
     score_a = 0
     tags_a = []
@@ -717,7 +741,6 @@ def analyze_symbol(coin):
         dist_ma50 = abs(current_price - ma50_5m) / ma50_5m * 100.0 if ma50_5m > 0 else 99.0
         dist_bb_mid_15m = abs(current_price - bb_mid_15m) / bb_mid_15m * 100.0 if bb_mid_15m > 0 else 99.0
 
-        # 이평선 지지는 현재가가 MA20 및 MA50 위에 안착해 있을 때만 부여
         if cond_spring:
             score_a += 25
             tags_a.append(f"유동성 스윕(Spring)+MA20 장악(꼬리 {max_wick_6:.1f}x)")
@@ -777,14 +800,12 @@ def analyze_symbol(coin):
     peak_breakout_vol = to_float(recent_5_bars["volume"].max(), default=0.0)
     peak_breakout_mult = to_float(recent_5_bars["vol_mult"].max(), default=1.0)
 
-    # 현재 봉이 시작 직후라 거래량이 너무 적으면 직전 마감 봉(prev)의 거래량으로 건조율 평가
     eval_pullback_vol = to_float(curr["volume"]) if to_float(curr["volume"]) >= ref_vol_ma20 * 0.05 else to_float(prev["volume"])
     pullback_vol_vs_peak = (eval_pullback_vol / peak_breakout_vol) if peak_breakout_vol > 0 else 1.0
 
     ref_sr_level = box_high if abs(curr["low"] - box_high) <= abs(curr["low"] - swing_high_8) else swing_high_8
     sr_flip_err_pct = (abs(to_float(curr["low"]) - ref_sr_level) / ref_sr_level) * 100.0 if ref_sr_level > 0 else 99.0
 
-    # S/R Flip 역시 12시간 최고점 부근(고점 대비 -5% 이내)에서 일어나는 진성 돌파 리테스트만 인정
     cond_sr_flip_retest = bool(
         peak_breakout_mult >= 2.5
         and drawdown_from_high_pct <= 5.0
@@ -840,6 +861,13 @@ def analyze_symbol(coin):
     if score_a < SCORE_THRESHOLD and score_b < SCORE_THRESHOLD:
         return None
 
+    # =================================================================
+    # [방어막 3: 알림 발송 직전 단일 심볼 Bybit 공식 크립토 검증 (Fail-Closed)]
+    # =================================================================
+    if not verify_bybit_pure_crypto_symbol(symbol, pure_crypto_bases, rwa_blocked_bases):
+        print(f"[TradFi/주식 차단 완료] {symbol} 종목은 순수 암호화폐가 아니므로 폐기합니다.")
+        return None
+
     # 1차 지지선과 2차 돌파선 산출
     support_line = min(recent_low_6, ma50_5m, current_price * 0.994)
     resistance_line = max(box_high, swing_high_8, current_price * 1.015)
@@ -861,7 +889,6 @@ def analyze_symbol(coin):
 
     avg_entry = (entry_low + entry_high) / 2.0
 
-    # 정수형 손절폭(-2% ~ -5%) 및 최소 1:2 R:R 보장 4단계 익절가 산출
     atr5 = to_float(curr["atr14"], default=avg_entry * 0.012)
     atr15_approx = atr5 * 1.732
     raw_sl_pct = (1.4 * atr15_approx / avg_entry) * 100.0 if avg_entry > 0 else 3.0
@@ -962,14 +989,18 @@ def main():
     now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
-    # 18시간 경과 종목 정리 및 비암호화폐 기존 추적 기록 즉시 삭제
+    candidates, pure_crypto_bases, rwa_blocked_bases = get_scanner_candidates()
+
+    # 18시간 경과 종목 정리 및 비암호화폐(SPCX 등) 기존 추적 기록 즉시 삭제
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
-        if is_tradfi_ticker(base_c) or (now_ts - tracked[sym].get("created_at", 0) > 64800):
+        if (
+            is_tradfi_ticker(base_c)
+            or base_c in rwa_blocked_bases
+            or (now_ts - tracked[sym].get("created_at", 0) > 64800)
+        ):
             del tracked[sym]
 
-    # 1단계: 바이비트 공식 크립토 선물 목록 + 메타데이터 검증으로 순수 암호화폐만 추출
-    candidates = get_scanner_candidates()
     if not candidates:
         print("[알림] 조건을 만족하는 순수 암호화폐 후보군 데이터를 가져오지 못했습니다.")
         save_state(state)
@@ -977,7 +1008,6 @@ def main():
 
     sent_count = 0
 
-    # 2단계: 추려진 순수 암호화폐만 분석 및 개별 알림 전송
     for coin in candidates:
         symbol = coin["symbol"]
         curr_p = coin["last_price"]
@@ -1012,7 +1042,7 @@ def main():
                 continue
 
         try:
-            res = analyze_symbol(coin)
+            res = analyze_symbol(coin, pure_crypto_bases, rwa_blocked_bases)
             if not res:
                 continue
 
