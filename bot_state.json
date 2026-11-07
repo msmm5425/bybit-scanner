@@ -509,6 +509,27 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "ERAUSDT": {
+      "created_at": 1794085223,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.074095,
+      "entry_low": 0.07263499999999999,
+      "entry_high": 0.07321899999999999,
+      "stop_price": 0.07146846,
+      "sl_pct": 2,
+      "tps": [
+        0.07636527788488018,
+        0.08241446729606168,
+        0.08816963232938584
+      ],
+      "tp_pcts": [
+        4.7,
+        13.0,
+        20.9
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
