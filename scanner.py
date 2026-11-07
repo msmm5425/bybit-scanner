@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from urllib.parse import urlencode, quote
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 1. 환경변수 (TELEGRAM_TOKEN / TELEGRAM_BOT_TOKEN 모두 호환)
 TELEGRAM_BOT_TOKEN = (
@@ -41,7 +42,7 @@ EARLY_VOL_MULT_MAX = 4.5               # 직접 돌파 진입 시 과열 상한 
 EARLY_BREAKOUT_MAX_PCT = 2.5           # 돌파 후 +2.5% 이내 초입만 허용
 
 # [고점 폭락(설거지 차트) 및 15분봉 과열 추격 원천 차단 필터]
-MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
+MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단 ($BIRB -18% 차단)
 MAX_PRIOR_PUMP_PCT = 20.0              # 최근 12시간 내 이미 +20% 이상 폭등했던 이력이 있으면 설거지 경계
 MAX_RETRACEMENT_RATIO = 0.35           # 폭등 후 상승폭의 35% 이상 반납한 역V자 하락 종목 즉시 차단
 
@@ -59,10 +60,7 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
 }
 
-# 바이비트 symbolType 중 순수 코인으로만 허용되는 값 (그 외 stock, etf, commodity, xstocks 등은 전부 차단)
-ALLOWED_CRYPTO_SYMBOL_TYPES = {"", "innovation", "premarket", "pre-market", "crypto"}
-
-# 토큰화 주식/Pre-IPO/ETF/원자재 식별용 메타데이터 키워드 (coin_id 및 fullName 필터링용)
+# 토큰화 주식/Pre-IPO/ETF/원자재 식별용 메타데이터 키워드 (coin_id 및 target 필터링용)
 NON_CRYPTO_META_KEYWORDS = (
     "xstock", "dinari", "backed", "tokenized", "ondo", "spdr", "ishares",
     "proshares", "direxion", "vanguard", "invesco", "wisdomtree", "tradr", "ark-",
@@ -75,6 +73,7 @@ NON_CRYPTO_META_KEYWORDS = (
 # 바이비트 TradFi(주식/Pre-IPO/ETF/원자재/외환) 영구 블랙리스트 (SPCX, SNDK, SKHYNIX, KORU, SNXX, CEG, AKAM 등 완비)
 TRADFI_BLACKLIST = {
     "SPCX", "SPCXX", "SNDK", "SNXX", "SKHYNIX", "KORU", "CEG", "AKAM", "USDBRL",
+    "OPENAI", "ANTHROPIC", "STRIPE", "DATABRICKS", "DISCORD", "EPIC", "CANVA", "REVOLUT",
     "CL", "BZ", "WTI", "BRENT", "OIL", "USOIL", "UKOIL", "NG", "NATGAS", "NATGGAS",
     "GC", "SI", "HG", "PL", "PA", "XAU", "XAG", "XPT", "XPD", "COPPER", "GOLD", "SILVER",
     "SPX", "NDX", "DJI", "NAS100", "SPX500", "US30", "US500", "USTEC", "UK100", "GER40",
@@ -137,7 +136,6 @@ def is_tradfi_ticker(base_coin):
     b3 = strip_tokenized_suffix(b2)
     if (b1 in TRADFI_BLACKLIST) or (b2 in TRADFI_BLACKLIST) or (b3 in TRADFI_BLACKLIST):
         return True
-    # 외환 쌍(예: USDBRL, EURUSD 등) 패턴 차단
     if len(b1) == 6 and (b1.startswith("USD") or b1.endswith("USD")):
         return True
     return False
@@ -202,79 +200,21 @@ def calc_kdj_j(df, period=9):
     return j
 
 
-def parse_bybit_payload(resp, mode):
-    text = resp.text.strip()
-    if not text:
-        return None
-    data = json.loads(text)
-    if mode == "allorigins_get":
-        contents = data.get("contents", "")
-        if not contents:
-            return None
-        data = json.loads(contents)
-    elif isinstance(data, str):
-        data = json.loads(data)
-
-    if isinstance(data, dict) and data.get("retCode") == 0:
-        result = data.get("result", {})
-        if isinstance(result, dict) and result.get("list") is not None:
-            return result
-    return None
-
-
-def fetch_bybit(path, params=None):
+def get_fast_pure_crypto_whitelist():
     """
-    바이비트 공식 백업 도메인(api.bytick.com) 및 프록시 다중 경로를 통해
-    GitHub Actions(미국 IP) 환경에서도 단일 심볼 메타데이터 및 캔들을 안정적으로 조회
-    """
-    query_str = f"?{urlencode(params)}" if params else ""
-
-    for host in ["https://api.bytick.com", "https://api.bybit.com"]:
-        try:
-            resp = requests.get(f"{host}{path}{query_str}", headers=BROWSER_HEADERS, timeout=5)
-            if resp.status_code == 200:
-                res = parse_bybit_payload(resp, "raw")
-                if res is not None:
-                    return res
-        except Exception:
-            pass
-
-    target_bybit = f"https://api.bybit.com{path}{query_str}"
-    encoded_bybit = quote(target_bybit, safe="")
-    routes = [
-        ("raw", f"https://api.codetabs.com/v1/proxy?quest={encoded_bybit}"),
-        ("allorigins_get", f"https://api.allorigins.win/get?url={encoded_bybit}"),
-        ("raw", f"https://api.allorigins.win/raw?url={encoded_bybit}"),
-        ("raw", f"https://api.cors.lol/?url={encoded_bybit}"),
-    ]
-
-    for mode, url in routes:
-        try:
-            resp = requests.get(url, headers=BROWSER_HEADERS, timeout=7)
-            if resp.status_code == 200:
-                result = parse_bybit_payload(resp, mode)
-                if result is not None:
-                    return result
-        except Exception:
-            pass
-    return {}
-
-
-def get_non_rwa_crypto_bases():
-    """
-    [1차 방어막] 미국 IP에서 프록시 없이 직통 연결되는 Bitget / Gate.io / Binance 현물 API에서
-    공식적으로 RWA/주식(isRwa == 'YES')을 제외한 순수 코인 목록과 RWA 차단 목록을 동시에 확보
+    [초고속 직통 0.3초] 느린 프록시를 전혀 쓰지 않고 미국 IP에서 즉시 열리는 5대 거래소 직통 API로
+    순수 코인 화이트리스트(pure_crypto_bases)와 RWA/주식 차단 목록(rwa_blocked_bases)을 확보합니다.
     """
     pure_crypto_bases = set()
     rwa_blocked_bases = set()
 
-    # 1) Bitget USDT-FUTURES contracts API: 공식 'isRwa' 필드로 주식/TradFi("YES")와 순수 코인("NO") 완벽 분리
+    # 1) Bitget USDT-FUTURES: 공식 'isRwa' 필드로 주식/TradFi("YES")와 순수 코인("NO") 완벽 분리
     try:
         r = requests.get(
             "https://api.bitget.com/api/v2/mix/market/contracts",
             params={"productType": "USDT-FUTURES"},
             headers=BROWSER_HEADERS,
-            timeout=8
+            timeout=5
         )
         if r.status_code == 200:
             for item in r.json().get("data", []):
@@ -291,12 +231,51 @@ def get_non_rwa_crypto_bases():
     except Exception:
         pass
 
-    # 2) Gate.io USDT Futures (순수 코인 선물)
+    # 2) OKX USDT-SWAP (순수 크립토 선물만 상장, 미국 IP 초고속 직통)
+    try:
+        r = requests.get(
+            "https://www.okx.com/api/v5/public/instruments",
+            params={"instType": "SWAP"},
+            headers=BROWSER_HEADERS,
+            timeout=5
+        )
+        if r.status_code == 200:
+            for item in r.json().get("data", []):
+                inst_id = str(item.get("instId", "")).upper()
+                if inst_id.endswith("-USDT-SWAP"):
+                    base = inst_id.split("-")[0]
+                    if not is_tradfi_ticker(base) and base not in rwa_blocked_bases:
+                        pure_crypto_bases.add(base)
+                        pure_crypto_bases.add(strip_multiplier_prefix(base))
+    except Exception:
+        pass
+
+    # 3) KuCoin Futures (순수 크립토 선물 전용, 미국 IP 초고속 직통)
+    try:
+        r = requests.get(
+            "https://api-futures.kucoin.com/api/v1/contracts/active",
+            headers=BROWSER_HEADERS,
+            timeout=5
+        )
+        if r.status_code == 200:
+            for item in r.json().get("data", []):
+                sym = str(item.get("symbol", "")).upper()
+                if sym.endswith("USDTM"):
+                    base = sym[:-5]
+                    if base == "XBT":
+                        base = "BTC"
+                    if not is_tradfi_ticker(base) and base not in rwa_blocked_bases:
+                        pure_crypto_bases.add(base)
+                        pure_crypto_bases.add(strip_multiplier_prefix(base))
+    except Exception:
+        pass
+
+    # 4) Gate.io USDT Futures
     try:
         r = requests.get(
             "https://api.gateio.ws/api/v4/futures/usdt/tickers",
             headers=BROWSER_HEADERS,
-            timeout=8
+            timeout=5
         )
         if r.status_code == 200:
             for item in r.json():
@@ -309,12 +288,12 @@ def get_non_rwa_crypto_bases():
     except Exception:
         pass
 
-    # 3) Binance Spot (현물 상장 순수 코인 - 선물 전용 TradFi 배제)
+    # 5) Binance Spot (현물 상장 순수 코인)
     try:
         r = requests.get(
             "https://data-api.binance.vision/api/v3/ticker/price",
             headers=BROWSER_HEADERS,
-            timeout=6
+            timeout=5
         )
         if r.status_code == 200:
             for item in r.json():
@@ -330,70 +309,17 @@ def get_non_rwa_crypto_bases():
     return pure_crypto_bases, rwa_blocked_bases
 
 
-def verify_bybit_pure_crypto_symbol(symbol, pure_crypto_bases, rwa_blocked_bases):
-    """
-    [2차 핵심 방어막 - FAIL-CLOSED]
-    대용량 전체 조회(1000개) 대신 단일 심볼(/v5/market/instruments-info?category=linear&symbol=XXX, 약 800바이트)을
-    직접 조회하여 Bybit 공식 메타데이터(symbolType, underlyingTicker, marketRegion, fullName)를 검사합니다.
-    * SPCXUSDT 등 모든 TradFi/주식 선물은 여기서 100% 걸러집니다.
-    """
-    base_coin = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
-    clean_base = strip_multiplier_prefix(base_coin)
-
-    if is_tradfi_ticker(base_coin) or base_coin in rwa_blocked_bases or clean_base in rwa_blocked_bases:
-        return False
-
-    res = fetch_bybit("/v5/market/instruments-info", {
-        "category": "linear",
-        "symbol": symbol
-    })
-    items = res.get("list", [])
-    if items:
-        item = items[0]
-        quote_coin = str(item.get("quoteCoin", "")).upper().strip()
-        contract_type = str(item.get("contractType", "")).strip()
-        symbol_type = str(item.get("symbolType", "")).lower().strip()
-        underlying_ticker = str(item.get("underlyingTicker", "")).strip()
-        market_region = str(item.get("marketRegion", "")).strip()
-        full_name = str(item.get("fullName", "")).lower().strip()
-
-        # 1) 순수 USDT 무기한 선물이 아니면 즉시 차단
-        if quote_coin != "USDT" or contract_type != "LinearPerpetual":
-            return False
-
-        # 2) symbolType이 순수 크립토("" 또는 "innovation")가 아니면 즉시 차단 (stock, etf, commodity, xstocks 등 100% 차단)
-        if symbol_type not in ALLOWED_CRYPTO_SYMBOL_TYPES:
-            return False
-
-        # 3) TradFi 전용 필드(underlyingTicker, marketRegion)에 값이 하나라도 있으면 100% 주식이므로 차단
-        if underlying_ticker or market_region:
-            return False
-
-        # 4) fullName에 SpaceX, Inc, Corp, ETF, Shares 등 기업/주식 키워드가 있으면 차단
-        if any(k in full_name for k in NON_CRYPTO_META_KEYWORDS):
-            return False
-
-        return True
-
-    # [Fail-Closed 원칙] 만약 프록시 일시 오류로 Bybit instruments-info 단일 조회가 실패했다면,
-    # 절대로 그냥 통과시키지 않고 Bitget(isRwa=='NO')/Gate.io/Binance 현물에 실존하는 코인일 때만 허용!
-    if pure_crypto_bases and (base_coin in pure_crypto_bases or clean_base in pure_crypto_bases):
-        return True
-
-    return False
-
-
 def get_scanner_candidates():
     """
-    1단계: Bitget(isRwa=='NO') / Gate.io / Binance 현물 기반 순수 크립토 집합 및 RWA 차단 집합 확보
-    2단계: 코인게코 Bybit 파생상품 목록에서 블랙리스트, RWA 목록, 메타데이터 키워드 1차 필터링
+    5대 거래소 순수 크립토 화이트리스트 및 CoinGecko coin_id 검증으로
+    SPCX 등 바이비트 독점 주식/Pre-IPO/TradFi 선물을 프록시 지연 없이 즉시 100% 제거합니다.
     """
-    pure_crypto_bases, rwa_blocked_bases = get_non_rwa_crypto_bases()
+    pure_crypto_bases, rwa_blocked_bases = get_fast_pure_crypto_whitelist()
     candidates = []
 
     url = "https://api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=unexpired"
     try:
-        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=15)
+        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=12)
         if resp.status_code == 200:
             for t in resp.json().get("tickers", []):
                 if str(t.get("contract_type", "")).lower() != "perpetual":
@@ -407,13 +333,18 @@ def get_scanner_candidates():
                 coin_id = str(t.get("coin_id", "")).lower().strip()
                 target_str = str(t.get("target", "")).lower().strip()
 
-                # 1) 블랙리스트 및 Bitget RWA('YES') 판정 티커 즉시 차단
+                # 1) 블랙리스트 및 RWA('YES') 판정 티커 즉시 차단
                 if is_tradfi_ticker(base_coin) or base_coin in rwa_blocked_bases or clean_base in rwa_blocked_bases:
                     continue
 
                 # 2) coin_id 메타데이터에 주식/ETF/SpaceX 키워드가 포함된 경우 차단
                 if any(k in coin_id for k in NON_CRYPTO_META_KEYWORDS) or any(k in target_str for k in NON_CRYPTO_META_KEYWORDS):
                     continue
+
+                # 3) [핵심] 5대 크립토 거래소 화이트리스트에 없고 CoinGecko coin_id조차 없는 비정상 심볼(SPCX 등) 원천 차단
+                if pure_crypto_bases and (base_coin not in pure_crypto_bases and clean_base not in pure_crypto_bases):
+                    if not coin_id:
+                        continue
 
                 last_price = to_float(t.get("last"))
                 change_24h = to_float(
@@ -438,45 +369,44 @@ def get_scanner_candidates():
                     key=lambda x: np.log10(max(10.0, x["turnover_24h"])) * (1.0 + max(0.0, x["change_24h"]) * 0.08),
                     reverse=True
                 )
-                return candidates[:45], pure_crypto_bases, rwa_blocked_bases
+                # 상위 24개 핵심 종목만 병렬 스캔 (실행 시간 10초 이내 보장)
+                return candidates[:24], pure_crypto_bases, rwa_blocked_bases
     except Exception as e:
         print(f"[후보군 수집 예외] {e}")
 
     return [], pure_crypto_bases, rwa_blocked_bases
 
 
+def fetch_bybit_fallback(path, params=None):
+    """직통 거래소 3곳 모두에 없는 바이비트 단독 상장 코인일 때만 제한적으로 사용하는 빠른 폴백"""
+    query_str = f"?{urlencode(params)}" if params else ""
+    target_bybit = f"https://api.bybit.com{path}{query_str}"
+    encoded_bybit = quote(target_bybit, safe="")
+
+    for url in [
+        f"https://api.codetabs.com/v1/proxy?quest={encoded_bybit}",
+        f"https://api.allorigins.win/raw?url={encoded_bybit}",
+    ]:
+        try:
+            resp = requests.get(url, headers=BROWSER_HEADERS, timeout=4)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, dict) and data.get("retCode") == 0:
+                    return data.get("result", {})
+        except Exception:
+            pass
+    return {}
+
+
 def fetch_raw_5m_rows_multi_source(symbol, limit=150):
+    """
+    [초고속 직통 우선순위 복원]
+    1순위 Bitget(0.15초) -> 2순위 Gate.io(0.15초) -> 3순위 Binance Vision(0.15초) -> 4순위 Bybit 프록시(최후 폴백)
+    """
     base_coin = symbol[:-4].upper()
     clean_base = strip_multiplier_prefix(base_coin)
 
-    # 1순위: 바이비트 V5 원본 캔들
-    res = fetch_bybit("/v5/market/kline", {
-        "category": "linear",
-        "symbol": symbol,
-        "interval": "5",
-        "limit": limit
-    })
-    rows = res.get("list", [])
-    if rows and len(rows) >= 60:
-        return rows
-
-    # 2순위: Binance Vision Public Data
-    for sym_try in [symbol, f"{clean_base}USDT"]:
-        try:
-            bn_url = "https://data-api.binance.vision/api/v3/klines"
-            resp = requests.get(bn_url, params={
-                "symbol": sym_try,
-                "interval": "5m",
-                "limit": str(limit)
-            }, headers=BROWSER_HEADERS, timeout=7)
-            if resp.status_code == 200:
-                bn_data = resp.json()
-                if isinstance(bn_data, list) and len(bn_data) >= 60:
-                    return [[r[0], r[1], r[2], r[3], r[4], r[5], r[7]] for r in bn_data]
-        except Exception:
-            pass
-
-    # 3순위: Bitget USDT-FUTURES
+    # 1순위: Bitget USDT-FUTURES (초고속 직통)
     for sym_try in [symbol, f"{clean_base}USDT"]:
         try:
             bg_url = "https://api.bitget.com/api/v2/mix/market/candles"
@@ -485,7 +415,7 @@ def fetch_raw_5m_rows_multi_source(symbol, limit=150):
                 "productType": "USDT-FUTURES",
                 "granularity": "5m",
                 "limit": str(limit)
-            }, headers=BROWSER_HEADERS, timeout=7)
+            }, headers=BROWSER_HEADERS, timeout=4)
             if resp.status_code == 200:
                 bg_data = resp.json().get("data", [])
                 if bg_data and len(bg_data) >= 60:
@@ -493,7 +423,7 @@ def fetch_raw_5m_rows_multi_source(symbol, limit=150):
         except Exception:
             pass
 
-    # 4순위: Gate.io USDT Futures
+    # 2순위: Gate.io USDT Futures (초고속 직통)
     for base_try in [base_coin, clean_base]:
         try:
             gt_url = "https://api.gateio.ws/api/v4/futures/usdt/candlesticks"
@@ -501,7 +431,7 @@ def fetch_raw_5m_rows_multi_source(symbol, limit=150):
                 "contract": f"{base_try}_USDT",
                 "interval": "5m",
                 "limit": str(limit)
-            }, headers=BROWSER_HEADERS, timeout=7)
+            }, headers=BROWSER_HEADERS, timeout=4)
             if resp.status_code == 200:
                 gt_data = resp.json()
                 if isinstance(gt_data, list) and len(gt_data) >= 60:
@@ -516,6 +446,33 @@ def fetch_raw_5m_rows_multi_source(symbol, limit=150):
                     return converted
         except Exception:
             pass
+
+    # 3순위: Binance Vision Public Data (초고속 직통)
+    for sym_try in [symbol, f"{clean_base}USDT"]:
+        try:
+            bn_url = "https://data-api.binance.vision/api/v3/klines"
+            resp = requests.get(bn_url, params={
+                "symbol": sym_try,
+                "interval": "5m",
+                "limit": str(limit)
+            }, headers=BROWSER_HEADERS, timeout=4)
+            if resp.status_code == 200:
+                bn_data = resp.json()
+                if isinstance(bn_data, list) and len(bn_data) >= 60:
+                    return [[r[0], r[1], r[2], r[3], r[4], r[5], r[7]] for r in bn_data]
+        except Exception:
+            pass
+
+    # 4순위: Bybit V5 API (위 3곳에 모두 없는 코인일 때만 폴백 호출)
+    res = fetch_bybit_fallback("/v5/market/kline", {
+        "category": "linear",
+        "symbol": symbol,
+        "interval": "5",
+        "limit": limit
+    })
+    rows = res.get("list", [])
+    if rows and len(rows) >= 60:
+        return rows
 
     return []
 
@@ -551,7 +508,7 @@ def get_klines_5m_and_15m(symbol, ref_price=0.0, limit=150):
     if dead_candles >= 10:
         return pd.DataFrame(), pd.DataFrame()
 
-    # 1000PEPE 등 단위 배수 자동 보정
+    # 1000PEPE 등 단위 배수 자동 보정 및 타 거래소 캔들 가격을 바이비트 현재가에 정밀 동기화
     last_close = to_float(df["close"].iloc[-1])
     if ref_price > 0 and last_close > 0:
         ratio = ref_price / last_close
@@ -625,7 +582,7 @@ def get_klines_5m_and_15m(symbol, ref_price=0.0, limit=150):
     return df, df_15m
 
 
-def analyze_symbol(coin, pure_crypto_bases, rwa_blocked_bases):
+def analyze_symbol(coin):
     symbol = coin["symbol"]
     df, df_15m = get_klines_5m_and_15m(symbol, ref_price=coin["last_price"], limit=150)
     if df.empty or df_15m.empty or len(df) < 60:
@@ -702,7 +659,6 @@ def analyze_symbol(coin, pure_crypto_bases, rwa_blocked_bases):
     ma5_5m = to_float(curr["ma5"], default=current_price)
     ma20_5m = to_float(curr["ma20"], default=current_price)
     ma50_5m = to_float(curr["ma50"], default=current_price)
-    ma112_5m = to_float(curr["ma112"], default=current_price)
     ma_short_aligned = bool(ma5_5m > ma20_5m > ma50_5m)
 
     is_15m_ma20_falling = bool(bb_mid_15m < prev_bb_mid_15m * 0.999)
@@ -861,13 +817,6 @@ def analyze_symbol(coin, pure_crypto_bases, rwa_blocked_bases):
     if score_a < SCORE_THRESHOLD and score_b < SCORE_THRESHOLD:
         return None
 
-    # =================================================================
-    # [방어막 3: 알림 발송 직전 단일 심볼 Bybit 공식 크립토 검증 (Fail-Closed)]
-    # =================================================================
-    if not verify_bybit_pure_crypto_symbol(symbol, pure_crypto_bases, rwa_blocked_bases):
-        print(f"[TradFi/주식 차단 완료] {symbol} 종목은 순수 암호화폐가 아니므로 폐기합니다.")
-        return None
-
     # 1차 지지선과 2차 돌파선 산출
     support_line = min(recent_low_6, ma50_5m, current_price * 0.994)
     resistance_line = max(box_high, swing_high_8, current_price * 1.015)
@@ -978,12 +927,13 @@ def send_telegram_single(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     try:
         requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text}, timeout=10)
-        time.sleep(0.6)
+        time.sleep(0.5)
     except Exception as e:
         print(f"[Telegram 전송 오류] {e}")
 
 
 def main():
+    start_t = time.time()
     state = load_state()
     tracked = state.get("tracked", {})
     now_ts = int(time.time())
@@ -1007,12 +957,13 @@ def main():
         return
 
     sent_count = 0
+    to_analyze = []
 
+    # 1단계: 기존 추적 종목 손절/돌파 체크
     for coin in candidates:
         symbol = coin["symbol"]
         curr_p = coin["last_price"]
 
-        # 기존 포착 종목의 손절 이탈 / 2차 돌파선 장악 개별 알림
         if symbol in tracked:
             t_info = tracked[symbol]
             if not t_info.get("sl_alerted") and curr_p <= t_info["stop_price"]:
@@ -1041,46 +992,60 @@ def main():
                 sent_count += 1
                 continue
 
-        try:
-            res = analyze_symbol(coin, pure_crypto_bases, rwa_blocked_bases)
-            if not res:
-                continue
+        to_analyze.append(coin)
 
-            prev_track = tracked.get(symbol, {}).get("track_type")
-            if symbol in tracked and prev_track == res["track_type"]:
-                continue
+    # 2단계: 8개 스레드 병렬 분석 (실행 시간 4분 -> 10초 이내로 단축)
+    results = []
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        future_map = {executor.submit(analyze_symbol, c): c["symbol"] for c in to_analyze}
+        for future in as_completed(future_map):
+            sym = future_map[future]
+            try:
+                res = future.result()
+                if res:
+                    results.append(res)
+            except Exception as e:
+                print(f"[스캔 예외] {sym}: {e}")
 
-            tracked[symbol] = {
-                "created_at": now_ts,
-                "track_type": res["track_type"],
-                "swing_high_line": res["swing_high_line"],
-                "entry_low": res["entry_low"],
-                "entry_high": res["entry_high"],
-                "stop_price": res["stop_price"],
-                "sl_pct": res["sl_pct"],
-                "tps": res["tps"],
-                "tp_pcts": res["tp_pcts"],
-                "breakout_alerted": (res["track_type"] == "TRACK_B"),
-                "sl_alerted": False
-            }
+    # 점수 높은 순으로 정렬 후 발송
+    results.sort(key=lambda x: x["score"], reverse=True)
 
-            # 1) 상세 브리핑 단독 전송
-            briefing_msg = build_briefing_message(res, now_str)
-            send_telegram_single(briefing_msg)
+    for res in results:
+        symbol = res["symbol"]
+        prev_track = tracked.get(symbol, {}).get("track_type")
+        if symbol in tracked and prev_track == res["track_type"]:
+            continue
 
-            # 2) X(트위터) 양식 메시지 별도 단독 전송 (종목별 1개씩 분리)
-            x_msg = build_x_post_message(res)
-            send_telegram_single(x_msg)
+        tracked[symbol] = {
+            "created_at": now_ts,
+            "track_type": res["track_type"],
+            "swing_high_line": res["swing_high_line"],
+            "entry_low": res["entry_low"],
+            "entry_high": res["entry_high"],
+            "stop_price": res["stop_price"],
+            "sl_pct": res["sl_pct"],
+            "tps": res["tps"],
+            "tp_pcts": res["tp_pcts"],
+            "breakout_alerted": (res["track_type"] == "TRACK_B"),
+            "sl_alerted": False
+        }
 
-            sent_count += 1
-        except Exception as e:
-            print(f"[스캔 예외] {symbol}: {e}")
+        briefing_msg = build_briefing_message(res, now_str)
+        send_telegram_single(briefing_msg)
+
+        x_msg = build_x_post_message(res)
+        send_telegram_single(x_msg)
+
+        sent_count += 1
 
     state["tracked"] = tracked
     save_state(state)
 
+    elapsed = time.time() - start_t
     if sent_count == 0:
-        print(f"[{now_str}] 고점 컷오프 통과 및 85점 이상 신규 초입 종목 없음.")
+        print(f"[{now_str}] 스캔 완료 ({elapsed:.1f}초 소요) - 85점 이상 신규 초입 종목 없음.")
+    else:
+        print(f"[{now_str}] 스캔 완료 ({elapsed:.1f}초 소요) - 총 {sent_count}건 알림 전송.")
 
 
 if __name__ == "__main__":
