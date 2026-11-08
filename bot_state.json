@@ -440,6 +440,27 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "QNTUSDT": {
+      "created_at": 1794140315,
+      "track_type": "TRACK_B",
+      "swing_high_line": 202.63459999999998,
+      "entry_low": 198.6418,
+      "entry_high": 200.23891999999995,
+      "stop_price": 195.45155279999997,
+      "sl_pct": 2,
+      "tps": [
+        210.87492277315135,
+        226.7187279363098,
+        252.355953119414
+      ],
+      "tp_pcts": [
+        5.7,
+        13.7,
+        26.5
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
