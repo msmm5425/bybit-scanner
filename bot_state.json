@@ -1,26 +1,5 @@
 {
   "tracked": {
-    "TIAUSDT": {
-      "created_at": 1794062117,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.44863,
-      "entry_low": 0.439348,
-      "entry_high": 0.442884,
-      "stop_price": 0.43229368,
-      "sl_pct": 2,
-      "tps": [
-        0.4685862202166065,
-        0.48667038374007227,
-        0.5761603988231048
-      ],
-      "tp_pcts": [
-        6.2,
-        10.3,
-        30.6
-      ],
-      "breakout_alerted": false,
-      "sl_alerted": false
-    },
     "HYPEUSDT": {
       "created_at": 1794110206,
       "track_type": "TRACK_B",
@@ -80,48 +59,6 @@
         6.5,
         10.5,
         20.4
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": false
-    },
-    "AAVEUSDT": {
-      "created_at": 1794062117,
-      "track_type": "TRACK_A",
-      "swing_high_line": 133.31009999999998,
-      "entry_low": 130.55196,
-      "entry_high": 131.60268,
-      "stop_price": 128.4557736,
-      "sl_pct": 2,
-      "tps": [
-        139.1115582369724,
-        145.24750799258146,
-        159.7519247344361
-      ],
-      "tp_pcts": [
-        6.1,
-        10.8,
-        21.9
-      ],
-      "breakout_alerted": false,
-      "sl_alerted": false
-    },
-    "GRASSUSDT": {
-      "created_at": 1794062117,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.5085149999999999,
-      "entry_low": 0.497994,
-      "entry_high": 0.502002,
-      "stop_price": 0.4899980399999999,
-      "sl_pct": 2,
-      "tps": [
-        0.5281772751621695,
-        0.5620842555381161,
-        0.6026340307551705
-      ],
-      "tp_pcts": [
-        5.6,
-        12.4,
-        20.5
       ],
       "breakout_alerted": true,
       "sl_alerted": false
@@ -334,7 +271,7 @@
         36.2
       ],
       "breakout_alerted": true,
-      "sl_alerted": false
+      "sl_alerted": true
     },
     "ARBUSDT": {
       "created_at": 1794104438,
