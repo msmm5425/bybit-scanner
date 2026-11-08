@@ -379,24 +379,24 @@
       "sl_alerted": false
     },
     "TAOUSDT": {
-      "created_at": 1794150704,
-      "track_type": "TRACK_B",
-      "swing_high_line": 229.8569,
-      "entry_low": 225.3277,
-      "entry_high": 227.13938,
-      "stop_price": 221.7088692,
+      "created_at": 1794154659,
+      "track_type": "TRACK_A",
+      "swing_high_line": 229.37985,
+      "entry_low": 224.63406000000003,
+      "entry_high": 226.44198000000003,
+      "stop_price": 221.0272596,
       "sl_pct": 2,
       "tps": [
-        240.49574100727085,
-        257.89596156882436,
-        286.05165827036717
+        240.15631764517994,
+        257.5319804272925,
+        285.64793962164947
       ],
       "tp_pcts": [
-        6.3,
-        14.0,
-        26.4
+        6.5,
+        14.2,
+        26.7
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "1000PEPEUSDT": {
