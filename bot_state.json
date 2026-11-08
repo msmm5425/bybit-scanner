@@ -398,6 +398,27 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "RSRUSDT": {
+      "created_at": 1794133572,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.001627045,
+      "entry_low": 0.001594985,
+      "entry_high": 0.001607809,
+      "stop_price": 0.0015693690600000001,
+      "sl_pct": 2,
+      "tps": [
+        0.001698877436,
+        0.0017823548610000001,
+        0.0019992235400000005
+      ],
+      "tp_pcts": [
+        6.1,
+        11.3,
+        24.8
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
