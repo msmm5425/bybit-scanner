@@ -377,6 +377,27 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "TAOUSDT": {
+      "created_at": 1794150704,
+      "track_type": "TRACK_B",
+      "swing_high_line": 229.8569,
+      "entry_low": 225.3277,
+      "entry_high": 227.13938,
+      "stop_price": 221.7088692,
+      "sl_pct": 2,
+      "tps": [
+        240.49574100727085,
+        257.89596156882436,
+        286.05165827036717
+      ],
+      "tp_pcts": [
+        6.3,
+        14.0,
+        26.4
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
