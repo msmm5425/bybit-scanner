@@ -419,6 +419,27 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "INJUSDT": {
+      "created_at": 1794136105,
+      "track_type": "TRACK_B",
+      "swing_high_line": 8.334164999999999,
+      "entry_low": 8.169945,
+      "entry_high": 8.235633,
+      "stop_price": 8.03873322,
+      "sl_pct": 2,
+      "tps": [
+        8.849260612749696,
+        9.54466863685005,
+        11.13052294795034
+      ],
+      "tp_pcts": [
+        7.9,
+        16.4,
+        35.7
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
