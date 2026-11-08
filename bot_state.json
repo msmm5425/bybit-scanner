@@ -148,25 +148,25 @@
       "sl_alerted": false
     },
     "SIRENUSDT": {
-      "created_at": 1794072451,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.02842,
-      "entry_low": 0.027860000000000003,
-      "entry_high": 0.028084,
-      "stop_price": 0.027412560000000002,
+      "created_at": 1794122787,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.027404999999999995,
+      "entry_low": 0.026838,
+      "entry_high": 0.027053999999999998,
+      "stop_price": 0.026407079999999996,
       "sl_pct": 2,
       "tps": [
-        0.029455124766079768,
-        0.030994183491196554,
-        0.03544233009558031
+        0.028146712959524693,
+        0.030886079541032303,
+        0.0353187115499443
       ],
       "tp_pcts": [
-        5.3,
-        10.8,
-        26.7
+        4.5,
+        14.6,
+        31.1
       ],
-      "breakout_alerted": true,
-      "sl_alerted": true
+      "breakout_alerted": false,
+      "sl_alerted": false
     },
     "ARIAUSDT": {
       "created_at": 1794110206,
@@ -186,7 +186,7 @@
         16.6,
         29.4
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "QUSDT": {
@@ -379,24 +379,45 @@
       "sl_alerted": false
     },
     "DOGEUSDT": {
-      "created_at": 1794119903,
-      "track_type": "TRACK_B",
+      "created_at": 1794122787,
+      "track_type": "TRACK_A",
       "swing_high_line": 0.07206499999999999,
-      "entry_low": 0.070645,
-      "entry_high": 0.07121299999999998,
-      "stop_price": 0.06951041999999999,
+      "entry_low": 0.070574,
+      "entry_high": 0.071142,
+      "stop_price": 0.06944084,
       "sl_pct": 2,
       "tps": [
-        0.07549543420126671,
-        0.08033727453455311,
-        0.0913178012092892
+        0.07542112767154105,
+        0.08025820241394824,
+        0.09122792148368951
       ],
       "tp_pcts": [
         6.4,
         13.3,
         28.7
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "CAPUSDT": {
+      "created_at": 1794122787,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.102515,
+      "entry_low": 0.10039400000000001,
+      "entry_high": 0.101202,
+      "stop_price": 0.09878204,
+      "sl_pct": 2,
+      "tps": [
+        0.10797085412554285,
+        0.11195024615080934,
+        0.12275795654007109
+      ],
+      "tp_pcts": [
+        7.1,
+        11.1,
+        21.8
+      ],
+      "breakout_alerted": false,
       "sl_alerted": false
     }
   }
