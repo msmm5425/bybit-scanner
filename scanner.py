@@ -25,21 +25,21 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [11/07 Top 5 피드백 반영: 멀티 타임프레임 + CVD 다이버전스 핵심 파라미터]
+# [11/08 Top 5 피드백 반영: 멀티 타임프레임 + CVD + 유동적 SL/3차 TP 파라미터]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 85점 이상 시 알림 발송
-PULLBACK_DRYUP_STRICT = 0.18           # 오늘자 피드백 반영: 눌림 거래량 극건조 기준 (18% 이하 만점)
+PULLBACK_DRYUP_STRICT = 0.15           # 11/08 피드백 반영: 발화봉 대비 눌림 거래량 15% 이하 극건조
 PULLBACK_DRYUP_MAX = 0.35              # 선취매 거래량 수축 허용 상한 (35% 이하)
-SR_FLIP_DRYUP_RATIO_MAX = 0.55         # 돌파 후 S/R Flip 및 MA20/50 리테스트 거래량 상한
-SR_FLIP_TOLERANCE_PCT = 0.95           # 전고점 S/R Flip 지지 허용 오차 (0.95% 이내, $FLY 0.97% 포섭)
+SR_FLIP_DRYUP_RATIO_MAX = 0.45         # 돌파 후 S/R Flip 및 MA20/50 리테스트 거래량 상한
+SR_FLIP_TOLERANCE_PCT = 0.95           # 전고점 S/R Flip 칼지지 허용 오차 (0.95% 이내)
 
-PRE_BOX_RANGE_MAX_PCT = 13.5           # 직전 2시간 박스권 응축 허용 폭 ($LYN 12.3%, $AKE 12.4% 포섭)
-PRE_BOX_TIGHT_PCT = 7.0                # 오늘자 중앙값(6.1%) 반영: 7.0% 이하 정밀 응축 가산점
-EMA_RIBBON_MAX_SPREAD_PCT = 1.8        # 5·20·50 이평선 리본 초밀집 수렴 기준 (1.8% 이내)
-PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저 거래량 / vol_ma20 (35% 이하)
+PRE_BOX_RANGE_MAX_PCT = 12.5           # 직전 2시간 박스권 응축 허용 상한
+PRE_BOX_ULTRA_TIGHT_PCT = 5.5          # 11/08 피드백(전 종목 1.6%~5.3% 응축) 반영: 초응축 기준
+EMA_RIBBON_MAX_SPREAD_PCT = 1.8        # 5·20·50 이평선 리본 초밀집 수렴 기준 (1.8% 이내, 4/5 적중)
+PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저 거래량 / vol_ma20 (35% 이하, 4/5 적중)
 
-EARLY_VOL_MULT_MIN = 2.4               # 초동 돌파 최소 거래량 배수 ($AIO 2.7x 포섭)
-EARLY_VOL_MULT_MAX = 5.0               # 추격 과열 상한 (5.0x 초과 봉은 눌림 리테스트에서 포착)
+EARLY_VOL_MULT_MIN = 2.8               # 11/08 피드백(최소 3.1x) 반영: 초동 돌파 최소 거래량 배수
+EARLY_VOL_MULT_MAX = 5.5               # 직접 돌파 진입 시 과열 상한 (초과 시 S/R Flip 리테스트에서 포착)
 EARLY_BREAKOUT_MAX_PCT = 2.5           # 돌파 후 +2.5% 이내 초입만 허용
 
 # [고점 폭락(설거지 차트) 및 상위 프레임(15m/1H) 과열 원천 차단 필터]
@@ -62,7 +62,6 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
 }
 
-# 토큰화 주식/Pre-IPO/ETF/원자재 식별용 메타데이터 키워드
 NON_CRYPTO_META_KEYWORDS = (
     "xstock", "dinari", "backed", "tokenized", "ondo", "spdr", "ishares",
     "proshares", "direxion", "vanguard", "invesco", "wisdomtree", "tradr", "ark-",
@@ -72,7 +71,6 @@ NON_CRYPTO_META_KEYWORDS = (
     "space exploration", "pre-ipo", "sandisk", "hynix", "technologies"
 )
 
-# 바이비트 TradFi(주식/Pre-IPO/ETF/원자재/외환) 영구 블랙리스트
 TRADFI_BLACKLIST = {
     "SPCX", "SPCXX", "SNDK", "SNXX", "SKHYNIX", "KORU", "CEG", "AKAM", "USDBRL",
     "OPENAI", "ANTHROPIC", "STRIPE", "DATABRICKS", "DISCORD", "EPIC", "CANVA", "REVOLUT",
@@ -143,7 +141,6 @@ def is_tradfi_ticker(base_coin):
 
 
 def fmt_price(price):
-    """소수점 가격이 잘리지 않도록 정밀 포맷팅"""
     p = to_float(price)
     if p <= 0:
         return "0"
@@ -161,7 +158,6 @@ def fmt_price(price):
 
 
 def fmt_pct(pct_val):
-    """종목별 저항/피보나치 비례 %를 깔끔하게 표기 (예: 6.4%, 12.0% -> 12%)"""
     v = round(to_float(pct_val), 1)
     return f"{int(v)}" if v == int(v) else f"{v:.1f}"
 
@@ -208,15 +204,10 @@ def calc_kdj_j(df, period=9):
 
 
 def calc_cvd_series(df):
-    """
-    캔들 내 매수/매도 체결 압력(CLV)과 아랫꼬리 스탑헌팅 흡수(Lower-Wick Absorption)를 결합한
-    선물 정밀 누적 볼륨 델타(CVD: Cumulative Volume Delta) 산출
-    """
+    """캔들 내 매수/매도 체결 압력(CLV)과 아랫꼬리 스탑헌팅 흡수를 결합한 누적 볼륨 델타(CVD)"""
     high_low = (df["high"] - df["low"]).replace(0, np.nan)
-    # 기본 CLV: 종가가 고가에 가까울수록 +1(시장가 매수 주도), 저가에 가까울수록 -1(시장가 매도 주도)
     clv = (((df["close"] - df["low"]) - (df["high"] - df["close"])) / high_low).fillna(0.0)
 
-    # 아랫꼬리 유동성 흡수 보정: 긴 아랫꼬리 발생 후 양봉 또는 상단 마감 시 매수 흡수 델타 가산
     lower_wick = np.minimum(df["open"], df["close"]) - df["low"]
     wick_share = (lower_wick / high_low).fillna(0.0)
     absorption_boost = np.where(df["close"] >= df["open"], wick_share * 0.45, wick_share * 0.20)
@@ -227,13 +218,7 @@ def calc_cvd_series(df):
 
 
 def detect_cvd_divergence(df, lookback=24):
-    """
-    [CVD 다이버전스 감지기]
-    1) 클래식 강세 CVD 다이버전스 (Bullish Divergence):
-       가격은 이전 스윙 저점 대비 같거나 더 낮아졌으나(저점 스윕), CVD 저점은 오히려 상승한 상태
-    2) 흡수형 스텔스 CVD 다이버전스 (Absorption Divergence):
-       가격은 박스권 횡보/약세(-1.5% ~ +0.8%)인데 CVD 기울기는 가파르게 우상향하며 고점을 돌파한 상태
-    """
+    """클래식 강세 CVD 다이버전스(저점 스윕 매수흡수) 및 박스권 스텔스 CVD 매집 감지"""
     if len(df) < lookback + 4:
         return False, ""
 
@@ -255,18 +240,16 @@ def detect_cvd_divergence(df, lookback=24):
     if cvd_range <= 0:
         cvd_range = 1.0
 
-    # 1) 클래식 강세 다이버전스: 가격 Lower Low / Equal Low + CVD Higher Low (+ 현재 반등 중)
     if p_low1 > 0 and (p_low2 <= p_low1 * 1.004) and ((cvd_low2 - cvd_low1) / cvd_range >= 0.08):
         if to_float(sub["close"].iloc[-1]) > p_low2 * 1.002:
             return True, "CVD 강세 다이버전스(저점 스윕 매수흡수)"
 
-    # 2) 박스권 흡수형 다이버전스: 가격 변화율은 미미한데 CVD는 강하게 우상향
     price_chg_pct = ((to_float(sub["close"].iloc[-1]) - to_float(sub["close"].iloc[0])) / max(to_float(sub["close"].iloc[0]), 1e-9)) * 100.0
     try:
         x = np.arange(len(sub))
         cvd_norm = (sub["cvd"].values - sub["cvd"].min()) / cvd_range
         cvd_slope = np.polyfit(x, cvd_norm, 1)[0]
-        if (-2.0 <= price_chg_pct <= 1.2) and cvd_slope >= 0.028 and to_float(sub["cvd"].iloc[-1]) >= to_float(sub["cvd"].quantile(0.80)):
+        if (-2.0 <= price_chg_pct <= 1.5) and cvd_slope >= 0.026 and to_float(sub["cvd"].iloc[-1]) >= to_float(sub["cvd"].quantile(0.78)):
             return True, "CVD 흡수 다이버전스(선행 시장가매집)"
     except Exception:
         pass
@@ -275,14 +258,10 @@ def detect_cvd_divergence(df, lookback=24):
 
 
 def get_fast_pure_crypto_whitelist():
-    """
-    미국 IP에서 즉시 열리는 5대 거래소 직통 API로
-    순수 코인 화이트리스트(pure_crypto_bases)와 RWA/주식 차단 목록(rwa_blocked_bases) 확보
-    """
+    """미국 IP에서 즉시 열리는 5대 거래소 직통 API로 순수 코인 화이트리스트 및 RWA 차단 목록 확보"""
     pure_crypto_bases = set()
     rwa_blocked_bases = set()
 
-    # 1) Bitget USDT-FUTURES ('isRwa' 공식 필드로 주식/RWA 완벽 분리)
     try:
         r = requests.get(
             "https://api.bitget.com/api/v2/mix/market/contracts",
@@ -305,7 +284,6 @@ def get_fast_pure_crypto_whitelist():
     except Exception:
         pass
 
-    # 2) OKX USDT-SWAP
     try:
         r = requests.get(
             "https://www.okx.com/api/v5/public/instruments",
@@ -324,7 +302,6 @@ def get_fast_pure_crypto_whitelist():
     except Exception:
         pass
 
-    # 3) KuCoin Futures
     try:
         r = requests.get(
             "https://api-futures.kucoin.com/api/v1/contracts/active",
@@ -344,7 +321,6 @@ def get_fast_pure_crypto_whitelist():
     except Exception:
         pass
 
-    # 4) Gate.io USDT Futures
     try:
         r = requests.get(
             "https://api.gateio.ws/api/v4/futures/usdt/tickers",
@@ -362,7 +338,6 @@ def get_fast_pure_crypto_whitelist():
     except Exception:
         pass
 
-    # 5) Binance Spot
     try:
         r = requests.get(
             "https://data-api.binance.vision/api/v3/ticker/price",
@@ -384,10 +359,6 @@ def get_fast_pure_crypto_whitelist():
 
 
 def get_scanner_candidates():
-    """
-    5대 거래소 순수 크립토 화이트리스트 및 CoinGecko coin_id 검증으로
-    비암호화폐(TradFi/주식)를 100% 배제하고, $FLY(1.8M)·$AIO(1.5M)급 초동 종목까지 포섭
-    """
     pure_crypto_bases, rwa_blocked_bases = get_fast_pure_crypto_whitelist()
     candidates = []
 
@@ -425,7 +396,6 @@ def get_scanner_candidates():
                 )
                 turnover_24h = to_float((t.get("converted_volume") or {}).get("usd"))
 
-                # 오늘자 Top 5 피드백 반영: 거래대금 1.2M 이상부터 스캔 풀에 포함
                 if last_price > 0 and (-8.0 <= change_24h <= 34.0) and turnover_24h >= 1_200_000:
                     candidates.append({
                         "symbol": symbol,
@@ -469,9 +439,6 @@ def fetch_bybit_fallback(path, params=None):
 
 
 def fetch_raw_klines_multi_source(symbol, interval="5m", limit=200):
-    """
-    5분봉("5m") 및 상위 프레임 1시간봉("1h") 캔들을 직통 거래소 API에서 0.15초 만에 수집
-    """
     base_coin = symbol[:-4].upper()
     clean_base = strip_multiplier_prefix(base_coin)
 
@@ -481,7 +448,6 @@ def fetch_raw_klines_multi_source(symbol, interval="5m", limit=200):
     by_inter = "5" if interval == "5m" else "60"
     min_len = 60 if interval == "5m" else 30
 
-    # 1순위: Bitget USDT-FUTURES (max limit 200)
     bg_limit = min(int(limit), 200)
     for sym_try in [symbol, f"{clean_base}USDT"]:
         try:
@@ -499,7 +465,6 @@ def fetch_raw_klines_multi_source(symbol, interval="5m", limit=200):
         except Exception:
             pass
 
-    # 2순위: Gate.io USDT Futures
     for base_try in [base_coin, clean_base]:
         try:
             gt_url = "https://api.gateio.ws/api/v4/futures/usdt/candlesticks"
@@ -523,7 +488,6 @@ def fetch_raw_klines_multi_source(symbol, interval="5m", limit=200):
         except Exception:
             pass
 
-    # 3순위: Binance Vision Public Data
     for sym_try in [symbol, f"{clean_base}USDT"]:
         try:
             bn_url = "https://data-api.binance.vision/api/v3/klines"
@@ -539,7 +503,6 @@ def fetch_raw_klines_multi_source(symbol, interval="5m", limit=200):
         except Exception:
             pass
 
-    # 4순위: Bybit V5 API (폴백)
     res = fetch_bybit_fallback("/v5/market/kline", {
         "category": "linear",
         "symbol": symbol,
@@ -572,7 +535,6 @@ def clean_and_scale_df(rows, ref_price=0.0, min_len=30):
 
     df = df.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
 
-    # 단위 배수(1000PEPE 등) 및 타 거래소 가격 편차를 바이비트 현재가에 맞게 정밀 스케일링
     last_close = to_float(df["close"].iloc[-1])
     if ref_price > 0 and last_close > 0:
         ratio = ref_price / last_close
@@ -582,7 +544,6 @@ def clean_and_scale_df(rows, ref_price=0.0, min_len=30):
                     df[col] = df[col] * mult
                 last_close = to_float(df["close"].iloc[-1])
                 break
-        # 거래소 간 미세 선물 가격 차이(0.1%~1.5%)를 바이비트 현재가에 정확히 정렬
         fine_ratio = ref_price / last_close if last_close > 0 else 1.0
         if 0.96 <= fine_ratio <= 1.04:
             for col in ["open", "high", "low", "close"]:
@@ -592,17 +553,11 @@ def clean_and_scale_df(rows, ref_price=0.0, min_len=30):
 
 
 def get_multi_tf_data(symbol, ref_price=0.0):
-    """
-    [멀티 타임프레임 엔진]
-    5분봉(200캔들) + 15분봉 + 1시간봉(120캔들 = 5일치) + 4시간봉(30캔들)을 생성하여
-    단기 타점부터 상위 프레임 추세·매물대·피보나치까지 한 번에 계산
-    """
     rows_5m = fetch_raw_klines_multi_source(symbol, interval="5m", limit=200)
     df = clean_and_scale_df(rows_5m, ref_price=ref_price, min_len=60)
     if df.empty:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    # 24/7 암호화폐 캔들 연속성 검증 (장마감 공백/보합 캔들이 있는 TradFi 제거)
     max_gap = df["timestamp"].diff().max()
     if pd.notna(max_gap) and max_gap > 900_000:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -612,7 +567,6 @@ def get_multi_tf_data(symbol, ref_price=0.0):
     if dead_candles >= 10:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    # 5분봉 핵심 지표 계산
     df["ma5"] = df["close"].rolling(5, min_periods=3).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=10).mean()
     df["ma50"] = df["close"].rolling(50, min_periods=20).mean()
@@ -648,7 +602,6 @@ def get_multi_tf_data(symbol, ref_price=0.0):
     ], axis=1).max(axis=1)
     df["atr14"] = tr.rolling(14, min_periods=5).mean()
 
-    # TTM 켈트너 채널(KC: MA20 ± 1.5 * ATR14) 스퀴즈 여부 (BB ⊂ KC)
     df["kc_upper"] = df["ma20"] + 1.5 * df["atr14"]
     df["kc_lower"] = df["ma20"] - 1.5 * df["atr14"]
     df["ttm_squeeze_on"] = (df["bb_upper"] <= df["kc_upper"]) & (df["bb_lower"] >= df["kc_lower"])
@@ -663,7 +616,6 @@ def get_multi_tf_data(symbol, ref_price=0.0):
     df["rsi14"] = calc_rsi(df["close"], period=14)
     df["kdj_j"] = calc_kdj_j(df, period=9)
 
-    # 15분봉 생성
     df_15m = df.groupby(df.index // 3).agg({
         "timestamp": "last",
         "open": "first",
@@ -682,7 +634,6 @@ def get_multi_tf_data(symbol, ref_price=0.0):
         (df_15m["close"] - df_15m["ma20"]) / df_15m["ma20"].replace(0, np.nan)
     ) * 100.0
 
-    # 1시간봉(1H) 수집 (실패 시 5분봉 리샘플링 자동 폴백)
     curr_p = to_float(df["close"].iloc[-1], default=ref_price)
     rows_1h = fetch_raw_klines_multi_source(symbol, interval="1h", limit=120)
     df_1h = clean_and_scale_df(rows_1h, ref_price=curr_p, min_len=24)
@@ -704,7 +655,6 @@ def get_multi_tf_data(symbol, ref_price=0.0):
     df_1h["rsi6"] = calc_rsi(df_1h["close"], period=6)
     df_1h["cvd"] = calc_cvd_series(df_1h)
 
-    # 4시간봉(4H) 리샘플링 생성
     df_4h = df_1h.groupby(df_1h.index // 4).agg({
         "timestamp": "last",
         "open": "first",
@@ -721,7 +671,6 @@ def get_multi_tf_data(symbol, ref_price=0.0):
 
 
 def extract_pivot_highs(df, left=3, right=3):
-    """차트에서 의미 있는 스윙 고점(Pivot High 매물대) 추출"""
     highs = df["high"].values
     pivots = []
     n = len(highs)
@@ -732,15 +681,36 @@ def extract_pivot_highs(df, left=3, right=3):
     return pivots
 
 
-def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
+def calc_dynamic_structural_sl(df_5m, df_15m, avg_entry):
     """
-    [트레이더팀 설계: 종목별 실전 저항선 & 피보나치 기반 동적 3단계 익절(TP1~TP3) 산출 엔진]
-    고정 %를 완전히 배제하고, 각 코인의 15m/1H/4H 스윙 고점 매물대와 피보나치 확장/되돌림을 결합하여
-    해당 종목만의 고유한 1차·2차·3차 목표가와 근거 라벨을 반환합니다.
+    [교정 완료: 진짜 유동적 구조적 손절(SL) 산출 엔진]
+    단순 30분 저점(항상 -2%로 수렴하던 버그) 대신,
+    직전 2시간 구조적 스윙/박스 저점(Spring 저점 포함) + 15분봉 ATR 변동성 버퍼를 결합하여
+    종목의 실제 변동폭과 지지선 거리에 따라 -2% ~ -5% 사이에서 유동적으로 결정합니다.
     """
-    candidates = []  # (price, label)
+    atr5 = to_float(df_5m["atr14"].iloc[-1], default=avg_entry * 0.012)
+    atr15 = atr5 * 1.732
 
-    # 1) 단기 및 중기 실전 파동(Impulse Wave) 피보나치 확장 레벨 산출
+    # 직전 18캔들(90분) 스윙 저점 및 15분봉 MA50 구조적 지지선 확인
+    swing_low_90m = to_float(df_5m.iloc[-18:]["low"].min(), default=avg_entry * 0.975)
+    ma50_15m = to_float(df_15m["ma50"].iloc[-1], default=swing_low_90m)
+    structural_support = min(swing_low_90m, ma50_15m) if ma50_15m < avg_entry else swing_low_90m
+
+    # 스윙 저점 아래에 0.85 * ATR(15m) 스탑헌팅 방어 버퍼 추가
+    raw_struct_dist_pct = ((avg_entry - (structural_support - 0.85 * atr15)) / avg_entry) * 100.0 if avg_entry > 0 else 3.0
+    raw_atr_dist_pct = (2.1 * atr15 / avg_entry) * 100.0 if avg_entry > 0 else 3.0
+
+    # 구조적 거리와 변동성 비례 거리 중 적절한 값 선택 (최소 2% ~ 최대 5% 정수형)
+    combined_sl_pct = max(raw_struct_dist_pct * 0.75 + raw_atr_dist_pct * 0.25, raw_atr_dist_pct)
+    sl_pct = max(2, min(5, int(round(combined_sl_pct))))
+    stop_price = avg_entry * (1.0 - sl_pct / 100.0)
+    return sl_pct, stop_price, structural_support
+
+
+def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
+    """종목별 실전 저항선(15m/1H/4H 스윙고점·이평선·BB상단) & 피보나치 확장 기반 3단계 익절(TP1~TP3)"""
+    candidates = []
+
     recent_low = to_float(df_5m.iloc[-36:]["low"].min(), default=avg_entry * 0.95)
     recent_high = to_float(df_5m.iloc[-36:]["high"].max(), default=avg_entry * 1.03)
     wave_height = max(recent_high - recent_low, avg_entry * 0.025)
@@ -757,7 +727,6 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
         if fib_p > avg_entry * 1.02:
             candidates.append((fib_p * 0.998, fib_name))
 
-    # 2) 상위 프레임(1H / 4H) 거시 파동 피보나치 되돌림 & 확장 레벨
     if not df_1h.empty:
         htf_low = to_float(df_1h["low"].min(), default=recent_low)
         htf_high = to_float(df_1h["high"].max(), default=recent_high)
@@ -775,7 +744,6 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
             if htf_p > avg_entry * 1.02:
                 candidates.append((htf_p * 0.998, r_name))
 
-        # 1H 스윙 피봇 고점 및 장기 이평/볼린저 상단 저항 추가
         for pv in extract_pivot_highs(df_1h, left=2, right=2):
             if pv > avg_entry * 1.02:
                 candidates.append((pv * 0.998, "1H 스윙고점"))
@@ -787,7 +755,6 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
         if bb_up_1h > avg_entry * 1.03:
             candidates.append((bb_up_1h * 0.998, "1H BB상단"))
 
-    # 3) 15분봉 및 4시간봉 주요 스윙 고점 매물대 추가
     for pv15 in extract_pivot_highs(df_15m, left=2, right=2):
         if pv15 > avg_entry * 1.02:
             candidates.append((pv15 * 0.998, "15m 매물대"))
@@ -800,25 +767,21 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
         if bb_up_4h > avg_entry * 1.04:
             candidates.append((bb_up_4h * 0.998, "4H BB상단"))
 
-    # 후보 저항선들을 진입가 대비 상승률(%) 기준으로 정렬 및 인접 레벨(1.2% 이내) 병합
     valid_levels = []
     for price_val, label in sorted(candidates, key=lambda x: x[0]):
         pct = ((price_val - avg_entry) / avg_entry) * 100.0
         if pct < 3.5 or pct > 65.0:
             continue
         if valid_levels and abs(pct - valid_levels[-1][1]) < 1.2:
-            # 스윙고점/매물대 라벨 우선 보존
             if "고점" in label or "매물대" in label:
                 valid_levels[-1] = (price_val, round(pct, 1), label)
             continue
         valid_levels.append((price_val, round(pct, 1), label))
 
-    # 종목 고유 변동성(15분 ATR 비율)을 반영하여 종목마다 기본 파동 스케일 차별화
     atr5 = to_float(df_5m["atr14"].iloc[-1], default=avg_entry * 0.01)
     vol_unit_pct = max(1.8, min(6.5, (atr5 * 1.75 / avg_entry) * 100.0))
 
-    # [1차 TP] 최소 1:2 R:R 보장 (sl_pct * 2.0 이상) + 종목 변동성 반영 첫 저항선
-    min_tp1_pct = max(float(sl_pct * 2.0), round(vol_unit_pct * 2.1, 1), 4.2)
+    min_tp1_pct = max(float(sl_pct * 2.0), round(vol_unit_pct * 2.1, 1), 4.5)
     tp1_choice = None
     for p, pct, lbl in valid_levels:
         if min_tp1_pct <= pct <= min_tp1_pct + 7.5:
@@ -828,8 +791,7 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
         fallback_tp1_pct = round(min_tp1_pct + (vol_unit_pct * 0.35), 1)
         tp1_choice = (avg_entry * (1.0 + fallback_tp1_pct / 100.0), fallback_tp1_pct, "Fib 1.272")
 
-    # [2차 TP] 1차 TP보다 최소 +4.0% 이상 높은 1H 핵심 저항 또는 Fib 1.618~2.0 구간
-    min_tp2_pct = max(tp1_choice[1] + max(4.0, vol_unit_pct * 1.8), float(sl_pct * 3.8), 9.5)
+    min_tp2_pct = max(tp1_choice[1] + max(4.0, vol_unit_pct * 1.8), float(sl_pct * 3.6), 9.5)
     tp2_choice = None
     for p, pct, lbl in valid_levels:
         if min_tp2_pct <= pct <= min_tp2_pct + 12.0:
@@ -839,8 +801,7 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
         fallback_tp2_pct = round(min_tp2_pct + (vol_unit_pct * 0.65), 1)
         tp2_choice = (avg_entry * (1.0 + fallback_tp2_pct / 100.0), fallback_tp2_pct, "Fib 1.618")
 
-    # [3차 TP] 2차 TP보다 최소 +6.0% 이상 높은 4H 메이저 저항 또는 Fib 2.618~3.618 대시세 목표
-    min_tp3_pct = max(tp2_choice[1] + max(6.0, vol_unit_pct * 2.6), float(sl_pct * 6.0), 16.5)
+    min_tp3_pct = max(tp2_choice[1] + max(6.0, vol_unit_pct * 2.5), float(sl_pct * 5.5), 16.0)
     tp3_choice = None
     for p, pct, lbl in valid_levels:
         if min_tp3_pct <= pct <= min_tp3_pct + 22.0:
@@ -863,7 +824,7 @@ def analyze_symbol(coin):
         return None
 
     curr = df.iloc[-1]
-    prev = df.iloc[-2]       # 직전 마감 완료된 5분봉
+    prev = df.iloc[-2]
     curr_15m = df_15m.iloc[-1]
     prev_15m = df_15m.iloc[-2] if len(df_15m) >= 2 else curr_15m
     curr_1h = df_1h.iloc[-1]
@@ -872,9 +833,7 @@ def analyze_symbol(coin):
     current_price = to_float(curr["close"], default=coin["last_price"])
     coin["last_price"] = current_price
 
-    # =================================================================
-    # [방어막 1] 고점 폭락(Pump & Dump / 설거지 차트) 및 상위 프레임(1H) 역배열 폭락 차단
-    # =================================================================
+    # [방어막 1] 고점 폭락(설거지 차트) 및 상위 프레임(1H) 역배열 폭락 차단
     high_12h = to_float(df.tail(144)["high"].max(), default=current_price)
     low_12h = to_float(df.tail(144)["low"].min(), default=current_price)
 
@@ -892,14 +851,12 @@ def analyze_symbol(coin):
     if (high_12h > high_4h * 1.03) and (high_4h > high_75m * 1.02):
         return None
 
-    # [상위 프레임(1H / 4H) 구조 진단]
     ma20_1h = to_float(curr_1h["ma20"], default=current_price)
     ma50_1h = to_float(curr_1h["ma50"], default=current_price)
     ma99_1h = to_float(curr_1h["ma99"], default=0.0)
     rsi6_1h = to_float(curr_1h["rsi6"], default=50.0)
     ma20_4h = to_float(df_4h["ma20"].iloc[-1], default=current_price) if not df_4h.empty else current_price
 
-    # 1H 장기 과열 차단 및 1H 역배열 급락(떨어지는 칼날) 차단
     if rsi6_1h >= CUTOFF_RSI6_1H_MAX:
         return None
     is_1h_freefall = bool(
@@ -911,7 +868,6 @@ def analyze_symbol(coin):
     if is_1h_freefall:
         return None
 
-    # 1H 머리 위 직통 장기 저항선(MA99)이 +0.3% ~ +3.2% 이내에 가로막고 있으면 손익비 불량으로 차단
     if ma99_1h > current_price:
         room_to_1h_ma99_pct = ((ma99_1h - current_price) / current_price) * 100.0
         if 0.3 <= room_to_1h_ma99_pct <= 3.2:
@@ -922,9 +878,7 @@ def analyze_symbol(coin):
         f"1H 상승우위(RSI6 {rsi6_1h:.0f})" if htf_bullish else f"1H 바닥반전시도(RSI6 {rsi6_1h:.0f})"
     )
 
-    # =================================================================
-    # [방어막 2: 15분봉 과열 및 급등 양봉 꼭대기 추격 원천 차단]
-    # =================================================================
+    # [방어막 2: 15분봉 과열 및 급등 양봉 꼭대기 추격 차단]
     rsi6_15m = to_float(curr_15m["rsi6"], default=50.0)
     kdj_j_15m = to_float(curr_15m["kdj_j"], default=50.0)
     bb_mid_15m = to_float(curr_15m["ma20"], default=current_price)
@@ -944,7 +898,7 @@ def analyze_symbol(coin):
     if curr_candle_gain_pct >= 3.2:
         return None
 
-    # 직전 2시간(24캔들) 박스권 및 OBV 매집 분석
+    # 직전 2시간 박스권 및 OBV 매집 분석
     pre_24 = df.iloc[-28:-4]
     box_high = to_float(pre_24["high"].max(), default=current_price)
     box_low = to_float(pre_24["low"].min(), default=current_price)
@@ -958,7 +912,6 @@ def analyze_symbol(coin):
         except Exception:
             obv_accum = False
 
-    # [핵심 신규] 5분봉 및 15분봉 CVD 강세 다이버전스 / 흡수 감지
     cvd_div_5m, cvd_tag_5m = detect_cvd_divergence(df, lookback=24)
     cvd_div_15m, cvd_tag_15m = detect_cvd_divergence(df_15m, lookback=14)
     has_cvd_div = bool(cvd_div_5m or cvd_div_15m)
@@ -975,38 +928,39 @@ def analyze_symbol(coin):
 
     is_15m_ma20_falling = bool(bb_mid_15m < prev_bb_mid_15m * 0.999)
 
-    # 마감 완료된 직전 봉 기준으로 거래량 건조율 계산 (정각 미완성 봉 0% 착시 방지)
     closed_3_min_vol = to_float(df.iloc[-4:-1]["volume"].min(), default=0.0)
     ref_vol_ma20 = to_float(prev["vol_ma20"], default=1.0)
     recent_3_vol_ratio = (closed_3_min_vol / ref_vol_ma20) if ref_vol_ma20 > 0 else 1.0
 
-    # 1) 유동성 스윕(Spring) & RSI 과매도 스러스트 (오늘자 Top 5 중 4종목 적중 핵심 알파)
+    # [11/08 피드백 100% 적중 알파] RSI 과매도 스러스트 (ACT 33->56, ARIA 23->55 포함 포섭)
     max_wick_6 = to_float(df.iloc[-6:-1]["lower_wick_ratio"].max(), default=0.0)
     pre8_min_rsi6 = to_float(df.iloc[-9:-1]["rsi6"].min(), default=50.0)
     curr_rsi6 = to_float(curr["rsi6"], default=50.0)
-    cond_rsi_thrust = bool(pre8_min_rsi6 <= 35.0 and curr_rsi6 >= 56.0 and (curr_rsi6 - pre8_min_rsi6) >= 22.0)
+    cond_rsi_thrust = bool(pre8_min_rsi6 <= 35.0 and curr_rsi6 >= 54.0 and (curr_rsi6 - pre8_min_rsi6) >= 20.0)
     cond_spring = bool(
         (not ma_short_aligned)
         and max_wick_6 >= 1.4
         and current_price > ma20_5m
-        and (obv_accum or cond_rsi_thrust or has_cvd_div)
+        and (obv_accum or cond_rsi_thrust or has_cvd_div or box_range_pct <= PRE_BOX_ULTRA_TIGHT_PCT)
     )
 
-    # 2) TTM 켈트너 스퀴즈 폭발 ($ICNT 포착 알파: 직전 6캔들 내 BB⊂KC 압축 후 상단 돌파)
     recent_squeeze = bool(df.iloc[-7:-1]["ttm_squeeze_on"].any())
     cond_ttm_squeeze = bool(recent_squeeze and current_price > ma20_5m and curr["close"] > curr["open"])
 
-    # 3) 이평선 리본 초밀집 확산 & MACD 양전환 발화
     pre5_min_ribbon = to_float(df.iloc[-6:-1]["ribbon_spread_pct"].min(), default=99.0)
     cond_ema_ribbon = bool(pre5_min_ribbon <= EMA_RIBBON_MAX_SPREAD_PCT and current_price > ma50_5m)
     cond_macd_ignition = bool(
         to_float(curr["macd_hist"]) > 0
         and (to_float(prev["macd_hist"]) <= 0 or to_float(curr["macd_hist"]) > to_float(prev["macd_hist"]))
     )
-    cond_clean_funding = bool(coin["funding_rate"] <= 0.005)
+
+    # [11/08 피드백 4/5 적중 알파] 음수 펀딩비 숏스퀴즈 수급 세분화
+    funding_rate = to_float(coin["funding_rate"], default=0.01)
+    cond_strong_short_squeeze = bool(funding_rate <= -0.020)  # BMT(-0.994%), BLEND(-0.71%), ACT(-0.053%)
+    cond_clean_funding = bool(funding_rate <= 0.005)          # MET(-0.001%) 및 중립 펀딩
 
     # =================================================================
-    # Track A (1차 선취매 / 유동성 스윕 반전 / CVD 매집 눌림 타점 채점)
+    # Track A (1차 선취매 / 유동성 스윕 반전 / 초응축 거래량 포켓 타점)
     # =================================================================
     score_a = 0
     tags_a = []
@@ -1014,9 +968,13 @@ def analyze_symbol(coin):
         dist_ma50 = abs(current_price - ma50_5m) / ma50_5m * 100.0 if ma50_5m > 0 else 99.0
         dist_bb_mid_15m = abs(current_price - bb_mid_15m) / bb_mid_15m * 100.0 if bb_mid_15m > 0 else 99.0
 
+        # 추세/반전 (25점)
         if cond_spring:
             score_a += 25
             tags_a.append(f"유동성 스윕(Spring)+MA20 돌파(꼬리 {max_wick_6:.1f}x)")
+        elif ma_short_aligned and (cond_ema_ribbon or box_range_pct <= PRE_BOX_ULTRA_TIGHT_PCT):
+            score_a += 25
+            tags_a.append("단기 정배열(5>20>50) 초응축 지지")
         elif (
             (dist_ma50 <= 1.2 or dist_bb_mid_15m <= 1.0)
             and current_price >= ma20_5m * 0.998
@@ -1025,48 +983,53 @@ def analyze_symbol(coin):
             score_a += 20
             tags_a.append("이평선 밀집 지지선 안착")
 
+        # 모멘텀/CVD (15~18점)
         if has_cvd_div:
             score_a += 18
             tags_a.append(cvd_label)
         elif cond_rsi_thrust:
-            score_a += 14
+            score_a += 15
             tags_a.append(f"RSI 과매도 스러스트({pre8_min_rsi6:.0f}→{curr_rsi6:.0f})")
         elif higher_low and current_price >= ma50_5m:
             score_a += 12
             tags_a.append("단기 저점 높임(Higher Low)")
 
+        # 매집/거래량 건조 포켓 (최대 38점: OBV 횡보 시에도 초응축+거래량 포켓이면 만점 인정)
         if 0.005 <= recent_3_vol_ratio <= PULLBACK_DRYUP_STRICT:
-            score_a += 26
+            score_a += 24
             tags_a.append(f"거래량 극건조 포켓({recent_3_vol_ratio*100:.0f}%)")
         elif 0.005 <= recent_3_vol_ratio <= PULLBACK_DRYUP_MAX:
-            score_a += 20
-            tags_a.append(f"거래량 수축({recent_3_vol_ratio*100:.0f}%)")
-        elif 0.005 <= recent_3_vol_ratio <= 0.50:
-            score_a += 12
-
-        if box_range_pct <= PRE_BOX_RANGE_MAX_PCT and (obv_accum or has_cvd_div):
             score_a += 18
-            tags_a.append(f"박스권 응축({box_range_pct:.1f}%)+OBV/CVD 매집")
-            if box_range_pct <= PRE_BOX_TIGHT_PCT:
-                score_a += 5
-                tags_a.append("정밀응축(<=7%)")
-        elif obv_accum:
-            score_a += 10
-            tags_a.append("OBV 우상향 매집")
+            tags_a.append(f"거래량 건조 포켓({recent_3_vol_ratio*100:.0f}%)")
 
-        if cond_ttm_squeeze:
-            score_a += 6
+        if box_range_pct <= PRE_BOX_ULTRA_TIGHT_PCT and (obv_accum or has_cvd_div or recent_3_vol_ratio <= PULLBACK_DRYUP_MAX):
+            score_a += 18
+            tags_a.append(f"초응축 박스({box_range_pct:.1f}%)")
+        elif box_range_pct <= PRE_BOX_RANGE_MAX_PCT and (obv_accum or has_cvd_div):
+            score_a += 15
+            tags_a.append(f"박스권 응축({box_range_pct:.1f}%)+OBV/CVD 매집")
+
+        # 스퀴즈/리본 & 숏스퀴즈 수급 가산점
+        if cond_ema_ribbon:
+            score_a += 8
+            tags_a.append(f"이평리본 초밀집({pre5_min_ribbon:.1f}%)")
+        elif cond_ttm_squeeze:
+            score_a += 8
             tags_a.append("TTM 켈트너 스퀴즈")
-        elif cond_ema_ribbon:
-            score_a += 5
-            tags_a.append(f"이평리본 수렴({pre5_min_ribbon:.1f}%)")
+
+        if cond_strong_short_squeeze:
+            score_a += 12
+            tags_a.append(f"강력 숏스퀴즈 수급({funding_rate:+.4f}%)")
+        elif cond_clean_funding:
+            score_a += 6
+            tags_a.append(f"청정/음수펀딩({funding_rate:+.4f}%)")
 
         if htf_bullish and 35.0 <= rsi6_15m <= 62.0:
-            score_a += 12
-            tags_a.append(f"상위프레임(1H/4H) 정배열 지지")
+            score_a += 8
+            tags_a.append("상위프레임(1H/4H) 지지")
 
     # =================================================================
-    # Track B (2차 돌파 초입 & S/R Flip 또는 MA20/50 눌림 리테스트 채점)
+    # Track B (2차 돌파 초입 & 전고점 S/R Flip 칼지지 리테스트 채점)
     # =================================================================
     score_b = 0
     tags_b = []
@@ -1082,46 +1045,44 @@ def analyze_symbol(coin):
     eval_pullback_vol = to_float(curr["volume"]) if to_float(curr["volume"]) >= ref_vol_ma20 * 0.05 else to_float(prev["volume"])
     pullback_vol_vs_peak = (eval_pullback_vol / peak_breakout_vol) if peak_breakout_vol > 0 else 1.0
 
-    # A) 전고점 S/R Flip 칼지지 리테스트 ($FLY 패턴)
     ref_sr_level = box_high if abs(curr["low"] - box_high) <= abs(curr["low"] - swing_high_8) else swing_high_8
     sr_flip_err_pct = (abs(to_float(curr["low"]) - ref_sr_level) / ref_sr_level) * 100.0 if ref_sr_level > 0 else 99.0
     cond_sr_flip_retest = bool(
-        peak_breakout_mult >= 2.5
+        peak_breakout_mult >= 2.8
         and drawdown_from_high_pct <= 5.0
         and current_price >= ref_sr_level * 0.996
         and sr_flip_err_pct <= SR_FLIP_TOLERANCE_PCT
         and pullback_vol_vs_peak <= SR_FLIP_DRYUP_RATIO_MAX
     )
 
-    # B) 초동 폭발 후 5분봉 MA20 / MA50 칼지지 리테스트 ($LYN, $AKE, $AIO 패턴 - 거래량 극건조)
     ma20_err_pct = (abs(to_float(curr["low"]) - ma20_5m) / ma20_5m) * 100.0 if ma20_5m > 0 else 99.0
     ma50_err_pct = (abs(to_float(curr["low"]) - ma50_5m) / ma50_5m) * 100.0 if ma50_5m > 0 else 99.0
     cond_ma_pullback_retest = bool(
-        peak_breakout_mult >= 2.7
+        peak_breakout_mult >= 2.8
         and drawdown_from_high_pct <= 5.0
         and current_price >= ma20_5m * 0.998
         and (ma20_err_pct <= 0.65 or ma50_err_pct <= 0.65)
-        and pullback_vol_vs_peak <= 0.25
+        and pullback_vol_vs_peak <= 0.22
     )
 
     max_vol_mult_2 = max(curr_vol_mult, prev_vol_mult)
 
     if cond_sr_flip_retest:
-        score_b += 30
+        score_b += 28
         tags_b.append(f"전고점 S/R Flip 칼지지(오차 {sr_flip_err_pct:.2f}%/눌림거래량 {pullback_vol_vs_peak*100:.0f}%)")
     elif cond_ma_pullback_retest:
         sup_name = "MA20" if ma20_err_pct <= 0.65 else "MA50"
-        score_b += 28
+        score_b += 25
         tags_b.append(f"돌파후 5m {sup_name} 지지 리테스트(눌림거래량 {pullback_vol_vs_peak*100:.0f}%)")
     elif reclaimed_bb_mid and is_early_breakout and max_vol_mult_2 <= EARLY_VOL_MULT_MAX and drawdown_from_high_pct <= 4.5:
-        score_b += 28
+        score_b += 26
         tags_b.append(f"BB중심선+스윙고점({fmt_price(swing_high_8)}) 돌파 초입")
 
-    if (cond_sr_flip_retest or cond_ma_pullback_retest) and peak_breakout_mult >= 2.5:
-        score_b += 22
-        tags_b.append(f"선행 초동수급 폭발({peak_breakout_mult:.1f}배)")
+    if (cond_sr_flip_retest or cond_ma_pullback_retest) and peak_breakout_mult >= 2.8:
+        score_b += 20
+        tags_b.append(f"초동수급 폭발({peak_breakout_mult:.1f}배)")
     elif EARLY_VOL_MULT_MIN <= max_vol_mult_2 <= EARLY_VOL_MULT_MAX and max(to_float(curr["body_ratio"]), to_float(prev["body_ratio"])) >= 0.50:
-        score_b += 22
+        score_b += 20
         tags_b.append(f"초동 수급 유입({max_vol_mult_2:.1f}배)")
 
     pre5_min_vol_ratio = (
@@ -1130,40 +1091,42 @@ def analyze_symbol(coin):
     )
     if 0.005 <= pre5_min_vol_ratio <= PRE_VOL_POCKET_MAX_RATIO:
         score_b += 18
-        tags_b.append(f"발화전 거래량 건조 포켓({pre5_min_vol_ratio*100:.0f}%)")
-    elif obv_accum and box_range_pct <= PRE_BOX_RANGE_MAX_PCT:
-        score_b += 14
-        tags_b.append(f"박스응축({box_range_pct:.1f}%)+OBV 매집")
+        tags_b.append(f"발화전 거래량 극건조 포켓({pre5_min_vol_ratio*100:.0f}%)")
+    elif box_range_pct <= PRE_BOX_ULTRA_TIGHT_PCT:
+        score_b += 15
+        tags_b.append(f"초응축 박스 돌파({box_range_pct:.1f}%)")
 
     if has_cvd_div:
         score_b += 12
         tags_b.append(cvd_label)
     elif cond_rsi_thrust:
-        score_b += 8
+        score_b += 12
         tags_b.append(f"RSI 과매도 스러스트({pre8_min_rsi6:.0f}→{curr_rsi6:.0f})")
 
+    if cond_ema_ribbon:
+        score_b += 8
+        tags_b.append(f"이평리본 초밀집 확산({pre5_min_ribbon:.1f}%)")
     if cond_ttm_squeeze:
-        score_b += 6
+        score_b += 7
         tags_b.append("TTM 켈트너 스퀴즈 폭발")
-    elif cond_ema_ribbon:
-        score_b += 5
-        tags_b.append(f"이평리본 확산({pre5_min_ribbon:.1f}%)")
-
     if cond_macd_ignition:
         score_b += 5
         tags_b.append("MACD 양전환 발화")
-    if cond_clean_funding:
-        score_b += 5
-        tags_b.append(f"청정펀딩({coin['funding_rate']:+.4f}%)")
+
+    if cond_strong_short_squeeze:
+        score_b += 15
+        tags_b.append(f"강력 숏스퀴즈 수급({funding_rate:+.4f}%)")
+    elif cond_clean_funding:
+        score_b += 8
+        tags_b.append(f"청정/음수펀딩({funding_rate:+.4f}%)")
+
     if htf_bullish and rsi6_15m <= 68.0 and kdj_j_15m <= 80.0:
-        score_b += 10
+        score_b += 8
         tags_b.append("상위프레임(1H/4H) 추세동조")
 
     if score_a < SCORE_THRESHOLD and score_b < SCORE_THRESHOLD:
         return None
 
-    # 1차 지지선과 2차 돌파선 산출
-    support_line = min(recent_low_6, ma50_5m, current_price * 0.994)
     resistance_line = max(box_high, swing_high_8, current_price * 1.015)
 
     if score_a >= score_b:
@@ -1183,14 +1146,11 @@ def analyze_symbol(coin):
 
     avg_entry = (entry_low + entry_high) / 2.0
 
-    # 구조적 지지선 및 ATR 기반 정수형 손절폭(-2% ~ -5%) 계산
-    atr5 = to_float(curr["atr14"], default=avg_entry * 0.012)
-    struct_sl_pct = ((avg_entry - support_line) / avg_entry) * 100.0 + 0.45 if avg_entry > support_line else 2.0
-    atr_sl_pct = (1.4 * atr5 * 1.732 / avg_entry) * 100.0 if avg_entry > 0 else 2.5
-    sl_pct = max(2, min(5, int(round(max(struct_sl_pct, atr_sl_pct)))))
-    stop_price = avg_entry * (1.0 - sl_pct / 100.0)
+    # [교정 완료] 종목별 구조적 스윙 저점 + 15m ATR 기반 유동적 손절(-2% ~ -5%) 계산
+    sl_pct, stop_price, structural_support = calc_dynamic_structural_sl(df, df_15m, avg_entry)
+    support_line = min(structural_support, current_price * 0.992)
 
-    # [핵심] 종목별 실제 차트 고점 매물대 & 피보나치 확장 기반 3단계 동적 TP 산출
+    # 종목별 실전 저항 매물대 & 피보나치 기반 3단계 동적 TP 산출
     tps, tp_pcts, tp_labels = calc_structural_fib_3tps(
         df, df_15m, df_1h, df_4h, avg_entry, sl_pct
     )
@@ -1223,7 +1183,6 @@ def analyze_symbol(coin):
 
 
 def build_briefing_message(res, now_str):
-    """1차/2차 상세 브리핑 메시지 (단독 발송용 - 3단계 동적 TP 및 상위프레임/저항 근거 포함)"""
     short_sym = res["symbol"].replace("USDT", "")
     return (
         f"{res['track_title']} ${short_sym} ({res['symbol']} | {res['score']}점)\n"
@@ -1233,10 +1192,10 @@ def build_briefing_message(res, now_str):
         f"• [멀티 프레임 진단]: {res['htf_status']} | 15m RSI6 {res['rsi6_15m']:.1f} (<75) | J값 {res['kdj_j_15m']:.1f} (<88)\n"
         f"• [포착 근거]: {' / '.join(res['matched_tags'])}\n"
         f"• [핵심 기준선 & 구조적 3단계 타점 가이드]:\n"
-        f"  - 1차 지지선(눌림 기준): {fmt_price(res['support_line'])} USDT\n"
+        f"  - 1차 지지선(구조적 스윙저점): {fmt_price(res['support_line'])} USDT\n"
         f"  - 2차 돌파선(스윙 고점): {fmt_price(res['swing_high_line'])} USDT\n"
         f"  - 권장 진입 구간: {fmt_price(res['entry_low'])} ~ {fmt_price(res['entry_high'])} USDT\n"
-        f"  - 손절가(SL): {fmt_price(res['stop_price'])} USDT (-{res['sl_pct']}%)\n"
+        f"  - 유동적 손절가(SL): {fmt_price(res['stop_price'])} USDT (-{res['sl_pct']}%·스윙저점+ATR버퍼)\n"
         f"  - 3단계 익절(TP): "
         f"1차 {fmt_price(res['tps'][0])}(+{fmt_pct(res['tp_pcts'][0])}%·{res['tp_labels'][0]}) / "
         f"2차 {fmt_price(res['tps'][1])}(+{fmt_pct(res['tp_pcts'][1])}%·{res['tp_labels'][1]}) / "
@@ -1245,7 +1204,6 @@ def build_briefing_message(res, now_str):
 
 
 def build_x_post_message(res):
-    """X(트위터) 양식 전용 메시지 (3차 익절까지만 종목별 맞춤 수치로 출력)"""
     short_sym = res["symbol"].replace("USDT", "")
     return (
         f"${short_sym} ({res['symbol']})\n\n"
@@ -1259,7 +1217,6 @@ def build_x_post_message(res):
 
 
 def send_telegram_single(text):
-    """절대 합쳐서 보내지 않고 1건씩 독립된 텔레그램 메시지로 개별 전송"""
     print(text)
     print("--------------------------------------------------")
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -1281,7 +1238,6 @@ def main():
 
     candidates, pure_crypto_bases, rwa_blocked_bases = get_scanner_candidates()
 
-    # 18시간 경과 종목 정리 및 비암호화폐 기존 추적 기록 즉시 삭제
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         if (
@@ -1299,7 +1255,6 @@ def main():
     sent_count = 0
     to_analyze = []
 
-    # 1단계: 기존 추적 종목 손절/돌파 체크
     for coin in candidates:
         symbol = coin["symbol"]
         curr_p = coin["last_price"]
@@ -1334,7 +1289,6 @@ def main():
 
         to_analyze.append(coin)
 
-    # 2단계: 8개 스레드 병렬 멀티 타임프레임 분석 (실행 시간 10초 이내 보장)
     results = []
     with ThreadPoolExecutor(max_workers=8) as executor:
         future_map = {executor.submit(analyze_symbol, c): c["symbol"] for c in to_analyze}
