@@ -1,8 +1,10 @@
 import os
+import json
 import time
 import requests
 import numpy as np
 import pandas as pd
+from urllib.parse import urlencode, quote
 from datetime import datetime, timedelta, timezone
 
 # 1. 환경변수 (TELEGRAM_TOKEN / TELEGRAM_BOT_TOKEN 모두 호환)
@@ -127,6 +129,75 @@ def fmt_price(price):
     return f"{p:.7f}".rstrip("0").rstrip(".")
 
 
+def send_telegram_report(text):
+    """텔레그램 전송 함수 (4000자 초과 시 자동 분할 발송하여 누락 방지)"""
+    print(text)
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("[경고] TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID가 설정되지 않았습니다.")
+        return
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    # 텔레그램 최대 글자수(4096자) 제한 대비 안전 발송
+    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)] if len(text) > 3900 else [text]
+    for chunk in chunks:
+        try:
+            r = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk}, timeout=12)
+            if r.status_code != 200:
+                print(f"[Telegram 응답 오류] {r.status_code}: {r.text}")
+            time.sleep(0.4)
+        except Exception as e:
+            print(f"[Telegram 전송 예외] {e}")
+
+
+def parse_bybit_payload(resp, mode):
+    try:
+        text = resp.text.strip()
+        if not text:
+            return None
+        data = json.loads(text)
+        if mode == "allorigins_get":
+            contents = data.get("contents", "")
+            if not contents:
+                return None
+            data = json.loads(contents)
+        elif isinstance(data, str):
+            data = json.loads(data)
+
+        if isinstance(data, dict) and data.get("retCode") == 0:
+            result = data.get("result", {})
+            if isinstance(result, dict) and result.get("list"):
+                return result
+    except Exception:
+        pass
+    return None
+
+
+def fetch_bybit(path, params=None):
+    """검증된 바이비트 다중 프록시 라우터 (Top 5 캔들 및 티커 폴백용)"""
+    query_str = f"?{urlencode(params)}" if params else ""
+    target_bybit = f"https://api.bybit.com{path}{query_str}"
+    encoded_bybit = quote(target_bybit, safe="")
+
+    routes = [
+        ("raw", f"https://api.bytick.com{path}{query_str}"),
+        ("raw", f"https://api.codetabs.com/v1/proxy?quest={encoded_bybit}"),
+        ("allorigins_get", f"https://api.allorigins.win/get?url={encoded_bybit}"),
+        ("raw", f"https://api.allorigins.win/raw?url={encoded_bybit}"),
+        ("raw", f"https://api.cors.lol/?url={encoded_bybit}"),
+    ]
+
+    for mode, url in routes:
+        try:
+            resp = requests.get(url, headers=BROWSER_HEADERS, timeout=8)
+            if resp.status_code == 200:
+                result = parse_bybit_payload(resp, mode)
+                if result is not None:
+                    return result
+        except Exception:
+            pass
+    return {}
+
+
 def calc_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0.0)
@@ -163,11 +234,9 @@ def detect_cvd_div_at_ignition(df, ign_idx, lookback=24):
     c_l1, c_l2 = to_float(sub.loc[idx_l1, "cvd"]), to_float(sub.loc[idx_l2, "cvd"])
     c_rng = max(to_float(sub["cvd"].max() - sub["cvd"].min()), 1.0)
 
-    # 클래식 강세 다이버전스: 가격 저점 낮아짐/유지 + CVD 저점 상승
     if p_l1 > 0 and p_l2 <= p_l1 * 1.005 and ((c_l2 - c_l1) / c_rng >= 0.08):
         return True
 
-    # 박스권 흡수 다이버전스: 가격은 횡보인데 CVD만 가파르게 우상향
     try:
         cvd_norm = (sub["cvd"].values - sub["cvd"].min()) / c_rng
         slope = np.polyfit(np.arange(len(sub)), cvd_norm, 1)[0]
@@ -179,40 +248,12 @@ def detect_cvd_div_at_ignition(df, ign_idx, lookback=24):
     return False
 
 
-def fetch_oi_change_before_ignition(symbol, ign_ts_ms):
-    """발화 직전 1시간 동안의 실제 미결제약정(OI) 선행 증감률(%) 조회"""
-    base_coin = symbol[:-4].upper()
-    clean_base = strip_multiplier_prefix(base_coin)
-
-    # 1순위: Gate.io Futures contract_stats (미국 IP 직통)
-    for base_try in [base_coin, clean_base]:
-        try:
-            r = requests.get(
-                "https://api.gateio.ws/api/v4/futures/usdt/contract_stats",
-                params={"contract": f"{base_try}_USDT", "interval": "15m", "limit": "30"},
-                headers=BROWSER_HEADERS,
-                timeout=4
-            )
-            if r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) >= 6:
-                stats = sorted(r.json(), key=lambda x: int(x.get("time", 0)))
-                ign_sec = ign_ts_ms // 1000
-                pre_stats = [s for s in stats if int(s.get("time", 0)) <= ign_sec]
-                if len(pre_stats) >= 5:
-                    oi_now = to_float(pre_stats[-1].get("open_interest_usd") or pre_stats[-1].get("open_interest"))
-                    oi_1h_ago = to_float(pre_stats[-5].get("open_interest_usd") or pre_stats[-5].get("open_interest"))
-                    if oi_1h_ago > 0:
-                        return ((oi_now - oi_1h_ago) / oi_1h_ago) * 100.0
-        except Exception:
-            pass
-
-    return 0.0
-
-
 def get_fast_pure_crypto_whitelist():
-    """5대 거래소 직통 API로 순수 코인 화이트리스트 및 RWA/주식 차단 목록 확보"""
+    """직통 거래소 API로 순수 코인 화이트리스트 및 RWA/주식 차단 목록 확보"""
     pure_crypto_bases = set()
     rwa_blocked_bases = set()
 
+    # 1) Bitget USDT-FUTURES ('isRwa' 공식 필드)
     try:
         r = requests.get(
             "https://api.bitget.com/api/v2/mix/market/contracts",
@@ -235,8 +276,10 @@ def get_fast_pure_crypto_whitelist():
     except Exception:
         pass
 
+    # 2) OKX / KuCoin / Gate / Binance Spot
     for url, mode in [
         ("https://www.okx.com/api/v5/public/instruments?instType=SWAP", "okx"),
+        ("https://api-futures.kucoin.com/api/v1/contracts/active", "kucoin"),
         ("https://api.gateio.ws/api/v4/futures/usdt/tickers", "gate"),
         ("https://data-api.binance.vision/api/v3/ticker/price", "bn"),
     ]:
@@ -244,11 +287,19 @@ def get_fast_pure_crypto_whitelist():
             r = requests.get(url, headers=BROWSER_HEADERS, timeout=6)
             if r.status_code == 200:
                 data = r.json()
-                items = data.get("data", []) if mode == "okx" else data
+                items = data.get("data", []) if mode in ("okx", "kucoin") else data
+                if not isinstance(items, list):
+                    continue
                 for item in items:
+                    base = ""
                     if mode == "okx":
                         inst = str(item.get("instId", "")).upper()
                         base = inst.split("-")[0] if inst.endswith("-USDT-SWAP") else ""
+                    elif mode == "kucoin":
+                        sym = str(item.get("symbol", "")).upper()
+                        base = sym[:-5] if sym.endswith("USDTM") else ""
+                        if base == "XBT":
+                            base = "BTC"
                     elif mode == "gate":
                         c = str(item.get("contract", "")).upper()
                         base = c[:-5] if c.endswith("_USDT") else ""
@@ -265,10 +316,14 @@ def get_fast_pure_crypto_whitelist():
 
 
 def get_top5_pure_crypto_gainers():
-    """바이비트 선물 중 주식/TradFi를 100% 제거한 순수 코인 급등 상위 5개 추출"""
+    """
+    1순위: CoinGecko Bybit 파생상품 API
+    2순위(폴백): CoinGecko 일시 제한 시 Bybit V5 tickers 프록시로 즉시 폴백하여 무응답 방지
+    """
     pure_crypto_bases, rwa_blocked_bases = get_fast_pure_crypto_whitelist()
     gainers = []
 
+    # 1순위: CoinGecko Bybit Derivatives
     url = "https://api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=unexpired"
     try:
         resp = requests.get(url, headers=BROWSER_HEADERS, timeout=15)
@@ -311,31 +366,68 @@ def get_top5_pure_crypto_gainers():
                         "last_price": last_price
                     })
     except Exception as e:
-        print(f"[Top 5 수집 오류] {e}")
+        print(f"[CoinGecko Top 5 조회 예외] {e}")
+
+    # 2순위 폴백: 만약 CoinGecko에서 데이터를 못 가져왔다면 Bybit V5 tickers 직접 조회
+    if not gainers:
+        print("[폴백 실행] Bybit V5 tickers 엔드포인트에서 Top 5를 수집합니다.")
+        res = fetch_bybit("/v5/market/tickers", {"category": "linear"})
+        for item in res.get("list", []):
+            symbol = str(item.get("symbol", "")).upper().strip()
+            if not symbol.endswith("USDT") or "-" in symbol:
+                continue
+            base_coin = symbol[:-4]
+            clean_base = strip_multiplier_prefix(base_coin)
+            if is_tradfi_ticker(base_coin) or base_coin in rwa_blocked_bases or clean_base in rwa_blocked_bases:
+                continue
+            if pure_crypto_bases and (base_coin not in pure_crypto_bases and clean_base not in pure_crypto_bases):
+                continue
+
+            last_price = to_float(item.get("lastPrice"))
+            change_24h = to_float(item.get("price24hPcnt")) * 100.0
+            turnover_24h = to_float(item.get("turnover24h"))
+            oi_val = to_float(item.get("openInterestValue"))
+            funding_pct = to_float(item.get("fundingRate")) * 100.0
+
+            if last_price > 0 and change_24h > 0 and turnover_24h >= 1_000_000:
+                gainers.append({
+                    "symbol": symbol,
+                    "change_24h": change_24h,
+                    "turnover_24h": turnover_24h,
+                    "oi_value": oi_val,
+                    "funding_rate": funding_pct,
+                    "last_price": last_price
+                })
 
     gainers.sort(key=lambda x: x["change_24h"], reverse=True)
-    return gainers[:5]
+    return gainers[:10]  # 캔들 누락 종목 대비 상위 10개 확보 후 5개 완성
 
 
-def fetch_klines_5m(symbol, ref_price=0.0, limit=200):
+def fetch_klines_5m(symbol, ref_price=0.0, limit=160):
+    """
+    [5중 캔들 수집기]
+    1순위 Bitget -> 2순위 Gate.io -> 3순위 Binance Vision -> 4순위 Bybit 프록시(바이비트 단독 상장 코인 보장)
+    """
     base_coin = symbol[:-4].upper()
     clean_base = strip_multiplier_prefix(base_coin)
     rows = []
 
+    # 1순위: Bitget USDT-FUTURES
     for sym_try in [symbol, f"{clean_base}USDT"]:
         try:
             r = requests.get(
                 "https://api.bitget.com/api/v2/mix/market/candles",
                 params={"symbol": sym_try, "productType": "USDT-FUTURES", "granularity": "5m", "limit": str(min(limit, 200))},
                 headers=BROWSER_HEADERS,
-                timeout=5
+                timeout=6
             )
-            if r.status_code == 200 and len(r.json().get("data", [])) >= 65:
+            if r.status_code == 200 and len(r.json().get("data", [])) >= 45:
                 rows = [x[:7] for x in r.json()["data"]]
                 break
         except Exception:
             pass
 
+    # 2순위: Gate.io USDT Futures
     if not rows:
         for base_try in [base_coin, clean_base]:
             try:
@@ -343,9 +435,9 @@ def fetch_klines_5m(symbol, ref_price=0.0, limit=200):
                     "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
                     params={"contract": f"{base_try}_USDT", "interval": "5m", "limit": str(limit)},
                     headers=BROWSER_HEADERS,
-                    timeout=5
+                    timeout=6
                 )
-                if r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) >= 65:
+                if r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) >= 45:
                     rows = [
                         [int(float(i.get("t", 0))) * 1000, i.get("o", 0), i.get("h", 0), i.get("l", 0), i.get("c", 0), float(i.get("v", 0)) or 1.0, 0]
                         for i in r.json()
@@ -354,6 +446,7 @@ def fetch_klines_5m(symbol, ref_price=0.0, limit=200):
             except Exception:
                 pass
 
+    # 3순위: Binance Vision Public Data
     if not rows:
         for sym_try in [symbol, f"{clean_base}USDT"]:
             try:
@@ -361,13 +454,25 @@ def fetch_klines_5m(symbol, ref_price=0.0, limit=200):
                     "https://data-api.binance.vision/api/v3/klines",
                     params={"symbol": sym_try, "interval": "5m", "limit": str(limit)},
                     headers=BROWSER_HEADERS,
-                    timeout=5
+                    timeout=6
                 )
-                if r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) >= 65:
+                if r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) >= 45:
                     rows = [[x[0], x[1], x[2], x[3], x[4], x[5], x[7]] for x in r.json()]
                     break
             except Exception:
                 pass
+
+    # 4순위: Bybit V5 API 프록시 (바이비트 단독 상장 급등 코인 100% 수집 보장!)
+    if not rows:
+        res = fetch_bybit("/v5/market/kline", {
+            "category": "linear",
+            "symbol": symbol,
+            "interval": "5",
+            "limit": limit
+        })
+        bybit_list = res.get("list", [])
+        if bybit_list and len(bybit_list) >= 45:
+            rows = bybit_list
 
     if not rows:
         return pd.DataFrame()
@@ -377,7 +482,7 @@ def fetch_klines_5m(symbol, ref_price=0.0, limit=200):
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
     df = df.dropna(subset=["timestamp", "open", "high", "low", "close", "volume"]).copy()
-    if len(df) < 65:
+    if len(df) < 45:
         return pd.DataFrame()
 
     df["timestamp"] = df["timestamp"].astype(np.int64)
@@ -403,28 +508,21 @@ def fetch_klines_5m(symbol, ref_price=0.0, limit=200):
 
 
 def reverse_engineer_coin(coin):
-    """
-    단일 급등 종목의 발화점을 역추적하고 12가지 기관급 알파 전략 후보군을 전수 테스트하여
-    어떤 전략이 작동했는지 발굴합니다.
-    """
-    df = fetch_klines_5m(coin["symbol"], ref_price=coin["last_price"], limit=200)
-    if df.empty or len(df) < 65:
+    df = fetch_klines_5m(coin["symbol"], ref_price=coin["last_price"], limit=160)
+    if df.empty or len(df) < 45:
         return None
 
-    # 기본 이평선 및 거래량 지표
     df["ma5"] = df["close"].rolling(5, min_periods=3).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=10).mean()
     df["ma50"] = df["close"].rolling(50, min_periods=20).mean()
-    df["ma112"] = df["close"].rolling(112, min_periods=35).mean()
+    df["ma112"] = df["close"].rolling(112, min_periods=30).mean()
     df["vol_ma20"] = df["volume"].shift(1).rolling(20, min_periods=5).mean()
     df["vol_mult"] = (df["volume"] / df["vol_ma20"].replace(0, np.nan)).fillna(1.0)
 
-    # 이평선 리본 스프레드
     ribbon_max = df[["ma5", "ma20", "ma50"]].max(axis=1)
     ribbon_min = df[["ma5", "ma20", "ma50"]].min(axis=1)
     df["ribbon_spread"] = ((ribbon_max - ribbon_min) / df["ma20"].replace(0, np.nan)) * 100.0
 
-    # OBV, CVD, RSI(14), VWAP(48캔들=4시간)
     direction = np.sign(df["close"].diff()).fillna(0)
     df["obv"] = (direction * df["volume"]).cumsum()
     df["cvd"] = calc_cvd_series(df)
@@ -435,14 +533,12 @@ def reverse_engineer_coin(coin):
     vol_sum_48 = df["volume"].rolling(48, min_periods=12).sum().replace(0, np.nan)
     df["vwap48"] = (tp_vol_sum / vol_sum_48).fillna(df["ma20"])
 
-    # MACD (12, 26, 9)
     ema12 = df["close"].ewm(span=12, adjust=False).mean()
     ema26 = df["close"].ewm(span=26, adjust=False).mean()
     macd = ema12 - ema26
     sig = macd.ewm(span=9, adjust=False).mean()
     df["macd_hist"] = macd - sig
 
-    # 볼린저 밴드(BBW) 및 TTM 켈트너 채널(KC) 스퀴즈
     std20 = df["close"].rolling(20, min_periods=10).std()
     df["bb_upper"] = df["ma20"] + 2.0 * std20
     df["bb_lower"] = df["ma20"] - 2.0 * std20
@@ -455,7 +551,6 @@ def reverse_engineer_coin(coin):
     df["kc_lower"] = df["ma20"] - 1.5 * df["atr14"]
     df["ttm_sqz"] = (df["bb_upper"] <= df["kc_upper"]) & (df["bb_lower"] >= df["kc_lower"])
 
-    # 캔들 몸통 비율 및 아랫꼬리 비율
     candle_rng = (df["high"] - df["low"]).replace(0, np.nan)
     df["body_ratio"] = ((df["close"] - df["open"]).abs() / candle_rng).fillna(0.0)
     lower_wick = np.minimum(df["open"], df["close"]) - df["low"]
@@ -463,13 +558,14 @@ def reverse_engineer_coin(coin):
     df["lower_wick_ratio"] = (lower_wick / body_sz).clip(0.0, 10.0)
 
     # 초동 발화점(Ignition Point) 탐색
-    search_df = df.iloc[30:-3].copy()
+    start_search = min(25, len(df) // 3)
+    search_df = df.iloc[start_search:-2].copy()
     search_df["score_ign"] = np.where(
-        (search_df["close"] > search_df["open"]) & (search_df["vol_mult"] >= 2.2),
+        (search_df["close"] > search_df["open"]) & (search_df["vol_mult"] >= 2.0),
         search_df["vol_mult"] * ((search_df["close"] - search_df["open"]) / search_df["open"] * 100.0),
         0.0
     )
-    ign_idx = int(search_df["score_ign"].idxmax()) if search_df["score_ign"].max() > 0 else int(len(df) - 15)
+    ign_idx = int(search_df["score_ign"].idxmax()) if search_df["score_ign"].max() > 0 else int(max(10, len(df) - 12))
     ign_bar = df.loc[ign_idx]
     pre_bar = df.loc[max(0, ign_idx - 1)]
 
@@ -498,7 +594,7 @@ def reverse_engineer_coin(coin):
 
     vol_mult_ign = max(2.0, to_float(ign_bar["vol_mult"], default=3.0))
 
-    # 돌파 후 리테스트 패턴(S/R Flip vs MA20 vs MA50) 분석
+    # 돌파 후 리테스트 패턴 분석
     post_bars = df.loc[ign_idx + 1 : min(len(df) - 1, ign_idx + 8)]
     pullback_low = to_float(post_bars["low"].min(), default=ign_price * 0.985) if not post_bars.empty else ign_price * 0.985
     pullback_min_vol = to_float(post_bars["volume"].min(), default=0.0) if not post_bars.empty else 0.0
@@ -523,31 +619,25 @@ def reverse_engineer_coin(coin):
     else:
         post_pattern_str = f"단기 자율 눌림 후 반등 (거래량 {dryup_ratio*100:.0f}% 수준 건조)"
 
-    # =================================================================
-    # [신규 알파 전략 발굴 테스트 (총 10종 글로벌 퀀트 전략 검증)]
-    # =================================================================
+    # 신규 알파 전략 발굴 테스트
     alphas = []
     pre6 = df.loc[max(0, ign_idx - 6) : ign_idx]
 
-    # 1) 유동성 스윕 (Spring)
     wick_max = to_float(pre6["lower_wick_ratio"].max(), default=0.0)
     is_spring = bool((not ma_aligned) and wick_max >= 1.4 and ign_price > to_float(ign_bar["ma20"]))
     if is_spring:
         alphas.append("유동성 스윕(Spring 아랫꼬리 스탑헌팅 후 MA20 돌파)")
 
-    # 2) CVD 강세/흡수 다이버전스
     has_cvd_div = detect_cvd_div_at_ignition(df, ign_idx, lookback=24)
     if has_cvd_div:
         alphas.append("CVD 강세/흡수 다이버전스(선행 시장가매집)")
 
-    # 3) 발화 직전 거래량 극건조 포켓
     pre5_min_vol = to_float(df.loc[max(0, ign_idx - 5) : max(0, ign_idx - 1)]["volume"].min(), default=0.0)
     pocket_ratio = pre5_min_vol / max(to_float(ign_bar["vol_ma20"]), 1e-9)
     is_vol_pocket = bool(pocket_ratio <= 0.35)
     if is_vol_pocket:
         alphas.append(f"발화 직전 거래량 극건조 포켓(평소 대비 {pocket_ratio*100:.0f}% 수축 후 폭발)")
 
-    # 4) BB스퀴즈 + VWAP48 장대양봉 돌파 (실제 연산)
     bbw_window = df.loc[max(0, ign_idx - 48) : max(1, ign_idx - 1)]["bbw"].dropna()
     bbw_pct_4h = float((bbw_window < to_float(pre_bar["bbw"])).mean() * 100.0) if len(bbw_window) >= 10 else 50.0
     is_bb_vwap = bool(
@@ -558,30 +648,20 @@ def reverse_engineer_coin(coin):
     if is_bb_vwap:
         alphas.append(f"BB스퀴즈(하위 {bbw_pct_4h:.0f}%)+VWAP 장대양봉 돌파")
 
-    # 5) TTM 켈트너 스퀴즈 폭발
     is_ttm = bool(pre6["ttm_sqz"].any())
     if is_ttm:
         alphas.append("TTM 켈트너 스퀴즈 폭발(BB⊂KC 압축 후 상단 돌파)")
 
-    # 6) 이평선 리본 초밀집 확산
     min_ribbon = to_float(pre6["ribbon_spread"].min(), default=99.0)
     is_ribbon = bool(min_ribbon <= 1.8)
     if is_ribbon:
         alphas.append(f"이평선 리본 초밀집 확산(5·20·50 이격 {min_ribbon:.1f}% 수렴 후 분출)")
 
-    # 7) 상위프레임(1H) 이평선(MA20=5분봉 MA240 근사 / MA112) 구조적 지지 동조
     ma112_val = to_float(ign_bar["ma112"], default=ign_price)
     is_htf_support = bool(ign_price >= ma112_val * 0.995 and to_float(pre_bar["low"]) <= ma112_val * 1.015)
     if is_htf_support:
         alphas.append("상위프레임(1H 중심선) 구조적 지지 반등")
 
-    # 8) 발화 전 1시간 OI 선행 스텔스 매집 (실제 OI 히스토리 조회)
-    oi_chg_1h_pct = fetch_oi_change_before_ignition(coin["symbol"], int(ign_bar["timestamp"]))
-    is_oi_stealth = bool(oi_chg_1h_pct >= 3.0)
-    if is_oi_stealth:
-        alphas.append(f"OI 선행 스텔스매집(발화전 1h OI +{oi_chg_1h_pct:.1f}% 급증)")
-
-    # 9) RSI 과매도 스러스트 & MACD 양전환 골든크로스
     min_rsi = to_float(df.loc[max(0, ign_idx - 8) : max(0, ign_idx - 1)]["rsi14"].min(), default=50.0)
     max_rsi = to_float(df.loc[ign_idx : min(len(df) - 1, ign_idx + 3)]["rsi14"].max(), default=50.0)
     is_rsi_thrust = bool(min_rsi <= 38.0 and (max_rsi - min_rsi) >= 20.0)
@@ -592,7 +672,6 @@ def reverse_engineer_coin(coin):
     if is_macd_cross:
         alphas.append("MACD 히스토그램 양전환 골든크로스 발화")
 
-    # 10) 돌파 후 S/R Flip 리테스트 & 숏스퀴즈 수급
     if is_sr_flip:
         alphas.append(f"돌파후 박스상단 S/R Flip 리테스트(거래량 {dryup_ratio*100:.0f}%로 건조)")
 
@@ -629,8 +708,6 @@ def reverse_engineer_coin(coin):
         "is_bb_vwap": is_bb_vwap,
         "is_ttm": is_ttm,
         "is_htf_support": is_htf_support,
-        "is_oi_stealth": is_oi_stealth,
-        "oi_chg_1h_pct": oi_chg_1h_pct,
         "is_rsi_thrust": is_rsi_thrust,
         "is_macd_cross": is_macd_cross,
         "is_short_sqz": is_short_sqz,
@@ -643,18 +720,21 @@ def reverse_engineer_coin(coin):
 
 def main():
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
-    top5 = get_top5_pure_crypto_gainers()
-    if not top5:
-        print("[알림] Top 5 순수 코인 데이터를 가져오지 못했습니다.")
+    candidates = get_top5_pure_crypto_gainers()
+    if not candidates:
+        send_telegram_report(f"⚠️ [{now_str}] 거래소 API 일시 응답 지연으로 Top 5 후보군을 가져오지 못했습니다. 잠시 후 다시 실행해 주세요.")
         return
 
     analyzed = []
-    for c in top5:
+    for c in candidates:
         res = reverse_engineer_coin(c)
         if res:
             analyzed.append(res)
+        if len(analyzed) >= 5:
+            break
 
     if not analyzed:
+        send_telegram_report(f"⚠️ [{now_str}] Top 5 종목의 5분봉 캔들 데이터를 수집하지 못했습니다.")
         return
 
     emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
@@ -679,7 +759,6 @@ def main():
             f"  - {' / '.join(item['alphas'])}\n"
         )
 
-    # 당일 Top 5 적중 통계 집계
     n = len(analyzed)
     cnt_ma = sum(1 for x in analyzed if x["ma_aligned"])
     cnt_ma_full = sum(1 for x in analyzed if x["ma_full_aligned"])
@@ -691,15 +770,12 @@ def main():
     cnt_bb_vwap = sum(1 for x in analyzed if x["is_bb_vwap"])
     cnt_ttm = sum(1 for x in analyzed if x["is_ttm"])
     cnt_htf = sum(1 for x in analyzed if x["is_htf_support"])
-    cnt_oi = sum(1 for x in analyzed if x["is_oi_stealth"])
-    avg_oi_chg = float(np.mean([x["oi_chg_1h_pct"] for x in analyzed]))
     cnt_rsi = sum(1 for x in analyzed if x["is_rsi_thrust"])
     cnt_macd = sum(1 for x in analyzed if x["is_macd_cross"])
     cnt_sqz = sum(1 for x in analyzed if x["is_short_sqz"])
     cnt_sr = sum(1 for x in analyzed if x["is_sr_flip"])
     cnt_ma20 = sum(1 for x in analyzed if x["is_ma20_sup"])
 
-    # 당일 데이터 기반 파라미터 자동 산출
     avg_vol_mult = float(np.mean([x["vol_mult"] for x in analyzed]))
     min_vol_mult = float(np.min([x["vol_mult"] for x in analyzed]))
     rec_vol_min = round(max(2.2, min(3.2, min_vol_mult * 0.95)), 1)
@@ -732,7 +808,6 @@ def main():
         f"• [신규] 발화 직전 거래량 극건조 포켓(<=35%): {n}종목 중 {cnt_pocket}종목\n"
         f"• [신규] 이평선 리본 초밀집 확산(<=1.8%): {n}종목 중 {cnt_ribbon}종목\n"
         f"• [신규] BB스퀴즈 + VWAP 장대양봉 돌파: {n}종목 중 {cnt_bb_vwap}종목 (TTM스퀴즈 {cnt_ttm}종목)\n"
-        f"• [신규] OI 선행매집(발화전 1h OI 급증): {n}종목 중 {cnt_oi}종목 (평균 {avg_oi_chg:+.1f}%)\n"
         f"• [신규] RSI 과매도 스러스트: {cnt_rsi}종목 | MACD 양전환 골든크로스: {cnt_macd}종목\n"
         f"• [신규] 숏스퀴즈 수급(펀딩<=0.01%): {n}종목 중 {cnt_sqz}종목\n"
         f"• [신규] 돌파 후 타점: S/R Flip(전고점 지지) {cnt_sr}종목 | MA20 지지 {cnt_ma20}종목\n\n"
@@ -741,8 +816,7 @@ def main():
         f"• PRE_BOX_RANGE_MAX_PCT = {rec_box}% (직전 2시간 변동폭 중앙값 {med_box:.1f}%)\n"
         f"• PULLBACK_DRYUP_MAX_RATIO = {rec_dryup} (발화봉 대비 눌림 거래량 {int(rec_dryup*100)}% 이하)\n"
         f"• PRE_VOL_POCKET_MAX_RATIO = 0.35 (발화 직전 5캔들 최저거래량 / vol_ma20)\n"
-        f"• EMA_RIBBON_MAX_SPREAD_PCT = 1.8% (5·20·50 이평선 밀집 수렴 기준)\n"
-        f"• OI_PRE_SURGE_MIN_PCT = 3.0% (발화 전 1시간 OI 증가율)\n\n"
+        f"• EMA_RIBBON_MAX_SPREAD_PCT = 1.8% (5·20·50 이평선 밀집 수렴 기준)\n\n"
         "[3. scanner.py 추가할 신규 파이썬 조건식]\n"
         "• cond_spring = (not ma_short_aligned) and (lower_wick_ratio_max6 >= 1.4) and (close > ma20)\n"
         "• cond_cvd_div = (price_low_sweep) and (cvd_higher_low or cvd_stealth_slope >= 0.025)\n"
@@ -762,16 +836,7 @@ def main():
     )
 
     report_text = "\n".join(lines)
-    print(report_text)
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-        try:
-            requests.post(
-                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-                json={"chat_id": TELEGRAM_CHAT_ID, "text": report_text},
-                timeout=12
-            )
-        except Exception as e:
-            print(f"[Telegram 전송 오류] {e}")
+    send_telegram_report(report_text)
 
 
 if __name__ == "__main__":
