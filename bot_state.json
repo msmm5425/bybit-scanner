@@ -1,26 +1,5 @@
 {
   "tracked": {
-    "HYPEUSDT": {
-      "created_at": 1794110206,
-      "track_type": "TRACK_B",
-      "swing_high_line": 78.57318,
-      "entry_low": 77.02494,
-      "entry_high": 77.64423599999999,
-      "stop_price": 75.78789624,
-      "sl_pct": 2,
-      "tps": [
-        82.15792704381938,
-        88.66055230874149,
-        96.43859093021267
-      ],
-      "tp_pcts": [
-        6.2,
-        14.6,
-        24.7
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": false
-    },
     "NEARUSDT": {
       "created_at": 1794119903,
       "track_type": "TRACK_B",
@@ -61,27 +40,6 @@
         31.1
       ],
       "breakout_alerted": false,
-      "sl_alerted": false
-    },
-    "ARIAUSDT": {
-      "created_at": 1794110206,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.1624,
-      "entry_low": 0.15904000000000001,
-      "entry_high": 0.16032,
-      "stop_price": 0.1564864,
-      "sl_pct": 2,
-      "tps": [
-        0.16679707445145964,
-        0.18623425396261803,
-        0.20664233019691197
-      ],
-      "tp_pcts": [
-        4.5,
-        16.6,
-        29.4
-      ],
-      "breakout_alerted": true,
       "sl_alerted": false
     },
     "PIEVERSEUSDT": {
@@ -292,7 +250,7 @@
         19.5
       ],
       "breakout_alerted": true,
-      "sl_alerted": false
+      "sl_alerted": true
     },
     "QNTUSDT": {
       "created_at": 1794140315,
