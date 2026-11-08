@@ -22,24 +22,24 @@
       "sl_alerted": false
     },
     "HYPEUSDT": {
-      "created_at": 1794101203,
-      "track_type": "TRACK_A",
-      "swing_high_line": 78.86143999999999,
-      "entry_low": 77.229824,
-      "entry_high": 77.851392,
-      "stop_price": 75.98979583999999,
+      "created_at": 1794110206,
+      "track_type": "TRACK_B",
+      "swing_high_line": 78.57318,
+      "entry_low": 77.02494,
+      "entry_high": 77.64423599999999,
+      "stop_price": 75.78789624,
       "sl_pct": 2,
       "tps": [
-        82.126012572264,
-        88.73825479155076,
-        96.52311011894736
+        82.15792704381938,
+        88.66055230874149,
+        96.43859093021267
       ],
       "tp_pcts": [
-        5.9,
-        14.4,
-        24.5
+        6.2,
+        14.6,
+        24.7
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "STXUSDT": {
@@ -127,24 +127,24 @@
       "sl_alerted": false
     },
     "NEARUSDT": {
-      "created_at": 1794053949,
-      "track_type": "TRACK_B",
-      "swing_high_line": 3.7433199999999998,
-      "entry_low": 3.66956,
-      "entry_high": 3.699064,
-      "stop_price": 3.61062576,
+      "created_at": 1794110206,
+      "track_type": "TRACK_A",
+      "swing_high_line": 3.7615899999999995,
+      "entry_low": 3.683764,
+      "entry_high": 3.713412,
+      "stop_price": 3.62461624,
       "sl_pct": 2,
       "tps": [
-        3.9195467589114403,
-        4.110923689862984,
-        4.4284796886323825
+        3.9381447292477305,
+        4.130429730112409,
+        4.4509876153169055
       ],
       "tp_pcts": [
-        6.4,
-        11.6,
-        20.2
+        6.5,
+        11.7,
+        20.3
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "AAVEUSDT": {
@@ -232,24 +232,24 @@
       "sl_alerted": true
     },
     "ARIAUSDT": {
-      "created_at": 1794091254,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.15904370961611555,
-      "entry_low": 0.15522,
-      "entry_high": 0.156468,
-      "stop_price": 0.15272712,
+      "created_at": 1794110206,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.1624,
+      "entry_low": 0.15904000000000001,
+      "entry_high": 0.16032,
+      "stop_price": 0.1564864,
       "sl_pct": 2,
       "tps": [
-        0.16480086659064994,
-        0.1744280381239073,
-        0.18629634364424177
+        0.16679707445145964,
+        0.18623425396261803,
+        0.20664233019691197
       ],
       "tp_pcts": [
-        5.7,
-        11.9,
-        19.5
+        4.5,
+        16.6,
+        29.4
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "QUSDT": {
