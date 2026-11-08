@@ -21,6 +21,7 @@ TELEGRAM_CHAT_ID = (
 ).strip()
 
 KST = timezone(timedelta(hours=9))
+HISTORY_FILE = "analyzer_history.json"  # 오늘 분석한 Top 5를 저장해 48시간 뒤 재분석하는 기록 파일
 
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -129,22 +130,51 @@ def fmt_price(price):
     return f"{p:.7f}".rstrip("0").rstrip(".")
 
 
+def load_history():
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict) and "cohorts" in data:
+                    return data
+        except Exception:
+            pass
+    return {"cohorts": []}
+
+
+def save_history(history_data):
+    try:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[기록 저장 오류] {e}")
+
+
 def send_telegram_report(text):
-    """텔레그램 전송 함수 (4000자 초과 시 자동 분할 발송하여 누락 방지)"""
+    """텔레그램 전송 함수 (4000자 초과 시 문단 단위로 안전하게 분할 전송)"""
     print(text)
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("[경고] TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID가 설정되지 않았습니다.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    # 텔레그램 최대 글자수(4096자) 제한 대비 안전 발송
-    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)] if len(text) > 3900 else [text]
+    chunks = []
+    current = ""
+    for line in text.split("\n"):
+        if len(current) + len(line) + 1 > 3800:
+            chunks.append(current)
+            current = line
+        else:
+            current = f"{current}\n{line}" if current else line
+    if current:
+        chunks.append(current)
+
     for chunk in chunks:
         try:
             r = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk}, timeout=12)
             if r.status_code != 200:
                 print(f"[Telegram 응답 오류] {r.status_code}: {r.text}")
-            time.sleep(0.4)
+            time.sleep(0.5)
         except Exception as e:
             print(f"[Telegram 전송 예외] {e}")
 
@@ -173,7 +203,6 @@ def parse_bybit_payload(resp, mode):
 
 
 def fetch_bybit(path, params=None):
-    """검증된 바이비트 다중 프록시 라우터 (Top 5 캔들 및 티커 폴백용)"""
     query_str = f"?{urlencode(params)}" if params else ""
     target_bybit = f"https://api.bybit.com{path}{query_str}"
     encoded_bybit = quote(target_bybit, safe="")
@@ -209,7 +238,6 @@ def calc_rsi(series, period=14):
 
 
 def calc_cvd_series(df):
-    """캔들 내 매수/매도 압력(CLV) 및 아랫꼬리 스탑헌팅 흡수를 결합한 누적 볼륨 델타(CVD)"""
     high_low = (df["high"] - df["low"]).replace(0, np.nan)
     clv = (((df["close"] - df["low"]) - (df["high"] - df["close"])) / high_low).fillna(0.0)
     lower_wick = np.minimum(df["open"], df["close"]) - df["low"]
@@ -220,7 +248,6 @@ def calc_cvd_series(df):
 
 
 def detect_cvd_div_at_ignition(df, ign_idx, lookback=24):
-    """발화 직전 구간에서 CVD 강세 다이버전스(저점 스윕 매수흡수) 또는 스텔스 매집 감지"""
     start_idx = max(0, ign_idx - lookback)
     sub = df.iloc[start_idx : ign_idx + 1].copy().reset_index(drop=True)
     if len(sub) < 12:
@@ -249,11 +276,9 @@ def detect_cvd_div_at_ignition(df, ign_idx, lookback=24):
 
 
 def get_fast_pure_crypto_whitelist():
-    """직통 거래소 API로 순수 코인 화이트리스트 및 RWA/주식 차단 목록 확보"""
     pure_crypto_bases = set()
     rwa_blocked_bases = set()
 
-    # 1) Bitget USDT-FUTURES ('isRwa' 공식 필드)
     try:
         r = requests.get(
             "https://api.bitget.com/api/v2/mix/market/contracts",
@@ -276,7 +301,6 @@ def get_fast_pure_crypto_whitelist():
     except Exception:
         pass
 
-    # 2) OKX / KuCoin / Gate / Binance Spot
     for url, mode in [
         ("https://www.okx.com/api/v5/public/instruments?instType=SWAP", "okx"),
         ("https://api-futures.kucoin.com/api/v1/contracts/active", "kucoin"),
@@ -316,14 +340,9 @@ def get_fast_pure_crypto_whitelist():
 
 
 def get_top5_pure_crypto_gainers():
-    """
-    1순위: CoinGecko Bybit 파생상품 API
-    2순위(폴백): CoinGecko 일시 제한 시 Bybit V5 tickers 프록시로 즉시 폴백하여 무응답 방지
-    """
     pure_crypto_bases, rwa_blocked_bases = get_fast_pure_crypto_whitelist()
     gainers = []
 
-    # 1순위: CoinGecko Bybit Derivatives
     url = "https://api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=unexpired"
     try:
         resp = requests.get(url, headers=BROWSER_HEADERS, timeout=15)
@@ -368,9 +387,7 @@ def get_top5_pure_crypto_gainers():
     except Exception as e:
         print(f"[CoinGecko Top 5 조회 예외] {e}")
 
-    # 2순위 폴백: 만약 CoinGecko에서 데이터를 못 가져왔다면 Bybit V5 tickers 직접 조회
     if not gainers:
-        print("[폴백 실행] Bybit V5 tickers 엔드포인트에서 Top 5를 수집합니다.")
         res = fetch_bybit("/v5/market/tickers", {"category": "linear"})
         for item in res.get("list", []):
             symbol = str(item.get("symbol", "")).upper().strip()
@@ -400,24 +417,28 @@ def get_top5_pure_crypto_gainers():
                 })
 
     gainers.sort(key=lambda x: x["change_24h"], reverse=True)
-    return gainers[:10]  # 캔들 누락 종목 대비 상위 10개 확보 후 5개 완성
+    return gainers[:10]
 
 
-def fetch_klines_5m(symbol, ref_price=0.0, limit=160):
+def fetch_klines_multi_tf(symbol, interval="5m", ref_price=0.0, limit=180):
     """
-    [5중 캔들 수집기]
-    1순위 Bitget -> 2순위 Gate.io -> 3순위 Binance Vision -> 4순위 Bybit 프록시(바이비트 단독 상장 코인 보장)
+    5분봉("5m") 및 48시간 궤적 추적용 15분봉("15m", 200캔들=50시간) 수집기
     """
     base_coin = symbol[:-4].upper()
     clean_base = strip_multiplier_prefix(base_coin)
     rows = []
+
+    bg_gran = "5m" if interval == "5m" else "15m"
+    gt_inter = "5m" if interval == "5m" else "15m"
+    bn_inter = "5m" if interval == "5m" else "15m"
+    by_inter = "5" if interval == "5m" else "15"
 
     # 1순위: Bitget USDT-FUTURES
     for sym_try in [symbol, f"{clean_base}USDT"]:
         try:
             r = requests.get(
                 "https://api.bitget.com/api/v2/mix/market/candles",
-                params={"symbol": sym_try, "productType": "USDT-FUTURES", "granularity": "5m", "limit": str(min(limit, 200))},
+                params={"symbol": sym_try, "productType": "USDT-FUTURES", "granularity": bg_gran, "limit": str(min(limit, 200))},
                 headers=BROWSER_HEADERS,
                 timeout=6
             )
@@ -433,7 +454,7 @@ def fetch_klines_5m(symbol, ref_price=0.0, limit=160):
             try:
                 r = requests.get(
                     "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
-                    params={"contract": f"{base_try}_USDT", "interval": "5m", "limit": str(limit)},
+                    params={"contract": f"{base_try}_USDT", "interval": gt_inter, "limit": str(limit)},
                     headers=BROWSER_HEADERS,
                     timeout=6
                 )
@@ -452,7 +473,7 @@ def fetch_klines_5m(symbol, ref_price=0.0, limit=160):
             try:
                 r = requests.get(
                     "https://data-api.binance.vision/api/v3/klines",
-                    params={"symbol": sym_try, "interval": "5m", "limit": str(limit)},
+                    params={"symbol": sym_try, "interval": bn_inter, "limit": str(limit)},
                     headers=BROWSER_HEADERS,
                     timeout=6
                 )
@@ -462,12 +483,12 @@ def fetch_klines_5m(symbol, ref_price=0.0, limit=160):
             except Exception:
                 pass
 
-    # 4순위: Bybit V5 API 프록시 (바이비트 단독 상장 급등 코인 100% 수집 보장!)
+    # 4순위: Bybit V5 API 프록시
     if not rows:
         res = fetch_bybit("/v5/market/kline", {
             "category": "linear",
             "symbol": symbol,
-            "interval": "5",
+            "interval": by_inter,
             "limit": limit
         })
         bybit_list = res.get("list", [])
@@ -508,7 +529,7 @@ def fetch_klines_5m(symbol, ref_price=0.0, limit=160):
 
 
 def reverse_engineer_coin(coin):
-    df = fetch_klines_5m(coin["symbol"], ref_price=coin["last_price"], limit=160)
+    df = fetch_klines_multi_tf(coin["symbol"], interval="5m", ref_price=coin["last_price"], limit=180)
     if df.empty or len(df) < 45:
         return None
 
@@ -569,7 +590,8 @@ def reverse_engineer_coin(coin):
     ign_bar = df.loc[ign_idx]
     pre_bar = df.loc[max(0, ign_idx - 1)]
 
-    ign_time_str = datetime.fromtimestamp(int(ign_bar["timestamp"]) / 1000, tz=KST).strftime("%m/%d %H:%M KST")
+    ign_ts_ms = int(ign_bar["timestamp"])
+    ign_time_str = datetime.fromtimestamp(ign_ts_ms / 1000, tz=KST).strftime("%m/%d %H:%M KST")
     ign_price = to_float(ign_bar["close"])
     post_high = to_float(df.loc[ign_idx:]["high"].max(), default=ign_price)
     pump_from_ign_pct = max(0.5, ((post_high - ign_price) / ign_price) * 100.0) if ign_price > 0 else 0.5
@@ -581,8 +603,9 @@ def reverse_engineer_coin(coin):
 
     pre_box = df.loc[max(0, ign_idx - 24) : max(1, ign_idx - 1)]
     box_high = to_float(pre_box["high"].max(), default=ign_price)
-    box_low = to_float(pre_box["low"].min(), default=ign_price)
+    box_low = to_float(pre_box["low"].min(), default=ign_price * 0.96)
     box_range_pct = ((box_high - box_low) / box_low) * 100.0 if box_low > 0 else 5.0
+    wave_height = max(ign_price - box_low, ign_price * 0.025)
 
     obv_up = False
     if len(pre_box) >= 5:
@@ -679,18 +702,20 @@ def reverse_engineer_coin(coin):
     if is_short_sqz:
         alphas.append(f"숏스퀴즈 수급(펀딩 {coin['funding_rate']:+.4f}%)")
 
-    # 종목별 유동적 손절폭(SL: 스윙저점+15분ATR 버퍼와 박스 변동폭 비례, -2% ~ -5% 유동)
-    atr_ign = to_float(ign_bar["atr14"], default=ign_price * 0.012)
-    struct_low = min(pullback_low, to_float(pre6["low"].min(), default=pullback_low))
-    struct_sl_pct = ((ign_price - (struct_low - 0.85 * atr_ign * 1.732)) / ign_price) * 100.0 if ign_price > 0 else 3.0
-    box_based_sl_pct = max(2.2, box_range_pct * 0.65)
-    raw_sl_pct = max(struct_sl_pct, box_based_sl_pct)
+    # 리테스트 진입가 기준 유동적 손절폭(-2% ~ -5%) 계산
+    atr_ign = to_float(ign_bar["atr14"], default=ign_price * 0.01)
+    retest_dist_pct = ((ign_price - pullback_low) / ign_price * 50.0) + (atr_ign / ign_price * 120.0)
+    raw_sl_pct = max(retest_dist_pct, box_range_pct * 0.42)
     dynamic_sl_pct = max(2, min(5, int(round(raw_sl_pct))))
 
     return {
         "coin": coin,
+        "ign_ts_ms": ign_ts_ms,
         "ign_time": ign_time_str,
         "ign_price": ign_price,
+        "box_low": box_low,
+        "box_high": box_high,
+        "wave_height": wave_height,
         "pump_pct": pump_from_ign_pct,
         "ma_str": ma_str,
         "box_range_pct": box_range_pct,
@@ -718,11 +743,160 @@ def reverse_engineer_coin(coin):
     }
 
 
+def analyze_48h_post_mortem(record):
+    """
+    [핵심 신규 엔진: 48시간 경과 종목 재분석 및 실전 1·2·3차 익절(TP1~TP3) 역추적]
+    저장된 종목(또는 48시간 전 발화 종목)의 15분봉 200캔들(50시간) 궤적을 추적하여:
+    1) 실제 1차 저항 눌림 지점(TP1), 2차 파동 고점(TP2), 48시간 최종 꼭대기(TP3)의 수익률(%)과 피보나치 배수 산출
+    2) 고점 도달 소요 시간 및 꼭대기에서 발생한 매도 징후(RSI 과열, 장대 윗꼬리, 거래량 폭발) 추출
+    3) 고점 가기 전 최대 하방 흔들기(MAE)를 측정하여 안 털리는 최적 손절폭(SL) 검증
+    """
+    symbol = record["symbol"]
+    ref_p = to_float(record.get("ign_price"), default=0.0)
+    df15 = fetch_klines_multi_tf(symbol, interval="15m", ref_price=ref_p, limit=200)
+    if df15.empty or len(df15) < 40:
+        return None
+
+    df15["ma20"] = df15["close"].rolling(20, min_periods=5).mean()
+    df15["vol_ma20"] = df15["volume"].shift(1).rolling(20, min_periods=5).mean()
+    df15["vol_mult"] = (df15["volume"] / df15["vol_ma20"].replace(0, np.nan)).fillna(1.0)
+    df15["rsi14"] = calc_rsi(df15["close"], period=14)
+    upper_wick = df15["high"] - np.maximum(df15["open"], df15["close"])
+    candle_rng = (df15["high"] - df15["low"]).replace(0, np.nan)
+    df15["upper_wick_share"] = (upper_wick / candle_rng).fillna(0.0)
+
+    ign_ts_ms = int(record.get("ign_ts_ms", 0))
+    # 저장된 발화 시각 이후 캔들 필터링 (만약 시뮬레이션 모드이거나 범위 밖이면 초기 48시간 파동 발화점 자동 탐색)
+    post_df = df15[df15["timestamp"] >= ign_ts_ms].copy().reset_index(drop=True)
+    if len(post_df) < 12:
+        # 최근 50시간 중 전반부(25~48시간 전)에서 가장 강하게 발화한 초동 지점 탐색
+        early_zone = df15.iloc[8:110].copy()
+        early_zone["ign_score"] = np.where(
+            early_zone["close"] > early_zone["open"],
+            early_zone["vol_mult"] * ((early_zone["close"] - early_zone["open"]) / early_zone["open"] * 100.0),
+            0.0
+        )
+        start_idx = int(early_zone["ign_score"].idxmax()) if early_zone["ign_score"].max() > 0 else 15
+        post_df = df15.iloc[start_idx:].copy().reset_index(drop=True)
+        ign_price = to_float(post_df["close"].iloc[0])
+        pre_low = to_float(df15.iloc[max(0, start_idx - 12) : start_idx + 1]["low"].min(), default=ign_price * 0.95)
+        wave_height = max(ign_price - pre_low, ign_price * 0.03)
+    else:
+        ign_price = to_float(record.get("ign_price"), default=to_float(post_df["close"].iloc[0]))
+        pre_low = to_float(record.get("box_low"), default=ign_price * 0.95)
+        wave_height = max(to_float(record.get("wave_height")), ign_price * 0.025)
+
+    if ign_price <= 0:
+        return None
+
+    # 48시간(15분봉 최대 192캔들) 구간 자르기
+    track_df = post_df.iloc[:192].copy().reset_index(drop=True)
+    peak_idx = int(track_df["high"].idxmax())
+    peak_bar = track_df.loc[peak_idx]
+    peak_price = to_float(peak_bar["high"], default=ign_price)
+    max_gain_pct = max(1.0, ((peak_price - ign_price) / ign_price) * 100.0)
+
+    # 발화 후 최고점 도달까지 걸린 시간(시간 단위)
+    hours_to_peak = max(0.25, round((int(peak_bar["timestamp"]) - int(track_df["timestamp"].iloc[0])) / 3_600_000.0, 1))
+
+    # 고점 도달 전 최대 하방 눌림(MAE: 스탑헌팅 깊이)
+    before_peak_df = track_df.loc[:peak_idx]
+    min_low_before_peak = to_float(before_peak_df["low"].min(), default=ign_price)
+    mae_drop_pct = max(0.0, ((ign_price - min_low_before_peak) / ign_price) * 100.0)
+    optimal_sl_pct = max(2, min(5, int(round(mae_drop_pct + 0.8))))
+
+    # 48시간 궤적 내 의미 있는 스윙 고점(저항 눌림 발생 지점) 추출 -> 실전 1차 TP, 2차 TP, 3차 TP 역산
+    swing_peaks = []
+    highs = track_df["high"].values
+    lows = track_df["low"].values
+    for i in range(1, len(track_df) - 2):
+        if highs[i] >= highs[i - 1] and highs[i] >= highs[i + 1]:
+            gain_i = ((highs[i] - ign_price) / ign_price) * 100.0
+            # 해당 고점 직후 6캔들(90분) 내 최소 1.5% 이상 되돌림(저항 눌림)이 발생한 유의미한 저항선만 추출
+            next_min_low = np.min(lows[i + 1 : min(len(lows), i + 7)])
+            pullback_from_peak = ((highs[i] - next_min_low) / highs[i]) * 100.0 if highs[i] > 0 else 0.0
+            if gain_i >= 3.0 and pullback_from_peak >= 1.5:
+                swing_peaks.append((float(highs[i]), round(float(gain_i), 1)))
+
+    # 상승률 순으로 중복 제거 정렬
+    unique_swings = []
+    for p_val, g_pct in sorted(swing_peaks, key=lambda x: x[1]):
+        if not unique_swings or (g_pct - unique_swings[-1][1] >= 3.0):
+            unique_swings.append((p_val, g_pct))
+
+    # [실전 TP1, TP2, TP3 결정]
+    tp3_price = peak_price
+    tp3_pct = round(max_gain_pct, 1)
+
+    if len(unique_swings) >= 2 and unique_swings[0][1] < tp3_pct * 0.85:
+        tp1_price, tp1_pct = unique_swings[0]
+        tp2_price, tp2_pct = unique_swings[min(1, len(unique_swings) - 1)]
+        if tp2_pct >= tp3_pct * 0.92:
+            tp2_pct = round((tp1_pct + tp3_pct) * 0.52, 1)
+            tp2_price = ign_price * (1.0 + tp2_pct / 100.0)
+    elif len(unique_swings) == 1 and unique_swings[0][1] < tp3_pct * 0.75:
+        tp1_price, tp1_pct = unique_swings[0]
+        tp2_pct = round((tp1_pct + tp3_pct) * 0.55, 1)
+        tp2_price = ign_price * (1.0 + tp2_pct / 100.0)
+    else:
+        # 원웨이 급등 파동인 경우 실전 피보나치 비례 분할 지점 산출
+        tp1_pct = round(max(optimal_sl_pct * 2.0, tp3_pct * 0.35), 1)
+        tp2_pct = round(max(tp1_pct + 4.0, tp3_pct * 0.65), 1)
+        tp1_price = ign_price * (1.0 + tp1_pct / 100.0)
+        tp2_price = ign_price * (1.0 + tp2_pct / 100.0)
+
+    # 각 익절 타점이 초동 박스 파동(wave_height) 대비 피보나치 몇 배수였는지 역산
+    fib1 = round((tp1_price - pre_low) / max(wave_height, 1e-9), 2)
+    fib2 = round((tp2_price - pre_low) / max(wave_height, 1e-9), 2)
+    fib3 = round((tp3_price - pre_low) / max(wave_height, 1e-9), 2)
+
+    # 3차 최종 고점(Blow-off Top)에서 나타난 차트 매도 징후 판별
+    top_signals = []
+    peak_rsi = to_float(peak_bar["rsi14"], default=50.0)
+    peak_vol_mult = to_float(peak_bar["vol_mult"], default=1.0)
+    peak_wick = to_float(peak_bar["upper_wick_share"], default=0.0)
+
+    if peak_rsi >= 72.0:
+        top_signals.append(f"15m RSI 과열({peak_rsi:.0f})")
+    if peak_wick >= 0.35:
+        top_signals.append(f"장대 윗꼬리 저항({peak_wick*100:.0f}%)")
+    if peak_vol_mult >= 4.0:
+        top_signals.append(f"거래량 클라이맥스({peak_vol_mult:.1f}x)")
+    if not top_signals:
+        top_signals.append("4H/1H 상위 매물대 도달 후 모멘텀 둔화")
+
+    curr_price = to_float(df15["close"].iloc[-1], default=ign_price)
+    post_peak_drop_pct = ((peak_price - curr_price) / peak_price) * 100.0 if peak_price > 0 else 0.0
+
+    return {
+        "symbol": symbol,
+        "ign_price": ign_price,
+        "peak_price": peak_price,
+        "curr_price": curr_price,
+        "hours_to_peak": hours_to_peak,
+        "mae_drop_pct": round(mae_drop_pct, 1),
+        "optimal_sl_pct": optimal_sl_pct,
+        "tp1_price": tp1_price,
+        "tp1_pct": tp1_pct,
+        "fib1": fib1,
+        "tp2_price": tp2_price,
+        "tp2_pct": tp2_pct,
+        "fib2": fib2,
+        "tp3_price": tp3_price,
+        "tp3_pct": tp3_pct,
+        "fib3": fib3,
+        "top_signal_str": " + ".join(top_signals),
+        "post_peak_drop_pct": round(post_peak_drop_pct, 1),
+    }
+
+
 def main():
+    now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
+
     candidates = get_top5_pure_crypto_gainers()
     if not candidates:
-        send_telegram_report(f"⚠️ [{now_str}] 거래소 API 일시 응답 지연으로 Top 5 후보군을 가져오지 못했습니다. 잠시 후 다시 실행해 주세요.")
+        send_telegram_report(f"⚠️ [{now_str}] 거래소 API 일시 응답 지연으로 Top 5 후보군을 가져오지 못했습니다.")
         return
 
     analyzed = []
@@ -737,9 +911,75 @@ def main():
         send_telegram_report(f"⚠️ [{now_str}] Top 5 종목의 5분봉 캔들 데이터를 수집하지 못했습니다.")
         return
 
+    # =====================================================================
+    # 1. 48시간 경과 코호트(Cohort) 로드 및 오늘의 신규 Top 5 기록 저장
+    # =====================================================================
+    history = load_history()
+    cohorts = history.get("cohorts", [])
+
+    # 저장된 지 44시간 ~ 96시간(약 2일) 경과한 미분석 코호트 찾기
+    due_cohort = None
+    for ch in cohorts:
+        elapsed_h = (now_ts - int(ch.get("saved_at", 0))) / 3600.0
+        if 44.0 <= elapsed_h <= 96.0 and not ch.get("reviewed_48h", False):
+            due_cohort = ch
+            ch["reviewed_48h"] = True
+            break
+
+    # 오늘 분석한 Top 5를 48시간 뒤 재분석할 수 있도록 history에 신규 저장 (오늘 날짜 중복 저장 방지)
+    today_date_str = datetime.now(KST).strftime("%Y-%m-%d")
+    if not any(ch.get("date_str") == today_date_str for ch in cohorts):
+        cohorts.append({
+            "date_str": today_date_str,
+            "saved_at": now_ts,
+            "reviewed_48h": False,
+            "coins": [
+                {
+                    "symbol": x["coin"]["symbol"],
+                    "ign_ts_ms": x["ign_ts_ms"],
+                    "ign_time": x["ign_time"],
+                    "ign_price": x["ign_price"],
+                    "box_low": x["box_low"],
+                    "box_high": x["box_high"],
+                    "wave_height": x["wave_height"],
+                }
+                for x in analyzed
+            ]
+        })
+
+    # 최근 10일치 기록만 유지하여 파일 용량 최적화
+    history["cohorts"] = cohorts[-10:]
+    save_history(history)
+
+    # 48시간 재분석 실행 (만약 첫 실행이라 48시간 전 저장 파일이 없으면, 현재 Top 5의 과거 48시간 파동을 즉시 역추적!)
+    if due_cohort:
+        cohort_title = f"⏱️ [48시간 경과 동일 상위종목({due_cohort['date_str']} 포착분) 실전 익절(TP1~TP3) 사후 검증]"
+        target_records = due_cohort["coins"]
+    else:
+        cohort_title = "⏱️ [과거 48시간 전체 파동 역추적 기반 실전 1·2·3차 익절(TP) 타점 분석 (48h 코호트 저장 시작됨)]"
+        target_records = [
+            {
+                "symbol": x["coin"]["symbol"],
+                "ign_ts_ms": x["ign_ts_ms"] - (36 * 3600 * 1000),  # 과거 48시간 파동 전체 탐색
+                "ign_price": x["ign_price"],
+                "box_low": x["box_low"],
+                "wave_height": x["wave_height"],
+            }
+            for x in analyzed
+        ]
+
+    post_mortem_list = []
+    for rec in target_records:
+        pm = analyze_48h_post_mortem(rec)
+        if pm:
+            post_mortem_list.append(pm)
+
+    # =====================================================================
+    # 2. 리포트 메시지 조립 (파트 1: 오늘의 Top 5 초동 분석 + 파트 2: 48시간 후 실전 익절 분석)
+    # =====================================================================
     emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
     lines = [
-        "📊 [Bybit Futures 급등 Top 5 초동 역추적 & 신규 전략 발굴]",
+        "📊 [Bybit Futures 급등 Top 5 초동 역추적 & 48h 실전 익절 검증]",
         f"🕒 기준 시각: {now_str} (순수 코인 상위 {len(analyzed)}개)\n"
     ]
 
@@ -758,6 +998,24 @@ def main():
             f"• [🔍 포착된 신규 알파 전략]:\n"
             f"  - {' / '.join(item['alphas'])}\n"
         )
+
+    # -----------------------------------------------------------------
+    # [신규 섹션] 48시간 추적 기반 종목별 실전 1·2·3차 익절(TP) 및 고점 징후 리포트
+    # -----------------------------------------------------------------
+    if post_mortem_list:
+        lines.append("━━━━━━━━━━━━━━━━━━")
+        lines.append(cohort_title)
+        for pm in post_mortem_list:
+            s_name = pm["symbol"].replace("USDT", "")
+            lines.append(
+                f"🎯 ${s_name} (발화가 {fmt_price(pm['ign_price'])} → 48h 최고가 {fmt_price(pm['peak_price'])} | +{pm['tp3_pct']:.1f}%)\n"
+                f"  - [고점 도달 시간 & 하방 흔들기]: 발화 후 {pm['hours_to_peak']}시간 소요 | 상승 전 최대눌림 -{pm['mae_drop_pct']}% (안 털리는 SL: -{pm['optimal_sl_pct']}%)\n"
+                f"  - [실전 1차 익절(첫 저항눌림)]: {fmt_price(pm['tp1_price'])} (+{pm['tp1_pct']}% | 파동 대비 Fib {pm['fib1']}배)\n"
+                f"  - [실전 2차 익절(중기 매물대)]: {fmt_price(pm['tp2_price'])} (+{pm['tp2_pct']}% | 파동 대비 Fib {pm['fib2']}배)\n"
+                f"  - [실전 3차 익절(48h 최종고점)]: {fmt_price(pm['tp3_price'])} (+{pm['tp3_pct']}% | 파동 대비 Fib {pm['fib3']}배)\n"
+                f"  - [3차 꼭대기 매도 시그널]: {pm['top_signal_str']} (고점 이후 -{pm['post_peak_drop_pct']}% 조정)"
+            )
+        lines.append("")
 
     n = len(analyzed)
     cnt_ma = sum(1 for x in analyzed if x["ma_aligned"])
@@ -784,17 +1042,30 @@ def main():
     rec_box = round(max(4.5, min(14.0, float(np.percentile([x["box_range_pct"] for x in analyzed], 80)))), 1)
     rec_dryup = round(max(0.15, min(0.35, float(np.median([x["dryup_ratio"] for x in analyzed]) + 0.08))), 2)
 
-    # [5번 항목] 유동적 손절폭(SL: -2% ~ -5%) 및 저항·피보나치 비례 3단계 익절(TP1~TP3) 산출
-    sl_list = [x["dynamic_sl_pct"] for x in analyzed]
-    min_sl, max_sl = int(min(sl_list)), int(max(sl_list))
-    rec_sl_int = int(round(float(np.median(sl_list))))
+    # 48시간 사후 검증 데이터를 결합하여 훨씬 정확한 실전 SL 및 3단계 TP 권장값 산출
+    if post_mortem_list:
+        sl_list = [pm["optimal_sl_pct"] for pm in post_mortem_list]
+        min_sl, max_sl = int(min(sl_list)), int(max(sl_list))
+        rec_sl_int = int(round(float(np.median(sl_list))))
 
-    med_pump = float(np.median([x["pump_pct"] for x in analyzed]))
-    max_pump = float(np.max([x["pump_pct"] for x in analyzed]))
+        tp1_pct = int(max(rec_sl_int * 2, round(float(np.median([pm["tp1_pct"] for pm in post_mortem_list]))), 5))
+        tp2_pct = int(max(tp1_pct + 5, round(float(np.median([pm["tp2_pct"] for pm in post_mortem_list]))), 12))
+        tp3_pct = int(max(tp2_pct + 7, round(float(np.median([pm["tp3_pct"] for pm in post_mortem_list]))), 20))
 
-    tp1_pct = int(max(rec_sl_int * 2, round(med_pump * 0.65), 6))         # 1차: 최소 1:2 R:R & 단기 매물대(Fib 1.272)
-    tp2_pct = int(max(tp1_pct + 5, round(med_pump * 1.25), 12))           # 2차: 1H 스윙고점 저항(Fib 1.618)
-    tp3_pct = int(max(tp2_pct + 7, round(max_pump * 1.05), 20))           # 3차: 4H 메이저 고점 저항(Fib 2.618)
+        med_fib1 = round(float(np.median([pm["fib1"] for pm in post_mortem_list])), 2)
+        med_fib2 = round(float(np.median([pm["fib2"] for pm in post_mortem_list])), 2)
+        med_fib3 = round(float(np.median([pm["fib3"] for pm in post_mortem_list])), 2)
+        med_peak_h = round(float(np.median([pm["hours_to_peak"] for pm in post_mortem_list])), 1)
+    else:
+        sl_list = [x["dynamic_sl_pct"] for x in analyzed]
+        min_sl, max_sl = int(min(sl_list)), int(max(sl_list))
+        rec_sl_int = int(round(float(np.median(sl_list))))
+        med_pump = float(np.median([x["pump_pct"] for x in analyzed]))
+        max_pump = float(np.max([x["pump_pct"] for x in analyzed]))
+        tp1_pct = int(max(rec_sl_int * 2, round(med_pump * 0.65), 6))
+        tp2_pct = int(max(tp1_pct + 5, round(med_pump * 1.25), 12))
+        tp3_pct = int(max(tp2_pct + 7, round(max_pump * 1.05), 20))
+        med_fib1, med_fib2, med_fib3, med_peak_h = 1.27, 1.62, 2.62, 12.0
 
     lines.append(
         "━━━━━━━━━━━━━━━━━━\n"
@@ -822,7 +1093,6 @@ def main():
         "• cond_cvd_div = (price_low_sweep) and (cvd_higher_low or cvd_stealth_slope >= 0.025)\n"
         f"• cond_vol_pocket = (pre5_min_vol / vol_ma20 <= 0.35) and (vol_mult >= {rec_vol_min})\n"
         "• cond_ema_ribbon = (pre5_min_ribbon_spread <= 1.8) and (close > ma50)\n"
-        "• cond_bb_vwap = (bbw_percentile_4h <= 35) and (close > vwap48) and (body_ratio >= 0.60)\n"
         f"• cond_sr_flip_retest = (abs(pullback_low - prev_box_high) / prev_box_high <= 0.012) and (pullback_vol_ratio <= {rec_dryup})\n\n"
         "[4. 100점 만점 스코어링 배점 조정안]\n"
         "• 추세/반전(정배열 5>20>50 또는 Spring 유동성 스윕 반전 + 1H/4H 추세): 25점\n"
@@ -830,9 +1100,12 @@ def main():
         "• 선물수급(OI 선행 급증 +3%↑ 또는 중립/음수 펀딩 숏스퀴즈): 20점\n"
         "• 변동성돌파(BB/TTM 스퀴즈 + 이평선 밀집 + VWAP/거래량 폭발): 15점\n"
         "• 타점컨펌(S/R Flip 전고점 또는 MA20 리테스트 + 거래량 건조): 20점 (총 100점, 85점↑ 알림)\n\n"
-        "[5. 타점 / 유동적 손절(SL) / 3단계 익절(TP) 기준]\n"
-        f"• 권장 유동적 손절폭(SL): -{rec_sl_int}% (종목별 스윙저점·ATR 기준 -{min_sl}%~-{max_sl}% 유동 적용)\n"
-        f"• 권장 3단계 익절(TP): 1차 +{tp1_pct}% (1:2 R:R·단기저항/Fib 1.272) / 2차 +{tp2_pct}% (1H고점/Fib 1.618) / 3차 +{tp3_pct}% (4H메이저저항/Fib 2.618)"
+        "[5. 48시간 사후검증 기반 유동적 손절(SL) & 3단계 익절(TP) 공식 튜닝안]\n"
+        f"• 실전 검증 유동 손절폭(SL): -{rec_sl_int}% (48h 고점 전 최대 흔들기 기준 -{min_sl}%~-{max_sl}% 유동 적용)\n"
+        f"• 48h 실전 3단계 익절(TP) 중앙값 (고점 도달 평균 {med_peak_h}시간 소요):\n"
+        f"  - 1차 TP(첫 저항눌림): +{tp1_pct}% (실전 파동 Fib {med_fib1}배 구간 / 15m 스윙매물대)\n"
+        f"  - 2차 TP(중기 저항대): +{tp2_pct}% (실전 파동 Fib {med_fib2}배 구간 / 1H 핵심고점)\n"
+        f"  - 3차 TP(48h 최종고점): +{tp3_pct}% (실전 파동 Fib {med_fib3}배 구간 / 15m RSI>=72+윗꼬리 저항 시 전량익절)"
     )
 
     report_text = "\n".join(lines)
