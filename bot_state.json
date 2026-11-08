@@ -505,6 +505,27 @@
       ],
       "breakout_alerted": false,
       "sl_alerted": false
+    },
+    "UNIUSDT": {
+      "created_at": 1794097053,
+      "track_type": "TRACK_B",
+      "swing_high_line": 7.325254999999999,
+      "entry_low": 7.180915000000001,
+      "entry_high": 7.238651,
+      "stop_price": 7.0655873399999995,
+      "sl_pct": 2,
+      "tps": [
+        7.587520336868546,
+        8.184125181414458,
+        9.818390020081496
+      ],
+      "tp_pcts": [
+        5.2,
+        13.5,
+        36.2
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
