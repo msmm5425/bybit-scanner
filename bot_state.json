@@ -232,22 +232,22 @@
       "sl_alerted": false
     },
     "MEGAUSDT": {
-      "created_at": 1794095077,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.05075,
-      "entry_low": 0.04970000000000001,
-      "entry_high": 0.05010000000000001,
-      "stop_price": 0.048902000000000015,
+      "created_at": 1794131386,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.051764999999999985,
+      "entry_low": 0.05074499999999999,
+      "entry_high": 0.05115299999999998,
+      "stop_price": 0.049930019999999985,
       "sl_pct": 2,
       "tps": [
-        0.052070394307445964,
-        0.056139078102482,
-        0.06393969859887913
+        0.054388905781941575,
+        0.05706287999999999,
+        0.06375207125225578
       ],
       "tp_pcts": [
-        4.3,
-        12.5,
-        28.1
+        6.8,
+        12.0,
+        25.1
       ],
       "breakout_alerted": true,
       "sl_alerted": false
@@ -355,6 +355,48 @@
         21.8
       ],
       "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "BLENDUSDT": {
+      "created_at": 1794131386,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.057979797979797985,
+      "entry_low": 0.056658,
+      "entry_high": 0.057114000000000005,
+      "stop_price": 0.055748280000000004,
+      "sl_pct": 2,
+      "tps": [
+        0.05953969208080809,
+        0.06496316682828282,
+        0.07693211026262625
+      ],
+      "tp_pcts": [
+        4.7,
+        14.2,
+        35.2
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "ENAUSDT": {
+      "created_at": 1794131386,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.15630999999999998,
+      "entry_low": 0.15323,
+      "entry_high": 0.154462,
+      "stop_price": 0.15076907999999997,
+      "sl_pct": 2,
+      "tps": [
+        0.16225484,
+        0.1738516,
+        0.18471982
+      ],
+      "tp_pcts": [
+        5.5,
+        13.0,
+        20.1
+      ],
+      "breakout_alerted": true,
       "sl_alerted": false
     }
   }
