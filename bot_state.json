@@ -63,27 +63,6 @@
       "breakout_alerted": true,
       "sl_alerted": false
     },
-    "METUSDT": {
-      "created_at": 1794072451,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.30754499999999996,
-      "entry_low": 0.301485,
-      "entry_high": 0.303909,
-      "stop_price": 0.29664306,
-      "sl_pct": 2,
-      "tps": [
-        0.3188255912473822,
-        0.3355158401897906,
-        0.38350703456151836
-      ],
-      "tp_pcts": [
-        5.3,
-        10.8,
-        26.7
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": false
-    },
     "SIRENUSDT": {
       "created_at": 1794122787,
       "track_type": "TRACK_A",
@@ -169,24 +148,24 @@
       "sl_alerted": false
     },
     "PIEVERSEUSDT": {
-      "created_at": 1794089311,
-      "track_type": "TRACK_B",
-      "swing_high_line": 1.4392699999999998,
-      "entry_low": 1.4109099999999999,
-      "entry_high": 1.4222539999999997,
-      "stop_price": 1.3882503599999998,
+      "created_at": 1794138191,
+      "track_type": "TRACK_A",
+      "swing_high_line": 1.5089027519448255,
+      "entry_low": 1.46615,
+      "entry_high": 1.47795,
+      "stop_price": 1.442609,
       "sl_pct": 2,
       "tps": [
-        1.510083254854281,
-        1.6767361170038912,
-        1.8469666782746363
+        1.5538494304682517,
+        1.6273391739603837,
+        1.8123836951579622
       ],
       "tp_pcts": [
-        6.6,
-        18.4,
-        30.4
+        5.6,
+        10.5,
+        23.1
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "ETHFIUSDT": {
@@ -437,6 +416,27 @@
         7.9,
         16.4,
         35.7
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
+    },
+    "XRPUSDT": {
+      "created_at": 1794138191,
+      "track_type": "TRACK_B",
+      "swing_high_line": 1.182475,
+      "entry_low": 1.159175,
+      "entry_high": 1.1684949999999998,
+      "stop_price": 1.1405583,
+      "sl_pct": 2,
+      "tps": [
+        1.2423965130449708,
+        1.2954809998283556,
+        1.3911959216821148
+      ],
+      "tp_pcts": [
+        6.8,
+        11.3,
+        19.5
       ],
       "breakout_alerted": true,
       "sl_alerted": false
