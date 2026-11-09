@@ -377,6 +377,28 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "ZECUSDT": {
+      "created_at": 1794225904,
+      "track_type": "TRACK_A",
+      "swing_high_line": 1224.9019999999998,
+      "entry_low": 1199.5592,
+      "entry_high": 1209.2136,
+      "stop_price": 1156.210944,
+      "sl_pct": 4,
+      "tps": [
+        1288.6722921020296,
+        1377.9144250900965,
+        1506.3867442048506
+      ],
+      "tp_pcts": [
+        7.0,
+        14.4,
+        25.1
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
