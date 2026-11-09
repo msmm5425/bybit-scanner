@@ -798,6 +798,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "LITUSDT": {
+      "created_at": 1794255303,
+      "track_type": "TRACK_A",
+      "swing_high_line": 3.3129599999999995,
+      "entry_low": 3.2444159999999997,
+      "entry_high": 3.2705279999999997,
+      "stop_price": 3.1271731199999997,
+      "sl_pct": 4,
+      "tps": [
+        3.5308262937062933,
+        3.875425035830951,
+        4.160917844840377
+      ],
+      "tp_pcts": [
+        8.4,
+        19.0,
+        27.7
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
