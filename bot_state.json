@@ -1,26 +1,5 @@
 {
   "tracked": {
-    "PIEVERSEUSDT": {
-      "created_at": 1794143662,
-      "track_type": "TRACK_B",
-      "swing_high_line": 1.5267123397169025,
-      "entry_low": 1.4944899999999999,
-      "entry_high": 1.5065059999999997,
-      "stop_price": 1.4704880399999998,
-      "sl_pct": 2,
-      "tps": [
-        1.5678227670401066,
-        1.6663671285320896,
-        1.8110025441446793
-      ],
-      "tp_pcts": [
-        4.5,
-        11.1,
-        20.7
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": true
-    },
     "DOGEUSDT": {
       "created_at": 1794187500,
       "track_type": "TRACK_B",
@@ -229,7 +208,7 @@
         19.1
       ],
       "breakout_alerted": false,
-      "sl_alerted": false
+      "sl_alerted": true
     },
     "MERLUSDT": {
       "created_at": 1794206453,
