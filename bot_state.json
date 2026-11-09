@@ -251,6 +251,27 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "MEGAUSDT": {
+      "created_at": 1794215404,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.05176499999999999,
+      "entry_low": 0.050745,
+      "entry_high": 0.05115299999999999,
+      "stop_price": 0.04789205999999999,
+      "sl_pct": 6,
+      "tps": [
+        0.057379654225170725,
+        0.061630575734634145,
+        0.06628464899999999
+      ],
+      "tp_pcts": [
+        12.6,
+        21.0,
+        30.1
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
