@@ -465,6 +465,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "ZAMAUSDT": {
+      "created_at": 1794231904,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.070035,
+      "entry_low": 0.06865500000000001,
+      "entry_high": 0.069207,
+      "stop_price": 0.06617376,
+      "sl_pct": 4,
+      "tps": [
+        0.07387710324656334,
+        0.08064225597543137,
+        0.08783993618309449
+      ],
+      "tp_pcts": [
+        7.2,
+        17.0,
+        27.4
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
