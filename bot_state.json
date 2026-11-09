@@ -21,27 +21,6 @@
       "breakout_alerted": true,
       "sl_alerted": false
     },
-    "ENAUSDT": {
-      "created_at": 1794148263,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.155295,
-      "entry_low": 0.152082,
-      "entry_high": 0.153306,
-      "stop_price": 0.14964012,
-      "sl_pct": 2,
-      "tps": [
-        0.16093997095623988,
-        0.170700508006483,
-        0.1832229008752026
-      ],
-      "tp_pcts": [
-        5.4,
-        11.8,
-        20.0
-      ],
-      "breakout_alerted": false,
-      "sl_alerted": true
-    },
     "RSRUSDT": {
       "created_at": 1794162273,
       "track_type": "TRACK_A",
