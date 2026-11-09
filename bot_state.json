@@ -820,6 +820,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "HANAUSDT": {
+      "created_at": 1794256804,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.017308909730363427,
+      "entry_low": 0.016915,
+      "entry_high": 0.017051,
+      "stop_price": 0.01596402,
+      "sl_pct": 6,
+      "tps": [
+        0.018933697983587346,
+        0.020327276869871055,
+        0.021571364014067996
+      ],
+      "tp_pcts": [
+        11.5,
+        19.7,
+        27.0
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
