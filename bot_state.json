@@ -190,24 +190,24 @@
       "sl_alerted": false
     },
     "ARBUSDT": {
-      "created_at": 1794222303,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.17965499999999995,
-      "entry_low": 0.17593799999999996,
-      "entry_high": 0.17735399999999996,
-      "stop_price": 0.16958015999999995,
+      "created_at": 1794223504,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.17965499999999998,
+      "entry_low": 0.176115,
+      "entry_high": 0.17753099999999997,
+      "stop_price": 0.16975007999999997,
       "sl_pct": 4,
       "tps": [
-        0.19209672604037778,
-        0.2026303339048804,
-        0.21868774799999996
+        0.1919841341745854,
+        0.20232202263334834,
+        0.21837640499999994
       ],
       "tp_pcts": [
-        8.7,
-        14.7,
-        23.8
+        8.6,
+        14.4,
+        23.5
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "INITUSDT": {
@@ -253,24 +253,24 @@
       "sl_alerted": false
     },
     "BIRBUSDT": {
-      "created_at": 1794223204,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.09658869602032177,
-      "entry_low": 0.094525,
-      "entry_high": 0.095285,
-      "stop_price": 0.08921069999999999,
+      "created_at": 1794223504,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.09584587623394544,
+      "entry_low": 0.093436,
+      "entry_high": 0.094188,
+      "stop_price": 0.08818328,
       "sl_pct": 6,
       "tps": [
-        0.10586849068585945,
-        0.11558230101608807,
-        0.12394139606265876
+        0.10505430421399001,
+        0.10983681428298485,
+        0.12298821908502282
       ],
       "tp_pcts": [
-        11.6,
-        21.8,
-        30.6
+        12.0,
+        17.1,
+        31.1
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "ENAUSDT": {
@@ -316,24 +316,24 @@
       "sl_alerted": false
     },
     "ETHUSDT": {
-      "created_at": 1794223385,
-      "track_type": "TRACK_A",
+      "created_at": 1794223504,
+      "track_type": "TRACK_B",
       "swing_high_line": 2137.996,
-      "entry_low": 2093.7616000000003,
-      "entry_high": 2110.6128,
-      "stop_price": 2060.1434560000002,
+      "entry_low": 2095.868,
+      "entry_high": 2112.7192,
+      "stop_price": 2062.207728,
       "sl_pct": 2,
       "tps": [
-        2243.0435902846502,
-        2422.381875205539,
-        2662.503617845706
+        2250.293656861089,
+        2430.2116070684715,
+        2671.109482026411
       ],
       "tp_pcts": [
-        6.7,
-        15.2,
-        26.7
+        6.9,
+        15.5,
+        26.9
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "RENDERUSDT": {
