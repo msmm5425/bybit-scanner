@@ -85,24 +85,24 @@
       "sl_alerted": false
     },
     "INJUSDT": {
-      "created_at": 1794196959,
-      "track_type": "TRACK_A",
-      "swing_high_line": 8.337209999999999,
-      "entry_low": 8.164716,
-      "entry_high": 8.230428,
-      "stop_price": 8.033620560000001,
+      "created_at": 1794200511,
+      "track_type": "TRACK_B",
+      "swing_high_line": 8.34939,
+      "entry_low": 8.18487,
+      "entry_high": 8.250678,
+      "stop_price": 8.053418520000001,
       "sl_pct": 2,
       "tps": [
-        8.576090492690058,
-        9.39390017010234,
-        10.717216800219301
+        8.601194323572477,
+        9.364447900770134,
+        10.599486051575404
       ],
       "tp_pcts": [
-        4.6,
-        14.6,
-        30.7
+        4.7,
+        14.0,
+        29.0
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "XRPUSDT": {
