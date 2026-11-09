@@ -686,6 +686,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "ETHFIUSDT": {
+      "created_at": 1794248104,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.630315,
+      "entry_low": 0.617895,
+      "entry_high": 0.6228629999999999,
+      "stop_price": 0.59556384,
+      "sl_pct": 4,
+      "tps": [
+        0.6711357794688992,
+        0.7556035143401665,
+        0.812076111
+      ],
+      "tp_pcts": [
+        8.2,
+        21.8,
+        30.9
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
