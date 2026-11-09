@@ -664,6 +664,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "VVVUSDT": {
+      "created_at": 1794244204,
+      "track_type": "TRACK_B",
+      "swing_high_line": 21.647919999999996,
+      "entry_low": 21.22136,
+      "entry_high": 21.391983999999997,
+      "stop_price": 20.454405119999997,
+      "sl_pct": 4,
+      "tps": [
+        22.920219809505937,
+        24.979192590762075,
+        26.68500822830761
+      ],
+      "tp_pcts": [
+        7.6,
+        17.2,
+        25.2
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
