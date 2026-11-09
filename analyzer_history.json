@@ -51,6 +51,58 @@
           "wave_height": 3.91e-05
         }
       ]
+    },
+    {
+      "date_str": "2026-11-09",
+      "saved_at": 1794200023,
+      "reviewed_48h": false,
+      "coins": [
+        {
+          "symbol": "JCTUSDT",
+          "ign_ts_ms": 1794168300000,
+          "ign_time": "11/09 05:05 KST",
+          "ign_price": 0.02066,
+          "box_low": 0.012473,
+          "box_high": 0.016259,
+          "wave_height": 0.008187000000000002
+        },
+        {
+          "symbol": "HANAUSDT",
+          "ign_ts_ms": 1794198600000,
+          "ign_time": "11/09 13:30 KST",
+          "ign_price": 0.01909,
+          "box_low": 0.01459,
+          "box_high": 0.01837,
+          "wave_height": 0.004499999999999999
+        },
+        {
+          "symbol": "RSRUSDT",
+          "ign_ts_ms": 1794167400000,
+          "ign_time": "11/09 04:50 KST",
+          "ign_price": 0.001732,
+          "box_low": 0.001661,
+          "box_high": 0.001722,
+          "wave_height": 7.10000000000001e-05
+        },
+        {
+          "symbol": "ICNTUSDT",
+          "ign_ts_ms": 1794164700000,
+          "ign_time": "11/09 04:05 KST",
+          "ign_price": 0.3667661777394305,
+          "box_low": 0.3566284153005464,
+          "box_high": 0.36546131722749486,
+          "wave_height": 0.01013776243888409
+        },
+        {
+          "symbol": "MERLUSDT",
+          "ign_ts_ms": 1794162300000,
+          "ign_time": "11/09 03:25 KST",
+          "ign_price": 0.029241204437400952,
+          "box_low": 0.028681141045958796,
+          "box_high": 0.029300158478605384,
+          "wave_height": 0.0007310301109350239
+        }
+      ]
     }
   ]
 }
