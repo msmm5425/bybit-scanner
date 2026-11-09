@@ -842,6 +842,50 @@
       "sl_alerted": true,
       "tp3_completed": false,
       "sl_at": 1794257704
+    },
+    "STONKUSDT": {
+      "created_at": 1794263404,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.053794999999999996,
+      "entry_low": 0.052682,
+      "entry_high": 0.053106,
+      "stop_price": 0.04972035999999999,
+      "sl_pct": 6,
+      "tps": [
+        0.059377793483822425,
+        0.06443854334838224,
+        0.07439586869826938
+      ],
+      "tp_pcts": [
+        12.3,
+        21.8,
+        40.7
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
+    },
+    "NXPCUSDT": {
+      "created_at": 1794263404,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.15907692307692306,
+      "entry_low": 0.153076,
+      "entry_high": 0.154308,
+      "stop_price": 0.14447047999999998,
+      "sl_pct": 6,
+      "tps": [
+        0.17271126081447954,
+        0.18258251945701343,
+        0.20740034993665157
+      ],
+      "tp_pcts": [
+        12.4,
+        18.8,
+        34.9
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
