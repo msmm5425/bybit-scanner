@@ -356,6 +356,48 @@
       ],
       "breakout_alerted": false,
       "sl_alerted": false
+    },
+    "HYPEUSDT": {
+      "created_at": 1794223804,
+      "track_type": "TRACK_B",
+      "swing_high_line": 74.94049499999998,
+      "entry_low": 73.463835,
+      "entry_high": 74.05449899999999,
+      "stop_price": 70.80880031999999,
+      "sl_pct": 4,
+      "tps": [
+        79.86070441918629,
+        85.0745258479521,
+        93.56927676162047
+      ],
+      "tp_pcts": [
+        8.3,
+        15.3,
+        26.9
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
+    },
+    "SOLUSDT": {
+      "created_at": 1794223804,
+      "track_type": "TRACK_B",
+      "swing_high_line": 88.27454999999999,
+      "entry_low": 86.53515,
+      "entry_high": 87.23091,
+      "stop_price": 84.2765391,
+      "sl_pct": 3,
+      "tps": [
+        93.43041651511209,
+        98.49053064742212,
+        106.67678858922214
+      ],
+      "tp_pcts": [
+        7.5,
+        13.4,
+        22.8
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
