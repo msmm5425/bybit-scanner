@@ -21,27 +21,6 @@
       "breakout_alerted": true,
       "sl_alerted": true
     },
-    "MEGAUSDT": {
-      "created_at": 1794131386,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.051764999999999985,
-      "entry_low": 0.05074499999999999,
-      "entry_high": 0.05115299999999998,
-      "stop_price": 0.049930019999999985,
-      "sl_pct": 2,
-      "tps": [
-        0.054388905781941575,
-        0.05706287999999999,
-        0.06375207125225578
-      ],
-      "tp_pcts": [
-        6.8,
-        12.0,
-        25.1
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": false
-    },
     "DOGEUSDT": {
       "created_at": 1794187500,
       "track_type": "TRACK_B",
@@ -62,27 +41,6 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
-    },
-    "BLENDUSDT": {
-      "created_at": 1794131386,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.057979797979797985,
-      "entry_low": 0.056658,
-      "entry_high": 0.057114000000000005,
-      "stop_price": 0.055748280000000004,
-      "sl_pct": 2,
-      "tps": [
-        0.05953969208080809,
-        0.06496316682828282,
-        0.07693211026262625
-      ],
-      "tp_pcts": [
-        4.7,
-        14.2,
-        35.2
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": true
     },
     "ENAUSDT": {
       "created_at": 1794148263,
@@ -127,24 +85,24 @@
       "sl_alerted": false
     },
     "INJUSDT": {
-      "created_at": 1794136105,
-      "track_type": "TRACK_B",
-      "swing_high_line": 8.334164999999999,
-      "entry_low": 8.169945,
-      "entry_high": 8.235633,
-      "stop_price": 8.03873322,
+      "created_at": 1794196959,
+      "track_type": "TRACK_A",
+      "swing_high_line": 8.337209999999999,
+      "entry_low": 8.164716,
+      "entry_high": 8.230428,
+      "stop_price": 8.033620560000001,
       "sl_pct": 2,
       "tps": [
-        8.849260612749696,
-        9.54466863685005,
-        11.13052294795034
+        8.576090492690058,
+        9.39390017010234,
+        10.717216800219301
       ],
       "tp_pcts": [
-        7.9,
-        16.4,
-        35.7
+        4.6,
+        14.6,
+        30.7
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "XRPUSDT": {
@@ -169,24 +127,24 @@
       "sl_alerted": true
     },
     "QNTUSDT": {
-      "created_at": 1794140315,
-      "track_type": "TRACK_B",
-      "swing_high_line": 202.63459999999998,
-      "entry_low": 198.6418,
-      "entry_high": 200.23891999999995,
-      "stop_price": 195.45155279999997,
+      "created_at": 1794196959,
+      "track_type": "TRACK_A",
+      "swing_high_line": 202.1677,
+      "entry_low": 197.98492000000002,
+      "entry_high": 199.57836,
+      "stop_price": 194.8060072,
       "sl_pct": 2,
       "tps": [
-        210.87492277315135,
-        226.7187279363098,
-        252.355953119414
+        209.39872910965136,
+        218.82943635655988,
+        253.02142529722485
       ],
       "tp_pcts": [
-        5.7,
-        13.7,
-        26.5
+        5.3,
+        10.1,
+        27.3
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "TAOUSDT": {
@@ -269,6 +227,27 @@
         6.2,
         13.1,
         21.9
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "WLDUSDT": {
+      "created_at": 1794196959,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.327845,
+      "entry_low": 0.321062,
+      "entry_high": 0.323646,
+      "stop_price": 0.31590692000000004,
+      "sl_pct": 2,
+      "tps": [
+        0.3424636070763501,
+        0.36419418854996893,
+        0.3840834903786468
+      ],
+      "tp_pcts": [
+        6.2,
+        13.0,
+        19.1
       ],
       "breakout_alerted": false,
       "sl_alerted": false
