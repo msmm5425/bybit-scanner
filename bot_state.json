@@ -421,6 +421,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "CHIPUSDT": {
+      "created_at": 1794229503,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.0356453471622011,
+      "entry_low": 0.03479,
+      "entry_high": 0.035070000000000004,
+      "stop_price": 0.0335328,
+      "sl_pct": 4,
+      "tps": [
+        0.03759820518582542,
+        0.04069712313454337,
+        0.04450027657735524
+      ],
+      "tp_pcts": [
+        7.6,
+        16.5,
+        27.4
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
