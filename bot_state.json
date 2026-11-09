@@ -105,27 +105,6 @@
       "breakout_alerted": true,
       "sl_alerted": false
     },
-    "XRPUSDT": {
-      "created_at": 1794138191,
-      "track_type": "TRACK_B",
-      "swing_high_line": 1.182475,
-      "entry_low": 1.159175,
-      "entry_high": 1.1684949999999998,
-      "stop_price": 1.1405583,
-      "sl_pct": 2,
-      "tps": [
-        1.2423965130449708,
-        1.2954809998283556,
-        1.3911959216821148
-      ],
-      "tp_pcts": [
-        6.8,
-        11.3,
-        19.5
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": true
-    },
     "QNTUSDT": {
       "created_at": 1794196959,
       "track_type": "TRACK_A",
