@@ -620,6 +620,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "LDOUSDT": {
+      "created_at": 1794237304,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.333935,
+      "entry_low": 0.32702600000000004,
+      "entry_high": 0.329658,
+      "stop_price": 0.31520832,
+      "sl_pct": 4,
+      "tps": [
+        0.35141684088834807,
+        0.3712413264462596,
+        0.4094355815150594
+      ],
+      "tp_pcts": [
+        7.0,
+        13.1,
+        24.7
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
