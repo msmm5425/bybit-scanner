@@ -333,10 +333,13 @@ def fetch_klines_for_week(symbol, interval="1h", ref_price=0.0, limit=200):
     return df
 
 
-def extract_all_signals_from_git_and_state(start_ts, end_ts, pure_crypto_bases, rwa_blocked_bases):
+def extract_unique_signals_from_git_and_state(start_ts, end_ts, pure_crypto_bases, rwa_blocked_bases):
     """
+    [1종목 1신호 원칙]
     Git 히스토리와 bot_state.json에서 주간 신호를 복원하되,
-    1) 주식/TradFi 종목(RKLB, APPSTOCK, COHR, MRNA 등)은 100% 제거합니다.
+    1) 주식/TradFi 종목은 100% 배제하고,
+    2) 동일 종목(symbol)이 여러 번 기록되어 있더라도 최초 포착 신호 1개로 통합하여
+       리포트에 동일 종목이 2번 표기되는 현상을 원천 제거합니다.
     """
     snapshots = []
 
@@ -371,7 +374,8 @@ def extract_all_signals_from_git_and_state(start_ts, end_ts, pure_crypto_bases, 
         except Exception:
             pass
 
-    raw_signals_by_key = {}
+    # 종목(symbol)당 단 1개의 대표 신호만 유지 (시간순 최초 진입 기준)
+    signals_by_symbol = {}
     for snap in snapshots:
         tracked = snap.get("tracked", {})
         if not isinstance(tracked, dict):
@@ -386,7 +390,7 @@ def extract_all_signals_from_git_and_state(start_ts, end_ts, pure_crypto_bases, 
             base_coin = sym[:-4]
             clean_base = strip_multiplier_prefix(base_coin)
 
-            # [핵심 1: 순수 코인 검증] 주식/TradFi 블랙리스트 및 RWA 종목 원천 배제
+            # 순수 코인 검증
             if is_tradfi_ticker(base_coin) or base_coin in rwa_blocked_bases or clean_base in rwa_blocked_bases:
                 continue
             if pure_crypto_bases and (base_coin not in pure_crypto_bases and clean_base not in pure_crypto_bases):
@@ -396,19 +400,11 @@ def extract_all_signals_from_git_and_state(start_ts, end_ts, pure_crypto_bases, 
             if not (start_ts <= created_at <= end_ts):
                 continue
 
-            matched_key = None
-            for k, existing in raw_signals_by_key.items():
-                if existing["symbol"] == sym and abs(existing["created_at"] - created_at) < 21600:
-                    matched_key = k
-                    break
-
-            # 과거 4단계 TP 기록이 있더라도 3차 익절 기준(앞 3개)으로 정규화
             raw_tps = [to_float(x) for x in (info.get("tps") or [])][:3]
             raw_tp_pcts = [to_float(x) for x in (info.get("tp_pcts") or [])][:3]
 
-            if matched_key is None:
-                key = f"{sym}_{created_at}"
-                raw_signals_by_key[key] = {
+            if sym not in signals_by_symbol:
+                signals_by_symbol[sym] = {
                     "symbol": sym,
                     "created_at": created_at,
                     "track_type": info.get("track_type", "TRACK_A"),
@@ -421,183 +417,166 @@ def extract_all_signals_from_git_and_state(start_ts, end_ts, pure_crypto_bases, 
                     "sl_alerted": bool(info.get("sl_alerted", False)),
                 }
             else:
+                # 더 이른 시각의 신호가 있다면 최초 신호 시각으로 고정
+                if created_at < signals_by_symbol[sym]["created_at"]:
+                    signals_by_symbol[sym]["created_at"] = created_at
+                    signals_by_symbol[sym]["entry_low"] = to_float(info.get("entry_low"))
+                    signals_by_symbol[sym]["entry_high"] = to_float(info.get("entry_high"))
+                    signals_by_symbol[sym]["stop_price"] = to_float(info.get("stop_price"))
+                    signals_by_symbol[sym]["sl_pct"] = abs(to_float(info.get("sl_pct"), default=3.0))
+                    signals_by_symbol[sym]["tps"] = raw_tps
+                    signals_by_symbol[sym]["tp_pcts"] = raw_tp_pcts
                 if info.get("sl_alerted"):
-                    raw_signals_by_key[matched_key]["sl_alerted"] = True
+                    signals_by_symbol[sym]["sl_alerted"] = True
 
-    sorted_signals = sorted(raw_signals_by_key.values(), key=lambda x: x["created_at"])
+    sorted_signals = sorted(signals_by_symbol.values(), key=lambda x: x["created_at"])
     return sorted_signals
 
 
-def evaluate_and_deduplicate_symbol_signals(sym_signals, end_ts):
+def evaluate_single_coin(sig):
     """
-    [핵심 2: 동일 종목 중복 알림 제거 및 3분류(익절 / 손절 / 보유중 현재가) 정밀 판정]
-    동일 종목에서 여러 번 신호가 발생했더라도, 첫 신호가 '손절(SL)' 또는 '3차 최종 익절(TP3)'로
-    종결되기 전에 발생한 중복 신호는 모두 무시합니다!
+    단일 종목의 알림 발생 시각(created_at)부터 현재 최신 캔들까지의 전체 궤적을 추적하여:
+    1) 알림 이후 도달한 실제 최고점 기준 최고수익률(max_surge_pct) 산출
+    2) 1·2·3차 익절 달성 / 손절 이탈 / 보유중(현재가 기준) 3분류 판정
     """
-    if not sym_signals:
-        return []
+    sym = sig["symbol"]
+    created_ms = sig["created_at"] * 1000
 
-    sym = sym_signals[0]["symbol"]
-    first_entry = (sym_signals[0]["entry_low"] + sym_signals[0]["entry_high"]) / 2.0
-    if first_entry <= 0:
-        first_entry = max(sym_signals[0]["entry_low"], sym_signals[0]["entry_high"])
+    entry_low = sig["entry_low"]
+    entry_high = sig["entry_high"]
+    avg_entry = (entry_low + entry_high) / 2.0 if (entry_low > 0 and entry_high > 0) else max(entry_low, entry_high)
+    sl_pct = sig["sl_pct"] if sig["sl_pct"] > 0 else 3.0
+    tp_pcts = [round(to_float(p), 1) for p in sig["tp_pcts"][:3] if to_float(p) > 0]
+    if not tp_pcts:
+        tp_pcts = [round(sl_pct * 2.0, 1), round(sl_pct * 3.5, 1), round(sl_pct * 5.0, 1)]
+    while len(tp_pcts) < 3:
+        tp_pcts.append(round(tp_pcts[-1] * 1.4, 1))
 
-    # 해당 종목의 1시간봉(200시간) 및 15분봉(50시간) 캔들 한 번에 로드
-    df_1h = fetch_klines_for_week(sym, interval="1h", ref_price=first_entry, limit=200)
-    df_15m = fetch_klines_for_week(sym, interval="15m", ref_price=first_entry, limit=200)
+    df_1h = fetch_klines_for_week(sym, interval="1h", ref_price=avg_entry, limit=200)
+    df_15m = fetch_klines_for_week(sym, interval="15m", ref_price=avg_entry, limit=200)
 
     frames = [d for d in (df_1h, df_15m) if not d.empty]
     if frames:
         df_all = pd.concat(frames, ignore_index=True).sort_values("timestamp").reset_index(drop=True)
+        # 알림 시각 이후부터 현재 최신 캔들까지 전체 추출
+        post_df = df_all[df_all["timestamp"] >= created_ms - 900_000].copy().reset_index(drop=True)
     else:
-        df_all = pd.DataFrame()
+        post_df = pd.DataFrame()
 
-    valid_results = []
-    locked_until_ms = 0  # 이 시각 전까지 발생한 동일 종목 재알림은 무시(손절 전 재알림 차단)
-
-    for sig in sym_signals:
-        created_ms = sig["created_at"] * 1000
-        # 이전 포지션이 아직 손절/종결되지 않은 상태에서 들어온 중복 알림이면 즉시 건너뜀!
-        if created_ms < locked_until_ms:
-            continue
-
-        end_ms = end_ts * 1000
-        entry_low = sig["entry_low"]
-        entry_high = sig["entry_high"]
-        avg_entry = (entry_low + entry_high) / 2.0 if (entry_low > 0 and entry_high > 0) else max(entry_low, entry_high)
-        stop_price = sig["stop_price"]
-        sl_pct = sig["sl_pct"] if sig["sl_pct"] > 0 else 3.0
-        tps = sig["tps"][:3]
-        tp_pcts = sig["tp_pcts"][:3]
-
-        if not df_all.empty and avg_entry > 0:
-            post_df = df_all[(df_all["timestamp"] >= created_ms - 900_000) & (df_all["timestamp"] <= end_ms + 3_600_000)].copy()
-        else:
-            post_df = pd.DataFrame()
-
-        # 캔들 데이터가 없는 예외 케이스
-        if post_df.empty or avg_entry <= 0:
-            if sig["sl_alerted"]:
-                valid_results.append({
-                    "symbol": sym,
-                    "status": "LOSS",
-                    "pct": -round(sl_pct, 1),
-                    "max_surge_pct": 0.0,
-                    "tp_stage": 0,
-                    "note": "손절선 이탈",
-                    "created_at": sig["created_at"]
-                })
-                locked_until_ms = created_ms + (6 * 3600 * 1000)
-            else:
-                valid_results.append({
-                    "symbol": sym,
-                    "status": "HOLDING",
-                    "pct": 0.0,
-                    "max_surge_pct": 0.0,
-                    "tp_stage": 0,
-                    "note": "보유중·1차 미달",
-                    "created_at": sig["created_at"]
-                })
-                locked_until_ms = float("inf")
-            continue
-
-        # 시간순(Chronological) 궤적 추적
-        highest_tp_idx = -1
-        sl_hit_first = False
-        sl_hit_ts_ms = 0
-        tp3_hit_ts_ms = 0
-        max_high_price = avg_entry
-
-        for _, row in post_df.iterrows():
-            c_ts = int(row["timestamp"])
-            c_high = to_float(row["high"], default=avg_entry)
-            c_low = to_float(row["low"], default=avg_entry)
-
-            if c_high > max_high_price:
-                max_high_price = c_high
-
-            # 1차 익절(TP1) 도달 전에 손절선(stop_price)이 먼저 깨졌는지 확인
-            if highest_tp_idx == -1 and stop_price > 0 and c_low <= stop_price:
-                if not (tps and c_high >= tps[0] and to_float(row["close"]) >= to_float(row["open"])):
-                    sl_hit_first = True
-                    sl_hit_ts_ms = c_ts
-                    break
-
-            # 1차 -> 2차 -> 3차 익절 도달 체크
-            for idx in range(len(tps)):
-                if tps[idx] > 0 and c_high >= tps[idx]:
-                    if idx > highest_tp_idx:
-                        highest_tp_idx = idx
-
-            # 3차 최종 익절(TP3) 달성 시 해당 포지션 목표 완수
-            if len(tps) >= 3 and highest_tp_idx >= 2:
-                tp3_hit_ts_ms = c_ts
-                break
-
-        max_surge_pct = max(0.0, round(((max_high_price - avg_entry) / avg_entry) * 100.0, 1))
-        current_price = to_float(df_all["close"].iloc[-1], default=avg_entry)
-        curr_pnl_pct = round(((current_price - avg_entry) / avg_entry) * 100.0, 1)
-
-        # -----------------------------------------------------------------
-        # 분류 1: 🟢 익절 달성 종목 (최소 1차 익절 이상 도달, 최종 목표는 3차 익절)
-        # -----------------------------------------------------------------
-        if highest_tp_idx >= 0 and highest_tp_idx < len(tp_pcts):
-            tp_stage = highest_tp_idx + 1
-            achieved_pct = round(to_float(tp_pcts[highest_tp_idx]), 1)
-            if tp_stage >= 3:
-                stage_note = "🎯 3차 최종목표 달성!"
-                # 3차 최종 익절 완료 후에도 최소 12시간 후부터만 신규 진입 허용
-                locked_until_ms = tp3_hit_ts_ms + (12 * 3600 * 1000) if tp3_hit_ts_ms > 0 else float("inf")
-            elif tp_stage == 2:
-                stage_note = "2차 익절 달성 (3차 미달)"
-                locked_until_ms = float("inf")  # 아직 3차 목표 진행 중이므로 재알림 잠금 유지
-            else:
-                stage_note = "1차 익절 달성 (3차 미달)"
-                locked_until_ms = float("inf")
-
-            valid_results.append({
-                "symbol": sym,
-                "status": "WIN",
-                "pct": achieved_pct,
-                "max_surge_pct": max(achieved_pct, max_surge_pct),
-                "tp_stage": tp_stage,
-                "note": stage_note,
-                "created_at": sig["created_at"]
-            })
-
-        # -----------------------------------------------------------------
-        # 분류 2: 🔴 손절 이탈 종목 (1차 익절 도달 전 손절가 이탈)
-        # -----------------------------------------------------------------
-        elif sl_hit_first or sig["sl_alerted"]:
-            valid_results.append({
+    if post_df.empty or avg_entry <= 0:
+        if sig["sl_alerted"]:
+            return {
                 "symbol": sym,
                 "status": "LOSS",
                 "pct": -round(sl_pct, 1),
-                "max_surge_pct": max_surge_pct,
+                "max_surge_pct": 0.0,
                 "tp_stage": 0,
                 "note": "손절선 이탈",
                 "created_at": sig["created_at"]
-            })
-            # 손절된 시각 이후에 나온 신호만 유효한 재진입으로 인정!
-            locked_until_ms = sl_hit_ts_ms + 1800_000 if sl_hit_ts_ms > 0 else (created_ms + 6 * 3600 * 1000)
+            }
+        return {
+            "symbol": sym,
+            "status": "HOLDING",
+            "pct": 0.0,
+            "max_surge_pct": 0.0,
+            "tp_stage": 0,
+            "note": "보유중·1차 미달",
+            "created_at": sig["created_at"]
+        }
 
-        # -----------------------------------------------------------------
-        # 분류 3: 🟡 보유/진행 중 종목 (1차 익절도 손절도 안 닿음 -> 무조건 현재가 기준!)
-        # -----------------------------------------------------------------
+    # 거래소 간 미세 가격 편차 보정: 알림 시점 첫 캔들의 시가/종가와 진입가 편차가 3% 이내면 진입가에 정밀 정렬
+    first_bar_close = to_float(post_df["close"].iloc[0], default=avg_entry)
+    if first_bar_close > 0 and 0.97 <= (avg_entry / first_bar_close) <= 1.03:
+        fine_scale = avg_entry / first_bar_close
+        for col in ["open", "high", "low", "close"]:
+            post_df[col] = post_df[col] * fine_scale
+
+    # 알림 이후 현재까지 도달한 전체 최고가 및 최고수익률(%) 계산 (중간에 멈추지 않고 끝까지 측정)
+    overall_max_high = max(to_float(post_df["high"].max(), default=avg_entry), avg_entry)
+    overall_max_surge_pct = round(((overall_max_high - avg_entry) / avg_entry) * 100.0, 1)
+
+    current_price = to_float(post_df["close"].iloc[-1], default=avg_entry)
+    curr_pnl_pct = round(((current_price - avg_entry) / avg_entry) * 100.0, 1)
+
+    # 시간순(Chronological) 궤적 시뮬레이션: 1차 익절 도달 전 손절선이 먼저 깨졌는지, 몇 차 익절까지 도달했는지 판정
+    highest_tp_idx = -1
+    sl_hit_first = False
+
+    for _, row in post_df.iterrows():
+        c_high = to_float(row["high"], default=avg_entry)
+        c_low = to_float(row["low"], default=avg_entry)
+        high_gain_pct = ((c_high - avg_entry) / avg_entry) * 100.0
+        low_drop_pct = ((avg_entry - c_low) / avg_entry) * 100.0
+
+        # 아직 1차 익절(TP1)에 도달하기 전에 손절폭(-sl_pct)에 먼저 도달했는지 확인
+        if highest_tp_idx == -1 and low_drop_pct >= sl_pct:
+            # 같은 캔들에서 양봉으로 TP1을 먼저 찍은 경우가 아니면 손절 처리
+            if not (high_gain_pct >= tp_pcts[0] and to_float(row["close"]) >= to_float(row["open"])):
+                sl_hit_first = True
+                break
+
+        # 1차 -> 2차 -> 3차 익절 도달 여부 업데이트 (루프를 끊지 않고 끝까지 최고 도달 단계 추적)
+        for idx, target_pct in enumerate(tp_pcts):
+            if high_gain_pct >= target_pct and idx > highest_tp_idx:
+                highest_tp_idx = idx
+
+    # 만약 실시간 현재가 수익률(curr_pnl_pct)이 이미 TP 단계 이상이면 해당 단계 달성으로 반영
+    if not sl_hit_first:
+        for idx, target_pct in enumerate(tp_pcts):
+            if curr_pnl_pct >= target_pct and idx > highest_tp_idx:
+                highest_tp_idx = idx
+
+    # -----------------------------------------------------------------
+    # 1) 🟢 익절 달성 종목 (1차 이상 익절 달성, 최종 목표: 3차 익절)
+    # -----------------------------------------------------------------
+    if highest_tp_idx >= 0:
+        tp_stage = highest_tp_idx + 1
+        achieved_pct = round(tp_pcts[highest_tp_idx], 1)
+        true_max_surge = max(overall_max_surge_pct, achieved_pct, curr_pnl_pct)
+
+        if tp_stage >= 3:
+            stage_note = "🎯 3차 최종목표 달성!"
+        elif tp_stage == 2:
+            stage_note = "2차 익절 달성 (3차 미달)"
         else:
-            valid_results.append({
-                "symbol": sym,
-                "status": "HOLDING",
-                "pct": curr_pnl_pct,
-                "max_surge_pct": max_surge_pct,
-                "tp_stage": 0,
-                "note": "보유중·1차 미달",
-                "created_at": sig["created_at"]
-            })
-            # 아직 손절되지 않고 보유 중인 종목이므로 이후 모든 중복 신호 원천 차단!
-            locked_until_ms = float("inf")
+            stage_note = "1차 익절 달성 (3차 미달)"
 
-    return valid_results
+        return {
+            "symbol": sym,
+            "status": "WIN",
+            "pct": achieved_pct,
+            "max_surge_pct": round(true_max_surge, 1),
+            "tp_stage": tp_stage,
+            "note": stage_note,
+            "created_at": sig["created_at"]
+        }
+
+    # -----------------------------------------------------------------
+    # 2) 🔴 손절 이탈 종목 (1차 익절 도달 전 손절가 이탈 또는 현재가가 손절폭 이하)
+    # -----------------------------------------------------------------
+    if sl_hit_first or sig["sl_alerted"] or curr_pnl_pct <= -sl_pct:
+        return {
+            "symbol": sym,
+            "status": "LOSS",
+            "pct": -round(sl_pct, 1),
+            "max_surge_pct": overall_max_surge_pct,
+            "tp_stage": 0,
+            "note": "손절선 이탈",
+            "created_at": sig["created_at"]
+        }
+
+    # -----------------------------------------------------------------
+    # 3) 🟡 보유/진행 중 종목 (1차 익절도 손절도 미도달 -> 실시간 현재가 기준)
+    # -----------------------------------------------------------------
+    return {
+        "symbol": sym,
+        "status": "HOLDING",
+        "pct": curr_pnl_pct,
+        "max_surge_pct": overall_max_surge_pct,
+        "tp_stage": 0,
+        "note": "보유중·1차 미달",
+        "created_at": sig["created_at"]
+    }
 
 
 def get_target_week_window(now_dt):
@@ -621,14 +600,14 @@ def main():
     end_ts = int(last_sun.timestamp())
     period_label = f"{last_mon.strftime('%Y-%m-%d(월) 00:00')} ~ {last_sun.strftime('%Y-%m-%d(일) 23:59')} KST"
 
-    signals = extract_all_signals_from_git_and_state(start_ts, end_ts, pure_crypto_bases, rwa_blocked_bases)
+    signals = extract_unique_signals_from_git_and_state(start_ts, end_ts, pure_crypto_bases, rwa_blocked_bases)
 
     if not signals:
         alt_start_dt = this_mon if (now_dt - this_mon).total_seconds() >= 3600 else (now_dt - timedelta(days=7))
         start_ts = int(alt_start_dt.timestamp())
         end_ts = int(now_dt.timestamp())
         period_label = f"{alt_start_dt.strftime('%Y-%m-%d %H:%M')} ~ {now_dt.strftime('%Y-%m-%d %H:%M')} KST (실시간 누적)"
-        signals = extract_all_signals_from_git_and_state(start_ts, end_ts, pure_crypto_bases, rwa_blocked_bases)
+        signals = extract_unique_signals_from_git_and_state(start_ts, end_ts, pure_crypto_bases, rwa_blocked_bases)
 
     if not signals:
         send_telegram_report(
@@ -638,22 +617,14 @@ def main():
         )
         return
 
-    # 종목(symbol)별로 그룹화하여 손절 전 중복 알림을 완벽히 제거하며 병렬 평가
-    grouped_by_sym = {}
-    for s in signals:
-        grouped_by_sym.setdefault(s["symbol"], []).append(s)
-
     all_results = []
     with ThreadPoolExecutor(max_workers=6) as executor:
-        f_map = {
-            executor.submit(evaluate_and_deduplicate_symbol_signals, sym_sigs, end_ts): sym
-            for sym, sym_sigs in grouped_by_sym.items()
-        }
+        f_map = {executor.submit(evaluate_single_coin, sig): sig["symbol"] for sig in signals}
         for future in as_completed(f_map):
             try:
-                res_list = future.result()
-                if res_list:
-                    all_results.extend(res_list)
+                res = future.result()
+                if res:
+                    all_results.append(res)
             except Exception as e:
                 print(f"[종목 평가 예외] {e}")
 
@@ -661,8 +632,8 @@ def main():
     loss_list = [r for r in all_results if r["status"] == "LOSS"]
     hold_list = [r for r in all_results if r["status"] == "HOLDING"]
 
-    # 정렬: 익절은 달성 단계 및 수익률 높은 순 / 손절은 손실률 순 / 보유중은 현재가 수익률 높은 순
-    win_list.sort(key=lambda x: (x["tp_stage"], x["pct"]), reverse=True)
+    # 정렬: 익절은 달성 단계 및 최고수익률 순 / 손절은 손실률 순 / 보유중은 현재 수익률 순
+    win_list.sort(key=lambda x: (x["tp_stage"], x["pct"], x["max_surge_pct"]), reverse=True)
     loss_list.sort(key=lambda x: x["pct"])
     hold_list.sort(key=lambda x: x["pct"], reverse=True)
 
@@ -678,7 +649,6 @@ def main():
     closed_cnt = win_cnt + loss_cnt
     closed_win_rate = (win_cnt / closed_cnt * 100.0) if closed_cnt > 0 else 0.0
 
-    # 수익률 및 손실률 합산 (확정 손익 + 보유 종목 현재가 반영 합산)
     realized_profit_pct = round(sum(r["pct"] for r in win_list), 1)
     realized_loss_pct = round(sum(abs(r["pct"]) for r in loss_list), 1)
     realized_net_pct = round(realized_profit_pct - realized_loss_pct, 1)
@@ -691,10 +661,10 @@ def main():
     total_net_all = round(total_profit_all - total_loss_all, 1)
 
     # =====================================================================
-    # 리포트 메시지 조립 (순수 코인 + 3분류 + 3차 달성여부 & 최고 상승률 병기)
+    # 리포트 메시지 조립 (종목명 중복 표기 제거 + 익절 종목만 알림후 최고수익률 표기)
     # =====================================================================
     lines = [
-        "📅 [Bybit 스캐너 순수 코인 주간 성과 결산 (중복알림 제거 완료)]",
+        "📅 [Bybit 스캐너 순수 코인 주간 성과 결산]",
         f"🕒 집계 기간: {period_label}",
         f"🕒 발송 시각: {now_str}\n",
         f"🟢 [1. 익절 달성 종목 (최종목표: 3차 익절)] ({win_cnt}종목 | 3차달성 {tp3_cnt}·2차 {tp2_cnt}·1차 {tp1_cnt})"
@@ -705,8 +675,8 @@ def main():
             short_sym = w["symbol"].replace("USDT", "")
             dt_str = datetime.fromtimestamp(w["created_at"], tz=KST).strftime("%m/%d")
             lines.append(
-                f"• ${short_sym} ({w['symbol']} | {dt_str}): +{fmt_pct(w['pct'])}% "
-                f"({w['note']} | 최고 +{fmt_pct(w['max_surge_pct'])}%)"
+                f"• ${short_sym} ({dt_str}): +{fmt_pct(w['pct'])}% "
+                f"({w['note']} | 알림후 최고 +{fmt_pct(w['max_surge_pct'])}%)"
             )
     else:
         lines.append("• 익절 달성 종목 없음")
@@ -717,8 +687,7 @@ def main():
             short_sym = l_item["symbol"].replace("USDT", "")
             dt_str = datetime.fromtimestamp(l_item["created_at"], tz=KST).strftime("%m/%d")
             lines.append(
-                f"• ${short_sym} ({l_item['symbol']} | {dt_str}): -{fmt_pct(abs(l_item['pct']))}% "
-                f"({l_item['note']} | 최고 +{fmt_pct(l_item['max_surge_pct'])}%)"
+                f"• ${short_sym} ({dt_str}): -{fmt_pct(abs(l_item['pct']))}% ({l_item['note']})"
             )
     else:
         lines.append("• 손절 이탈 종목 없음")
@@ -730,8 +699,7 @@ def main():
             dt_str = datetime.fromtimestamp(h_item["created_at"], tz=KST).strftime("%m/%d")
             sign = "+" if h_item["pct"] >= 0 else "-"
             lines.append(
-                f"• ${short_sym} ({h_item['symbol']} | {dt_str}): 현재 {sign}{fmt_pct(abs(h_item['pct']))}% "
-                f"({h_item['note']} | 최고 +{fmt_pct(h_item['max_surge_pct'])}%)"
+                f"• ${short_sym} ({dt_str}): 현재 {sign}{fmt_pct(abs(h_item['pct']))}% ({h_item['note']})"
             )
     else:
         lines.append("• 현재 보유/진행 중인 종목 없음")
@@ -741,8 +709,8 @@ def main():
 
     lines.append(
         "\n━━━━━━━━━━━━━━━━━━\n"
-        "📊 [4. 일주일 합산 최종 성적표 (순수 코인 기준)]\n"
-        f"• 총 신호 종목 수(중복제거): {total_cnt}개 (익절 {win_cnt} / 손절 {loss_cnt} / 보유중 {hold_cnt})\n"
+        "📊 [4. 일주일 합산 최종 성적표 (순수 코인·단일 종목 기준)]\n"
+        f"• 총 신호 종목 수: {total_cnt}개 (익절 {win_cnt} / 손절 {loss_cnt} / 보유중 {hold_cnt})\n"
         f"• 3차 최종목표 달성: {tp3_cnt}개 | 2차 달성: {tp2_cnt}개 | 1차 달성: {tp1_cnt}개\n"
         f"• 확정 종목 성공률(승률): {closed_win_rate:.1f}% ({win_cnt}승 {loss_cnt}패)\n"
         f"• [확정 손익 계산(익절-손절)]: +{fmt_pct(realized_profit_pct)}% - {fmt_pct(realized_loss_pct)}% = {r_sign}{fmt_pct(realized_net_pct)}%\n"
