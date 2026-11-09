@@ -708,6 +708,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "PYTHUSDT": {
+      "created_at": 1794251530,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.06699,
+      "entry_low": 0.06567,
+      "entry_high": 0.06619799999999999,
+      "stop_price": 0.06263729999999999,
+      "sl_pct": 5,
+      "tps": [
+        0.07188003595245354,
+        0.07620401619628163,
+        0.08221969799999998
+      ],
+      "tp_pcts": [
+        9.0,
+        15.6,
+        24.7
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
