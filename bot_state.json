@@ -316,24 +316,24 @@
       "sl_alerted": false
     },
     "ETHUSDT": {
-      "created_at": 1794223204,
-      "track_type": "TRACK_B",
-      "swing_high_line": 2137.96555,
-      "entry_low": 2095.83815,
-      "entry_high": 2112.68911,
-      "stop_price": 2062.1783574,
+      "created_at": 1794223385,
+      "track_type": "TRACK_A",
+      "swing_high_line": 2137.996,
+      "entry_low": 2093.7616000000003,
+      "entry_high": 2110.6128,
+      "stop_price": 2060.1434560000002,
       "sl_pct": 2,
       "tps": [
-        2242.7162889817528,
-        2422.02840514936,
-        2662.1151096121325
+        2243.0435902846502,
+        2422.381875205539,
+        2662.503617845706
       ],
       "tp_pcts": [
-        6.6,
-        15.1,
-        26.5
+        6.7,
+        15.2,
+        26.7
       ],
-      "breakout_alerted": true,
+      "breakout_alerted": false,
       "sl_alerted": false
     },
     "RENDERUSDT": {
