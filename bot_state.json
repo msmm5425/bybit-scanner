@@ -487,6 +487,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "B2USDT": {
+      "created_at": 1794232204,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.4750332167832168,
+      "entry_low": 0.451276,
+      "entry_high": 0.45490800000000003,
+      "stop_price": 0.42590648000000003,
+      "sl_pct": 6,
+      "tps": [
+        0.5007223063513986,
+        0.5372587897430069,
+        0.5826371021153846
+      ],
+      "tp_pcts": [
+        10.5,
+        18.6,
+        28.6
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
