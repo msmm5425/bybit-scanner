@@ -251,6 +251,27 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false
+    },
+    "ARBUSDT": {
+      "created_at": 1794207303,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.17660999999999996,
+      "entry_low": 0.17312999999999998,
+      "entry_high": 0.17452199999999998,
+      "stop_price": 0.16687296,
+      "sl_pct": 4,
+      "tps": [
+        0.1877546963997488,
+        0.19675822266094878,
+        0.21311067599999997
+      ],
+      "tp_pcts": [
+        8.0,
+        13.2,
+        22.6
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false
     }
   }
 }
