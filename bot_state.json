@@ -399,6 +399,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "BATUSDT": {
+      "created_at": 1794228903,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.128905,
+      "entry_low": 0.126238,
+      "entry_high": 0.127254,
+      "stop_price": 0.12167615999999999,
+      "sl_pct": 4,
+      "tps": [
+        0.13669960332098086,
+        0.15084003185366238,
+        0.16048963664748087
+      ],
+      "tp_pcts": [
+        7.9,
+        19.0,
+        26.6
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
