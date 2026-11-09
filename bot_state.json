@@ -295,24 +295,24 @@
       "sl_alerted": false
     },
     "AAVEUSDT": {
-      "created_at": 1794221104,
-      "track_type": "TRACK_A",
+      "created_at": 1794221403,
+      "track_type": "TRACK_B",
       "swing_high_line": 133.44205,
-      "entry_low": 130.68118,
-      "entry_high": 131.73293999999999,
-      "stop_price": 125.9587776,
+      "entry_low": 130.81265,
+      "entry_high": 131.86441,
+      "stop_price": 126.08498879999999,
       "sl_pct": 4,
       "tps": [
-        140.79788189570894,
-        151.84165926330354,
-        163.74641088
+        140.72258891073798,
+        151.76046051503437,
+        163.64780838
       ],
       "tp_pcts": [
-        7.3,
-        15.7,
-        24.8
+        7.1,
+        15.5,
+        24.6
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     }
   }
