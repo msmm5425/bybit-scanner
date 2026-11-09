@@ -752,6 +752,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "AVAXUSDT": {
+      "created_at": 1794253504,
+      "track_type": "TRACK_B",
+      "swing_high_line": 8.634604999999999,
+      "entry_low": 8.464464999999999,
+      "entry_high": 8.532521,
+      "stop_price": 7.988583419999999,
+      "sl_pct": 6,
+      "tps": [
+        9.503729576992761,
+        10.34271780358627,
+        11.116028844
+      ],
+      "tp_pcts": [
+        11.8,
+        21.7,
+        30.8
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
