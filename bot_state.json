@@ -148,24 +148,24 @@
       "sl_alerted": false
     },
     "1000PEPEUSDT": {
-      "created_at": 1794152618,
-      "track_type": "TRACK_A",
+      "created_at": 1794206453,
+      "track_type": "TRACK_B",
       "swing_high_line": 0.005075,
-      "entry_low": 0.0049700000000000005,
-      "entry_high": 0.00501,
-      "stop_price": 0.0048902,
-      "sl_pct": 2,
+      "entry_low": 0.004975,
+      "entry_high": 0.0050149999999999995,
+      "stop_price": 0.0047452499999999995,
+      "sl_pct": 5,
       "tps": [
-        0.005235458316870802,
-        0.005653376238640854,
-        0.006329618830501779
+        0.0055174582248717135,
+        0.006028193370385073,
+        0.00648351
       ],
       "tp_pcts": [
-        4.9,
-        13.3,
-        26.8
+        10.5,
+        20.7,
+        29.8
       ],
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false
     },
     "SUIUSDT": {
@@ -229,6 +229,27 @@
         19.1
       ],
       "breakout_alerted": false,
+      "sl_alerted": false
+    },
+    "MERLUSDT": {
+      "created_at": 1794206453,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.031465,
+      "entry_low": 0.030845,
+      "entry_high": 0.031092999999999996,
+      "stop_price": 0.029110859999999995,
+      "sl_pct": 6,
+      "tps": [
+        0.03479560896034339,
+        0.03934262875471699,
+        0.042148808999999995
+      ],
+      "tp_pcts": [
+        12.4,
+        27.0,
+        36.1
+      ],
+      "breakout_alerted": true,
       "sl_alerted": false
     }
   }
