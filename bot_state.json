@@ -886,6 +886,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "JUPUSDT": {
+      "created_at": 1794271504,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.25577999999999995,
+      "entry_low": 0.250488,
+      "entry_high": 0.252504,
+      "stop_price": 0.24143615999999998,
+      "sl_pct": 4,
+      "tps": [
+        0.2696191307139858,
+        0.2859738351152658,
+        0.3110978691110233
+      ],
+      "tp_pcts": [
+        7.2,
+        13.7,
+        23.7
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
