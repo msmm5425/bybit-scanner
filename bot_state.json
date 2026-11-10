@@ -974,6 +974,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "XRPUSDT": {
+      "created_at": 1794282603,
+      "track_type": "TRACK_B",
+      "swing_high_line": 1.10838,
+      "entry_low": 1.0895976,
+      "entry_high": 1.0926552,
+      "stop_price": 1.0583926080000001,
+      "sl_pct": 3,
+      "tps": [
+        1.179137,
+        1.2426098,
+        1.3239468
+      ],
+      "tp_pcts": [
+        8.1,
+        13.9,
+        21.3
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
