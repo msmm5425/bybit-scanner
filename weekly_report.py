@@ -115,6 +115,11 @@ def fmt_pct(val):
     return f"{int(v)}" if v == int(v) else f"{v:.1f}"
 
 
+def fmt_track(track_type):
+    """TRACK_A / TRACK_B를 한글 약칭(1차선취매 / 2차돌파)으로 변환"""
+    return "2차돌파" if str(track_type).upper() == "TRACK_B" else "1차선취매"
+
+
 def send_telegram_report(text):
     print(text)
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -228,10 +233,7 @@ def fetch_bybit_fast(path, params=None):
 
 
 def parse_and_validate_df(rows, created_ms, ref_price):
-    """
-    수집된 캔들이 바이비트 알림 당시 진입가(ref_price)와 실제로 일치하는 동일 코인인지 검증합니다.
-    ($JCT처럼 타 거래소에 동명이인 코인이 있어 +553%로 튀는 현상을 100% 방지)
-    """
+    """수집된 캔들이 바이비트 알림 당시 진입가(ref_price)와 실제로 일치하는 동일 코인인지 검증"""
     if not rows:
         return pd.DataFrame()
 
@@ -251,7 +253,6 @@ def parse_and_validate_df(rows, created_ms, ref_price):
     if ref_price <= 0:
         return df
 
-    # 1000PEPE 등 단위 배수 보정
     last_close = to_float(df["close"].iloc[-1])
     if last_close > 0:
         ratio = ref_price / last_close
@@ -261,15 +262,12 @@ def parse_and_validate_df(rows, created_ms, ref_price):
                     df[col] = df[col] * mult
                 break
 
-    # 알림 발생 시점(created_ms) 근처 캔들의 가격과 진입가(ref_price)가 일치하는지 검증
     near_df = df[(df["timestamp"] >= created_ms - 3_600_000) & (df["timestamp"] <= created_ms + 3_600_000)]
     if not near_df.empty:
         anchor_price = to_float(near_df["close"].iloc[0])
-        # 만약 알림 시점 가격이 진입가와 15% 이상 차이 나면 동명이인 다른 코인이므로 즉시 폐기!
         if anchor_price <= 0 or not (0.85 <= (anchor_price / ref_price) <= 1.15):
             return pd.DataFrame()
     else:
-        # 최근 가격이라도 진입가 대비 비정상적(0.4배 미만 또는 2.5배 초과)이면 폐기
         if last_close <= 0 or not (0.40 <= (to_float(df["close"].iloc[-1]) / ref_price) <= 2.50):
             return pd.DataFrame()
 
@@ -277,14 +275,11 @@ def parse_and_validate_df(rows, created_ms, ref_price):
 
 
 def fetch_verified_15m_klines(symbol, created_ms, ref_price, limit=750):
-    """
-    이종 거래소 혼합(concat)으로 인한 가격 튐 현상을 막기 위해,
-    진입가 정합성 검증을 통과한 단일 거래소의 15분봉(최대 750캔들 = 7.8일치)만 반환합니다.
-    """
+    """진입가 정합성 검증을 통과한 단일 거래소의 15분봉(최대 750캔들 = 7.8일치)만 반환"""
     base_coin = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
     clean_base = strip_multiplier_prefix(base_coin)
 
-    # 1순위: Gate.io USDT Futures (최대 750개 15분봉 = 7.8일치)
+    # 1순위: Gate.io USDT Futures
     for base_try in [base_coin, clean_base]:
         try:
             r = requests.get(
@@ -306,7 +301,7 @@ def fetch_verified_15m_klines(symbol, created_ms, ref_price, limit=750):
         except Exception:
             pass
 
-    # 2순위: Binance Vision Public Data (최대 750개 15분봉)
+    # 2순위: Binance Vision Public Data
     for sym_try in [symbol, f"{clean_base}USDT"]:
         try:
             r = requests.get(
@@ -325,7 +320,7 @@ def fetch_verified_15m_klines(symbol, created_ms, ref_price, limit=750):
         except Exception:
             pass
 
-    # 3순위: Bybit V5 API 프록시 (바이비트 원본 데이터 최대 750개)
+    # 3순위: Bybit V5 API 프록시
     res = fetch_bybit_fast("/v5/market/kline", {
         "category": "linear",
         "symbol": symbol,
@@ -338,7 +333,7 @@ def fetch_verified_15m_klines(symbol, created_ms, ref_price, limit=750):
         if not df.empty:
             return df
 
-    # 4순위: Bitget USDT-FUTURES (15분봉 200개 또는 1시간봉 200개)
+    # 4순위: Bitget USDT-FUTURES
     for gran in ["15m", "1H"]:
         for sym_try in [symbol, f"{clean_base}USDT"]:
             try:
@@ -433,7 +428,7 @@ def extract_signal_episodes_by_symbol(start_ts, end_ts, pure_crypto_bases, rwa_b
                 episodes_by_key[key] = {
                     "symbol": sym,
                     "created_at": created_at,
-                    "track_type": info.get("track_type", "TRACK_A"),
+                    "track_type": str(info.get("track_type", "TRACK_A")).upper(),
                     "entry_low": to_float(info.get("entry_low")),
                     "entry_high": to_float(info.get("entry_high")),
                     "stop_price": to_float(info.get("stop_price")),
@@ -454,13 +449,6 @@ def extract_signal_episodes_by_symbol(start_ts, end_ts, pure_crypto_bases, rwa_b
 
 
 def evaluate_symbol_episodes_to_single_result(sym_episodes):
-    """
-    [완벽 교정]
-    1) 알림 발생 시각(created_ms)부터 '현재 시각'까지 전 구간을 빈틈없이 추적합니다.
-    2) 손절폭(-sl_pct, 지난주 기본 -2%)에 한 번이라도 닿았거나 현재가가 -sl_pct 이하이면
-       절대 '보유중'에 남기지 않고 100% '🔴 손절 이탈'로 판정합니다.
-    3) 1차 익절폭(tp_pcts[0]) 이상 올랐거나 현재가가 1차 익절 이상이면 100% '🟢 익절 달성'으로 판정합니다.
-    """
     if not sym_episodes:
         return None
 
@@ -469,6 +457,7 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
 
     for sig in sym_episodes:
         created_ms = sig["created_at"] * 1000
+        track_type = sig.get("track_type", "TRACK_A")
         entry_low = sig["entry_low"]
         entry_high = sig["entry_high"]
         avg_entry = (entry_low + entry_high) / 2.0 if (entry_low > 0 and entry_high > 0) else max(entry_low, entry_high)
@@ -487,7 +476,6 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
 
         df = fetch_verified_15m_klines(sym, created_ms, avg_entry, limit=750)
         if not df.empty and avg_entry > 0:
-            # 알림 시각 이후부터 현재 시각까지 모든 캔들 추적 (일요일 밤에서 끊지 않음!)
             post_df = df[df["timestamp"] >= created_ms - 600_000].copy().reset_index(drop=True)
         else:
             post_df = pd.DataFrame()
@@ -496,6 +484,7 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
             if sig["sl_alerted"]:
                 ep_results.append({
                     "symbol": sym,
+                    "track_type": track_type,
                     "status": "LOSS",
                     "pct": -round(sl_pct, 1),
                     "max_surge_pct": 0.0,
@@ -506,6 +495,7 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
             else:
                 ep_results.append({
                     "symbol": sym,
+                    "track_type": track_type,
                     "status": "HOLDING",
                     "pct": 0.0,
                     "max_surge_pct": 0.0,
@@ -515,7 +505,6 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
                 })
             continue
 
-        # 알림 이후 최고점 수익률(%) 및 현재가 수익률(%)
         overall_max_high = max(to_float(post_df["high"].max(), default=avg_entry), avg_entry)
         overall_max_surge_pct = max(0.0, round(((overall_max_high - avg_entry) / avg_entry) * 100.0, 1))
 
@@ -532,18 +521,15 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
             high_gain_pct = ((c_high - avg_entry) / avg_entry) * 100.0
             low_drop_pct = ((avg_entry - c_low) / avg_entry) * 100.0
 
-            # 1차 익절(TP1) 도달 전에 손절 기준(stop_price 또는 -sl_pct)에 먼저 도달했는지 검사
             if c_ts >= created_ms and highest_tp_idx == -1 and (c_low <= stop_price or low_drop_pct >= sl_pct):
                 if not (high_gain_pct >= tp_pcts[0] and to_float(row["close"]) >= to_float(row["open"])):
                     sl_hit_first = True
                     break
 
-            # 1차 -> 2차 -> 3차 익절 도달 여부 업데이트
             for idx in range(3):
                 if (c_high >= tps[idx] or high_gain_pct >= tp_pcts[idx]) and idx > highest_tp_idx:
                     highest_tp_idx = idx
 
-        # [하드 컷오프 안전장치]: 현재가(curr_pnl_pct)가 이미 TP 이상이거나 -sl_pct 이하인 경우 강제 보정
         if not sl_hit_first:
             for idx in range(3):
                 if curr_pnl_pct >= tp_pcts[idx] and idx > highest_tp_idx:
@@ -551,7 +537,7 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
             if highest_tp_idx == -1 and curr_pnl_pct <= -sl_pct:
                 sl_hit_first = True
 
-        # 1) 🟢 익절 달성 (1차 TP 이상 도달)
+        # 1) 🟢 익절 달성
         if highest_tp_idx >= 0:
             tp_stage = highest_tp_idx + 1
             achieved_pct = round(to_float(tp_pcts[highest_tp_idx]), 1)
@@ -566,6 +552,7 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
 
             ep_results.append({
                 "symbol": sym,
+                "track_type": track_type,
                 "status": "WIN",
                 "pct": achieved_pct,
                 "max_surge_pct": round(true_max_surge, 1),
@@ -574,10 +561,11 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
                 "created_at": sig["created_at"]
             })
 
-        # 2) 🔴 손절 이탈 (1차 익절 전 손절선 이탈 또는 현재가 <= -sl_pct)
+        # 2) 🔴 손절 이탈
         elif sl_hit_first or sig["sl_alerted"] or curr_pnl_pct <= -sl_pct:
             ep_results.append({
                 "symbol": sym,
+                "track_type": track_type,
                 "status": "LOSS",
                 "pct": -round(sl_pct, 1),
                 "max_surge_pct": overall_max_surge_pct,
@@ -586,10 +574,11 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
                 "created_at": sig["created_at"]
             })
 
-        # 3) 🟡 보유/진행 중 종목 (반드시 -sl_pct 초과 ~ +tp1_pct 미만 구간에만 존재!)
+        # 3) 🟡 보유/진행 중 종목
         else:
             ep_results.append({
                 "symbol": sym,
+                "track_type": track_type,
                 "status": "HOLDING",
                 "pct": curr_pnl_pct,
                 "max_surge_pct": overall_max_surge_pct,
@@ -598,13 +587,11 @@ def evaluate_symbol_episodes_to_single_result(sym_episodes):
                 "created_at": sig["created_at"]
             })
 
-    # 동일 코인에 여러 에피소드가 있었다면 가장 최신 에피소드(단, 이미 익절 성공한 에피소드가 있으면 익절 우선) 1개만 반환
     wins = [r for r in ep_results if r["status"] == "WIN"]
     if wins:
         wins.sort(key=lambda x: (x["tp_stage"], x["pct"], x["max_surge_pct"]), reverse=True)
         return wins[0]
 
-    # 가장 최근 신호 결과 반환
     ep_results.sort(key=lambda x: x["created_at"], reverse=True)
     return ep_results[0]
 
@@ -681,6 +668,17 @@ def main():
     closed_cnt = win_cnt + loss_cnt
     closed_win_rate = (win_cnt / closed_cnt * 100.0) if closed_cnt > 0 else 0.0
 
+    # 트랙별(1차선취매 vs 2차돌파) 성과 집계
+    a_wins = sum(1 for r in win_list if r.get("track_type") != "TRACK_B")
+    a_losses = sum(1 for r in loss_list if r.get("track_type") != "TRACK_B")
+    a_holds = sum(1 for r in hold_list if r.get("track_type") != "TRACK_B")
+    a_rate = (a_wins / (a_wins + a_losses) * 100.0) if (a_wins + a_losses) > 0 else 0.0
+
+    b_wins = sum(1 for r in win_list if r.get("track_type") == "TRACK_B")
+    b_losses = sum(1 for r in loss_list if r.get("track_type") == "TRACK_B")
+    b_holds = sum(1 for r in hold_list if r.get("track_type") == "TRACK_B")
+    b_rate = (b_wins / (b_wins + b_losses) * 100.0) if (b_wins + b_losses) > 0 else 0.0
+
     realized_profit_pct = round(sum(r["pct"] for r in win_list), 1)
     realized_loss_pct = round(sum(abs(r["pct"]) for r in loss_list), 1)
     realized_net_pct = round(realized_profit_pct - realized_loss_pct, 1)
@@ -693,7 +691,7 @@ def main():
     total_net_all = round(total_profit_all - total_loss_all, 1)
 
     # =====================================================================
-    # 리포트 메시지 조립 (종목명 1회 표기 + 익절 종목만 알림후 최고수익률 표기)
+    # 리포트 메시지 조립 (1차선취매 / 2차돌파 표기 + 트랙별 승률 비교 포함)
     # =====================================================================
     lines = [
         "📅 [Bybit 스캐너 순수 코인 주간 성과 결산]",
@@ -706,8 +704,9 @@ def main():
         for w in win_list:
             short_sym = w["symbol"].replace("USDT", "")
             dt_str = datetime.fromtimestamp(w["created_at"], tz=KST).strftime("%m/%d")
+            t_label = fmt_track(w.get("track_type"))
             lines.append(
-                f"• ${short_sym} ({dt_str}): +{fmt_pct(w['pct'])}% "
+                f"• ${short_sym} ({dt_str}·{t_label}): +{fmt_pct(w['pct'])}% "
                 f"({w['note']} | 알림후 최고 +{fmt_pct(w['max_surge_pct'])}%)"
             )
     else:
@@ -718,8 +717,9 @@ def main():
         for l_item in loss_list:
             short_sym = l_item["symbol"].replace("USDT", "")
             dt_str = datetime.fromtimestamp(l_item["created_at"], tz=KST).strftime("%m/%d")
+            t_label = fmt_track(l_item.get("track_type"))
             lines.append(
-                f"• ${short_sym} ({dt_str}): -{fmt_pct(abs(l_item['pct']))}% ({l_item['note']})"
+                f"• ${short_sym} ({dt_str}·{t_label}): -{fmt_pct(abs(l_item['pct']))}% ({l_item['note']})"
             )
     else:
         lines.append("• 손절 이탈 종목 없음")
@@ -729,9 +729,10 @@ def main():
         for h_item in hold_list:
             short_sym = h_item["symbol"].replace("USDT", "")
             dt_str = datetime.fromtimestamp(h_item["created_at"], tz=KST).strftime("%m/%d")
+            t_label = fmt_track(h_item.get("track_type"))
             sign = "+" if h_item["pct"] >= 0 else "-"
             lines.append(
-                f"• ${short_sym} ({dt_str}): 현재 {sign}{fmt_pct(abs(h_item['pct']))}% ({h_item['note']})"
+                f"• ${short_sym} ({dt_str}·{t_label}): 현재 {sign}{fmt_pct(abs(h_item['pct']))}% ({h_item['note']})"
             )
     else:
         lines.append("• 현재 보유/진행 중인 종목 없음")
@@ -744,7 +745,8 @@ def main():
         "📊 [4. 일주일 합산 최종 성적표 (순수 코인·단일 종목 기준)]\n"
         f"• 총 신호 종목 수: {total_cnt}개 (익절 {win_cnt} / 손절 {loss_cnt} / 보유중 {hold_cnt})\n"
         f"• 3차 최종목표 달성: {tp3_cnt}개 | 2차 달성: {tp2_cnt}개 | 1차 달성: {tp1_cnt}개\n"
-        f"• 확정 종목 성공률(승률): {closed_win_rate:.1f}% ({win_cnt}승 {loss_cnt}패)\n"
+        f"• 전체 확정 승률: {closed_win_rate:.1f}% ({win_cnt}승 {loss_cnt}패)\n"
+        f"• 트랙별 승률: 1차선취매 {a_rate:.1f}%({a_wins}승 {a_losses}패·보유 {a_holds}) | 2차돌파 {b_rate:.1f}%({b_wins}승 {b_losses}패·보유 {b_holds})\n"
         f"• [확정 손익 계산(익절-손절)]: +{fmt_pct(realized_profit_pct)}% - {fmt_pct(realized_loss_pct)}% = {r_sign}{fmt_pct(realized_net_pct)}%\n"
         f"• [보유 종목 현재가 합산 시]: +{fmt_pct(total_profit_all)}% - {fmt_pct(total_loss_all)}% = {t_sign}{fmt_pct(total_net_all)}%"
     )
