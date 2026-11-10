@@ -547,7 +547,6 @@ def get_multi_tf_data(symbol, ref_price=0.0):
     df["obv"] = (direction * df["volume"]).cumsum()
     df["cvd"] = calc_cvd_series(df)
 
-    # 최근 1시간(12캔들) 단기 VWAP 계산 (정밀 진입 구간 산출용)
     typical_p = (df["high"] + df["low"] + df["close"]) / 3.0
     tp_vol_12 = (typical_p * df["volume"]).rolling(12, min_periods=3).sum()
     vol_12 = df["volume"].rolling(12, min_periods=3).sum().replace(0, np.nan)
@@ -652,12 +651,6 @@ def extract_pivot_highs(df, left=3, right=3):
 
 
 def calc_precise_entry_zone(df_5m, df_15m, current_price, track_type, box_high, swing_high_8):
-    """
-    [정밀 진입 구간(entry_low ~ entry_high) 계산 엔진]
-    단순 고정 비율(-0.6% ~ +0.2%)이 아니라, 알림 직후 실제로 체결 가능한
-    미시 지지선(5m MA5, MA20, 1시간 VWAP, S/R Flip 지지선, 현재 양봉 몸통 중심값, 5m ATR)을 결합하여
-    실전 체결률이 가장 높은 진입 구간을 산출합니다.
-    """
     curr = df_5m.iloc[-1]
     prev = df_5m.iloc[-2]
 
@@ -674,17 +667,13 @@ def calc_precise_entry_zone(df_5m, df_15m, current_price, track_type, box_high, 
     candle_mid = (curr_open + current_price) / 2.0
     prev_close = to_float(prev.get("close"), default=current_price)
 
-    # 1) 진입 상단(entry_high): 알림 확인 즉시 체결 가능하도록 현재가 기준 미세 호가 버퍼만 부여
     curr_gain_pct = ((current_price - curr_open) / curr_open) * 100.0 if curr_open > 0 else 0.0
     if curr_gain_pct >= 1.2:
-        # 이미 양봉이 다소 올라온 상태면 추격 매수를 막기 위해 현재가를 상단 캡으로 고정
         entry_high = current_price
     else:
-        # 잔잔한 응축 상태면 현재가 바로 위(+0.08% ~ +0.15%)까지 허용하여 즉시 체결 보장
         upper_buf_pct = min(0.15, max(0.06, atr_pct * 0.18))
         entry_high = current_price * (1.0 + upper_buf_pct / 100.0)
 
-    # 2) 진입 하단(entry_low): 현재가 아래 -0.25% ~ -1.10% (실제 호흡 조절 시 닿는 범위) 내의 기술적 지지선 탐색
     min_reach_price = current_price * (1.0 - max(0.45, min(1.10, atr_pct * 1.15)) / 100.0)
     max_reach_price = current_price * (1.0 - max(0.22, min(0.40, atr_pct * 0.40)) / 100.0)
 
@@ -701,17 +690,14 @@ def calc_precise_entry_zone(df_5m, df_15m, current_price, track_type, box_high, 
     atr_pullback_price = max(min_reach_price, min(max_reach_price, atr_pullback_price))
 
     if valid_supports:
-        # 유효 범위 내에 있는 실제 지지선들의 평균과 ATR 눌림가를 6:4로 결합하여 정밀 하단 산출
         struct_anchor = float(np.mean(valid_supports))
         entry_low = (struct_anchor * 0.65) + (atr_pullback_price * 0.35)
     else:
-        # 이평선이 너무 멀리 있으면 양봉 몸통 중심(candle_mid)과 ATR 눌림가를 결합
         if min_reach_price <= candle_mid <= max_reach_price:
             entry_low = (candle_mid * 0.6) + (atr_pullback_price * 0.4)
         else:
             entry_low = atr_pullback_price
 
-    # 최소 스프레드(0.25%) 보장 안전장치
     if entry_low >= entry_high * 0.9975:
         entry_low = entry_high * (1.0 - max(0.32, atr_pct * 0.55) / 100.0)
 
@@ -1167,7 +1153,6 @@ def analyze_symbol(coin):
         final_score = int(min(100, score_b))
         matched_tags = tags_b
 
-    # [핵심 업그레이드] 체결 가능한 실전 정밀 진입 구간(entry_low ~ entry_high) 계산
     entry_low, entry_high = calc_precise_entry_zone(
         df, df_15m, current_price, track_type, box_high, swing_high_8
     )
@@ -1266,6 +1251,8 @@ def main():
 
     candidates, pure_crypto_bases, rwa_blocked_bases = get_scanner_candidates()
 
+    # [핵심 수정 1] API 일시 응답 지연 시에도 기존 보유 종목(tracked)이 삭제되지 않도록 보호!
+    # 1차 선취매든 2차 돌파든 한 번 포착된 종목은 손절 후 6시간(또는 3차 익절 후 24시간)이 지나기 전까지 절대 삭제하지 않음
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         t_item = tracked[sym]
@@ -1273,11 +1260,8 @@ def main():
         is_sl_done = bool(t_item.get("sl_alerted", False))
         is_tp3_done = bool(t_item.get("tp3_completed", False))
 
-        if (
-            is_tradfi_ticker(base_c)
-            or base_c in rwa_blocked_bases
-            or (pure_crypto_bases and base_c not in pure_crypto_bases and strip_multiplier_prefix(base_c) not in pure_crypto_bases)
-        ):
+        # 영구 주식/RWA 블랙리스트만 즉시 제거 (일시적인 API 지연으로 인한 pure_crypto_bases 누락 삭제 방지)
+        if is_tradfi_ticker(base_c) or base_c in rwa_blocked_bases:
             del tracked[sym]
             continue
 
@@ -1285,7 +1269,7 @@ def main():
             del tracked[sym]
         elif is_tp3_done and (now_ts - int(t_item.get("tp3_at", t_item.get("created_at", 0))) > 86400):
             del tracked[sym]
-        elif age_sec > 604800:
+        elif age_sec > 604800:  # 최대 7일 유지
             del tracked[sym]
 
     if not candidates:
@@ -1296,13 +1280,22 @@ def main():
     sent_count = 0
     to_analyze = []
 
+    # [핵심 수정 2] 1차가 먼저 왔든 2차가 먼저 왔든 현재 tracked에 있는 모든 코인의 베이스 심볼(1000배수 포함)을 양방향 잠금!
+    locked_clean_bases = {
+        strip_multiplier_prefix(s[:-4].upper())
+        for s in tracked.keys()
+        if s.endswith("USDT")
+    }
+
     for coin in candidates:
         symbol = coin["symbol"]
         curr_p = coin["last_price"]
+        clean_b = strip_multiplier_prefix(symbol[:-4].upper())
 
         if symbol in tracked:
             t_info = tracked[symbol]
 
+            # 손절가 이탈 체크 (손절 전인 보유 종목만 1회 발송)
             if not t_info.get("sl_alerted") and not t_info.get("tp3_completed") and curr_p <= to_float(t_info.get("stop_price")):
                 t_info["sl_alerted"] = True
                 t_info["sl_at"] = now_ts
@@ -1315,12 +1308,18 @@ def main():
                 sent_count += 1
                 continue
 
+            # 3차 최종 익절 달성 체크
             tps_list = t_info.get("tps") or []
             if len(tps_list) >= 3 and not t_info.get("tp3_completed") and not t_info.get("sl_alerted"):
                 if curr_p >= to_float(tps_list[2]):
                     t_info["tp3_completed"] = True
                     t_info["tp3_at"] = now_ts
 
+            # 이미 추적 중인 종목은 1차든 2차든 절대 재분석하지 않고 건너뜀 (2차 선행 후 1차 눌림 중복도 100% 차단)
+            continue
+
+        # 동일 베이스 코인(예: PEPE vs 1000PEPE)이 이미 잠겨 있는 경우에도 건너뜀
+        if clean_b in locked_clean_bases:
             continue
 
         to_analyze.append(coin)
@@ -1341,7 +1340,10 @@ def main():
 
     for res in results:
         symbol = res["symbol"]
-        if symbol in tracked and not tracked[symbol].get("sl_alerted", False):
+        clean_b = strip_multiplier_prefix(symbol[:-4].upper())
+
+        # 이중 안전장치: 1차/2차 구분 없이 이미 tracked 또는 locked_clean_bases에 있으면 발송 차단
+        if symbol in tracked or clean_b in locked_clean_bases:
             continue
 
         tracked[symbol] = {
@@ -1354,10 +1356,11 @@ def main():
             "sl_pct": res["sl_pct"],
             "tps": res["tps"],
             "tp_pcts": res["tp_pcts"],
-            "breakout_alerted": (res["track_type"] == "TRACK_B"),
+            "breakout_alerted": True,
             "sl_alerted": False,
             "tp3_completed": False
         }
+        locked_clean_bases.add(clean_b)
 
         briefing_msg = build_briefing_message(res, now_str)
         send_telegram_single(briefing_msg)
