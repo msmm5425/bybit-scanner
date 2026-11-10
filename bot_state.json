@@ -1150,6 +1150,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "NIGHTUSDT": {
+      "created_at": 1794317104,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.04263,
+      "entry_low": 0.04188896665878458,
+      "entry_high": 0.04202885788602506,
+      "stop_price": 0.040280555781508624,
+      "sl_pct": 4,
+      "tps": [
+        0.04598441909482147,
+        0.048474164078505556,
+        0.05215841099077796
+      ],
+      "tp_pcts": [
+        9.6,
+        15.5,
+        24.3
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
