@@ -399,8 +399,9 @@
         25.1
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794277803
     },
     "BATUSDT": {
       "created_at": 1794228903,
@@ -928,6 +929,28 @@
         45.6
       ],
       "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
+    },
+    "MAGMAUSDT": {
+      "created_at": 1794277803,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.23852499999999996,
+      "entry_low": 0.23430367992958814,
+      "entry_high": 0.23519282709642175,
+      "stop_price": 0.22535832337248474,
+      "sl_pct": 4,
+      "tps": [
+        0.2531349504992565,
+        0.26868059740811556,
+        0.2935441239344902
+      ],
+      "tp_pcts": [
+        7.8,
+        14.5,
+        25.0
+      ],
+      "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
     }
