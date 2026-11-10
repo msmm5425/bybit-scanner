@@ -952,6 +952,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "GRAMUSDT": {
+      "created_at": 1794280504,
+      "track_type": "TRACK_A",
+      "swing_high_line": 1.1282634173565251,
+      "entry_low": 1.0777607738814994,
+      "entry_high": 1.0856260000000002,
+      "stop_price": 1.027608717593712,
+      "sl_pct": 5,
+      "tps": [
+        1.175112463584783,
+        1.270910594050786,
+        1.3801272248609433
+      ],
+      "tp_pcts": [
+        8.6,
+        17.5,
+        27.6
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
