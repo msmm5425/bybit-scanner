@@ -1108,6 +1108,28 @@
       "sl_alerted": true,
       "tp3_completed": false,
       "sl_at": 1794293104
+    },
+    "GRASSUSDT": {
+      "created_at": 1794296403,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.5095299999999999,
+      "entry_low": 0.5008956,
+      "entry_high": 0.5023012,
+      "stop_price": 0.48655044799999997,
+      "sl_pct": 3,
+      "tps": [
+        0.5372323963899572,
+        0.5682514585418584,
+        0.6342417000964087
+      ],
+      "tp_pcts": [
+        7.1,
+        13.3,
+        26.4
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
