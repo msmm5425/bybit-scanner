@@ -1063,6 +1063,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "SANDUSDT": {
+      "created_at": 1794292204,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.04364499999999999,
+      "entry_low": 0.042900789837699974,
+      "entry_high": 0.043025799999999996,
+      "stop_price": 0.04124476312209598,
+      "sl_pct": 4,
+      "tps": [
+        0.04704340606910059,
+        0.04992001646000463,
+        0.053465689942035696
+      ],
+      "tp_pcts": [
+        9.5,
+        16.2,
+        24.4
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
