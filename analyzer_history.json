@@ -3,7 +3,7 @@
     {
       "date_str": "2026-11-08",
       "saved_at": 1794122056,
-      "reviewed_48h": false,
+      "reviewed_48h": true,
       "coins": [
         {
           "symbol": "METUSDT",
@@ -101,6 +101,58 @@
           "box_low": 0.028681141045958796,
           "box_high": 0.029300158478605384,
           "wave_height": 0.0007310301109350239
+        }
+      ]
+    },
+    {
+      "date_str": "2026-11-10",
+      "saved_at": 1794285757,
+      "reviewed_48h": false,
+      "coins": [
+        {
+          "symbol": "INITUSDT",
+          "ign_ts_ms": 1794250800000,
+          "ign_time": "11/10 04:00 KST",
+          "ign_price": 0.14828407934893184,
+          "box_low": 0.13196841302136317,
+          "box_high": 0.14528992878942015,
+          "wave_height": 0.016315666327568673
+        },
+        {
+          "symbol": "PIEVERSEUSDT",
+          "ign_ts_ms": 1794255600000,
+          "ign_time": "11/10 05:20 KST",
+          "ign_price": 2.0650122302405327,
+          "box_low": 1.9052766644263361,
+          "box_high": 2.2276032162638155,
+          "wave_height": 0.15973556581419657
+        },
+        {
+          "symbol": "EDGEUSDT",
+          "ign_ts_ms": 1794280200000,
+          "ign_time": "11/10 12:10 KST",
+          "ign_price": 0.4198094663124849,
+          "box_low": 0.39967399178942287,
+          "box_high": 0.4228449649843033,
+          "wave_height": 0.020135474523062025
+        },
+        {
+          "symbol": "ARIAUSDT",
+          "ign_ts_ms": 1794273900000,
+          "ign_time": "11/10 10:25 KST",
+          "ign_price": 0.1824723472847535,
+          "box_low": 0.17754738480351287,
+          "box_high": 0.18063170474125953,
+          "wave_height": 0.004924962481240636
+        },
+        {
+          "symbol": "BRUSDT",
+          "ign_ts_ms": 1794278100000,
+          "ign_time": "11/10 11:35 KST",
+          "ign_price": 0.47900129919114875,
+          "box_low": 0.4499172289510079,
+          "box_high": 0.4661613092494028,
+          "wave_height": 0.02908407024014087
         }
       ]
     }
