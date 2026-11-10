@@ -1148,8 +1148,9 @@
         24.4
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794309604
     }
   }
 }
