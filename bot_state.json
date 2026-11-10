@@ -821,29 +821,6 @@
       "sl_alerted": false,
       "tp3_completed": false
     },
-    "BEAMUSDT": {
-      "created_at": 1794257434,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.004310705,
-      "entry_low": 0.004221518,
-      "entry_high": 0.004255494,
-      "stop_price": 0.0040689657599999995,
-      "sl_pct": 4,
-      "tps": [
-        0.004543728332,
-        0.004886657100000003,
-        0.0052701745279999995
-      ],
-      "tp_pcts": [
-        7.2,
-        15.3,
-        24.3
-      ],
-      "breakout_alerted": false,
-      "sl_alerted": true,
-      "tp3_completed": false,
-      "sl_at": 1794257704
-    },
     "STONKUSDT": {
       "created_at": 1794263404,
       "track_type": "TRACK_A",
@@ -949,6 +926,28 @@
         7.8,
         14.5,
         25.0
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
+    },
+    "ATOMUSDT": {
+      "created_at": 1794279604,
+      "track_type": "TRACK_B",
+      "swing_high_line": 1.3966399999999997,
+      "entry_low": 1.3720461906634718,
+      "entry_high": 1.3768255999999999,
+      "stop_price": 1.333202818471784,
+      "sl_pct": 3,
+      "tps": [
+        1.4649311606175337,
+        1.55431028707147,
+        1.6979519712427413
+      ],
+      "tp_pcts": [
+        6.6,
+        13.1,
+        23.5
       ],
       "breakout_alerted": true,
       "sl_alerted": false,
