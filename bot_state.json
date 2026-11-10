@@ -908,6 +908,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "ARIAUSDT": {
+      "created_at": 1794272704,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.18066999999999997,
+      "entry_low": 0.17693199999999998,
+      "entry_high": 0.178356,
+      "stop_price": 0.16698535999999997,
+      "sl_pct": 6,
+      "tps": [
+        0.1962007587590696,
+        0.22309649406498197,
+        0.25868488694251596
+      ],
+      "tp_pcts": [
+        10.4,
+        25.6,
+        45.6
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
