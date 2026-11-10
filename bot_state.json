@@ -1129,6 +1129,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "PONSUSDT": {
+      "created_at": 1794303303,
+      "track_type": "TRACK_A",
+      "swing_high_line": 0.15833999999999998,
+      "entry_low": 0.15541374072890024,
+      "entry_high": 0.15616940847643407,
+      "stop_price": 0.14955991161856047,
+      "sl_pct": 4,
+      "tps": [
+        0.17562681483375958,
+        0.18757218567774933,
+        0.19804429411764704
+      ],
+      "tp_pcts": [
+        12.7,
+        20.4,
+        27.1
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
