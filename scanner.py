@@ -25,7 +25,7 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [11/09 48h 사후검증 & Top 5 피드백 반영 핵심 파라미터]
+# [48h 사후검증 & Top 5 피드백 반영 핵심 파라미터]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 85점 이상 시 알림 발송
 PULLBACK_DRYUP_STRICT = 0.20           # 발화봉 대비 눌림 거래량 20% 이하 건조
@@ -343,15 +343,12 @@ def get_scanner_candidates():
                 coin_id = str(t.get("coin_id", "")).lower().strip()
                 target_str = str(t.get("target", "")).lower().strip()
 
-                # 1) 블랙리스트 및 RWA 차단 목록 즉시 배제
                 if is_tradfi_ticker(base_coin) or base_coin in rwa_blocked_bases or clean_base in rwa_blocked_bases:
                     continue
 
-                # 2) 메타데이터 키워드 차단
                 if any(k in coin_id for k in NON_CRYPTO_META_KEYWORDS) or any(k in target_str for k in NON_CRYPTO_META_KEYWORDS):
                     continue
 
-                # 3) [엄격 화이트리스트] 5대 순수 크립토 거래소 목록에 아예 없는 심볼(RKLB, MRNA 등)은 coin_id 유무와 무관하게 무조건 차단!
                 if pure_crypto_bases and (base_coin not in pure_crypto_bases and clean_base not in pure_crypto_bases):
                     continue
 
@@ -550,6 +547,12 @@ def get_multi_tf_data(symbol, ref_price=0.0):
     df["obv"] = (direction * df["volume"]).cumsum()
     df["cvd"] = calc_cvd_series(df)
 
+    # 최근 1시간(12캔들) 단기 VWAP 계산 (정밀 진입 구간 산출용)
+    typical_p = (df["high"] + df["low"] + df["close"]) / 3.0
+    tp_vol_12 = (typical_p * df["volume"]).rolling(12, min_periods=3).sum()
+    vol_12 = df["volume"].rolling(12, min_periods=3).sum().replace(0, np.nan)
+    df["vwap12"] = (tp_vol_12 / vol_12).fillna(df["ma20"])
+
     ema12 = df["close"].ewm(span=12, adjust=False).mean()
     ema26 = df["close"].ewm(span=26, adjust=False).mean()
     macd_line = ema12 - ema26
@@ -646,6 +649,73 @@ def extract_pivot_highs(df, left=3, right=3):
         if highs[i] == np.max(window) and highs[i] > 0:
             pivots.append(float(highs[i]))
     return pivots
+
+
+def calc_precise_entry_zone(df_5m, df_15m, current_price, track_type, box_high, swing_high_8):
+    """
+    [정밀 진입 구간(entry_low ~ entry_high) 계산 엔진]
+    단순 고정 비율(-0.6% ~ +0.2%)이 아니라, 알림 직후 실제로 체결 가능한
+    미시 지지선(5m MA5, MA20, 1시간 VWAP, S/R Flip 지지선, 현재 양봉 몸통 중심값, 5m ATR)을 결합하여
+    실전 체결률이 가장 높은 진입 구간을 산출합니다.
+    """
+    curr = df_5m.iloc[-1]
+    prev = df_5m.iloc[-2]
+
+    atr5 = to_float(curr.get("atr14"), default=current_price * 0.006)
+    atr_pct = (atr5 / current_price) * 100.0 if current_price > 0 else 0.6
+    atr_pct = max(0.30, min(1.20, atr_pct))
+
+    ma5_5m = to_float(curr.get("ma5"), default=current_price)
+    ma20_5m = to_float(curr.get("ma20"), default=current_price)
+    vwap12_5m = to_float(curr.get("vwap12"), default=current_price)
+    ma20_15m = to_float(df_15m["ma20"].iloc[-1], default=current_price)
+
+    curr_open = to_float(curr.get("open"), default=current_price)
+    candle_mid = (curr_open + current_price) / 2.0
+    prev_close = to_float(prev.get("close"), default=current_price)
+
+    # 1) 진입 상단(entry_high): 알림 확인 즉시 체결 가능하도록 현재가 기준 미세 호가 버퍼만 부여
+    curr_gain_pct = ((current_price - curr_open) / curr_open) * 100.0 if curr_open > 0 else 0.0
+    if curr_gain_pct >= 1.2:
+        # 이미 양봉이 다소 올라온 상태면 추격 매수를 막기 위해 현재가를 상단 캡으로 고정
+        entry_high = current_price
+    else:
+        # 잔잔한 응축 상태면 현재가 바로 위(+0.08% ~ +0.15%)까지 허용하여 즉시 체결 보장
+        upper_buf_pct = min(0.15, max(0.06, atr_pct * 0.18))
+        entry_high = current_price * (1.0 + upper_buf_pct / 100.0)
+
+    # 2) 진입 하단(entry_low): 현재가 아래 -0.25% ~ -1.10% (실제 호흡 조절 시 닿는 범위) 내의 기술적 지지선 탐색
+    min_reach_price = current_price * (1.0 - max(0.45, min(1.10, atr_pct * 1.15)) / 100.0)
+    max_reach_price = current_price * (1.0 - max(0.22, min(0.40, atr_pct * 0.40)) / 100.0)
+
+    tech_candidates = [ma5_5m, ma20_5m, vwap12_5m, ma20_15m, candle_mid, prev_close]
+    if track_type == "TRACK_B":
+        tech_candidates.extend([box_high, swing_high_8])
+
+    valid_supports = [
+        p for p in tech_candidates
+        if min_reach_price <= p <= max_reach_price
+    ]
+
+    atr_pullback_price = current_price - (0.65 * atr5)
+    atr_pullback_price = max(min_reach_price, min(max_reach_price, atr_pullback_price))
+
+    if valid_supports:
+        # 유효 범위 내에 있는 실제 지지선들의 평균과 ATR 눌림가를 6:4로 결합하여 정밀 하단 산출
+        struct_anchor = float(np.mean(valid_supports))
+        entry_low = (struct_anchor * 0.65) + (atr_pullback_price * 0.35)
+    else:
+        # 이평선이 너무 멀리 있으면 양봉 몸통 중심(candle_mid)과 ATR 눌림가를 결합
+        if min_reach_price <= candle_mid <= max_reach_price:
+            entry_low = (candle_mid * 0.6) + (atr_pullback_price * 0.4)
+        else:
+            entry_low = atr_pullback_price
+
+    # 최소 스프레드(0.25%) 보장 안전장치
+    if entry_low >= entry_high * 0.9975:
+        entry_low = entry_high * (1.0 - max(0.32, atr_pct * 0.55) / 100.0)
+
+    return entry_low, entry_high
 
 
 def calc_strategic_altcoin_sl(df_5m, df_15m, df_1h, avg_entry, box_low, box_range_pct, track_type, is_spring, symbol):
@@ -1091,22 +1161,22 @@ def analyze_symbol(coin):
         track_title = "🟢 [1차 선취매/눌림 타점 포착]"
         final_score = int(min(100, score_a))
         matched_tags = tags_a
-        entry_low = current_price * 0.994
-        entry_high = current_price * 1.002
     else:
         track_type = "TRACK_B"
         track_title = "🚀 [2차 돌파/리테스트 타점 포착]"
         final_score = int(min(100, score_b))
         matched_tags = tags_b
-        entry_low = current_price * 0.995
-        entry_high = current_price * 1.003
 
+    # [핵심 업그레이드] 체결 가능한 실전 정밀 진입 구간(entry_low ~ entry_high) 계산
+    entry_low, entry_high = calc_precise_entry_zone(
+        df, df_15m, current_price, track_type, box_high, swing_high_8
+    )
     avg_entry = (entry_low + entry_high) / 2.0
 
     sl_pct, stop_price, structural_support, sl_reason = calc_strategic_altcoin_sl(
         df, df_15m, df_1h, avg_entry, box_low, box_range_pct, track_type, cond_spring, symbol
     )
-    support_line = min(structural_support, recent_low_6, current_price * 0.990)
+    support_line = min(structural_support, recent_low_6, entry_low * 0.992)
 
     tps, tp_pcts, tp_labels = calc_structural_fib_3tps(
         df, df_15m, df_1h, df_4h, avg_entry, sl_pct
@@ -1162,10 +1232,10 @@ def build_briefing_message(res, now_str):
 
 
 def build_x_post_message(res):
+    """X(트위터) 업로드 전용 양식: 현재가 삭제 & 정밀 진입 구간 표기"""
     short_sym = res["symbol"].replace("USDT", "")
     return (
         f"${short_sym} ({res['symbol']})\n\n"
-        f"현재가: {fmt_price(res['last_price'])} USDT\n\n"
         f"- 진입 구간: {fmt_price(res['entry_low'])} ~ {fmt_price(res['entry_high'])} USDT\n\n"
         f"- SL: {fmt_price(res['stop_price'])} USDT (-{res['sl_pct']}%)\n\n"
         f"- 1차 {fmt_price(res['tps'][0])}(+{fmt_pct(res['tp_pcts'][0])}%)\n"
@@ -1196,9 +1266,6 @@ def main():
 
     candidates, pure_crypto_bases, rwa_blocked_bases = get_scanner_candidates()
 
-    # [핵심 수정 1] 비암호화폐 삭제 및 보유 종목 유지 기간 확대
-    # - 손절된 종목(sl_alerted == True)은 6시간 뒤 목록에서 정리하여 새로운 셋업 발생 시에만 재포착 허용
-    # - 아직 손절되지 않은 보유 종목(sl_alerted == False)은 18시간 만에 지우지 않고 최대 7일(604800초) 동안 유지하여 재알림 원천 차단!
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         t_item = tracked[sym]
@@ -1218,7 +1285,7 @@ def main():
             del tracked[sym]
         elif is_tp3_done and (now_ts - int(t_item.get("tp3_at", t_item.get("created_at", 0))) > 86400):
             del tracked[sym]
-        elif age_sec > 604800:  # 최대 7일(일주일) 경과 시 정리
+        elif age_sec > 604800:
             del tracked[sym]
 
     if not candidates:
@@ -1233,11 +1300,9 @@ def main():
         symbol = coin["symbol"]
         curr_p = coin["last_price"]
 
-        # [핵심 수정 2] 이미 tracked에 있는 종목은 손절되지 않는 한 절대 신규 타점 분석(to_analyze)에 넣지 않음!
         if symbol in tracked:
             t_info = tracked[symbol]
 
-            # 1) 아직 손절 전인데 현재가가 손절선 이하로 내려간 경우 -> 손절 알림 발송 후 종료 표시
             if not t_info.get("sl_alerted") and not t_info.get("tp3_completed") and curr_p <= to_float(t_info.get("stop_price")):
                 t_info["sl_alerted"] = True
                 t_info["sl_at"] = now_ts
@@ -1250,14 +1315,12 @@ def main():
                 sent_count += 1
                 continue
 
-            # 2) 3차 최종 익절가 달성 체크
             tps_list = t_info.get("tps") or []
             if len(tps_list) >= 3 and not t_info.get("tp3_completed") and not t_info.get("sl_alerted"):
                 if curr_p >= to_float(tps_list[2]):
                     t_info["tp3_completed"] = True
                     t_info["tp3_at"] = now_ts
 
-            # 3) 손절되지 않고 보유 중인 종목은 to_analyze에 추가하지 않고 무조건 continue (재알림 100% 차단!)
             continue
 
         to_analyze.append(coin)
@@ -1278,7 +1341,6 @@ def main():
 
     for res in results:
         symbol = res["symbol"]
-        # 이중 안전장치: 만약 tracked에 아직 살아있는 종목이면 절대 발송 금지
         if symbol in tracked and not tracked[symbol].get("sl_alerted", False):
             continue
 
