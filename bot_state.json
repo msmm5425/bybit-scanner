@@ -1130,6 +1130,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "PIEVERSEUSDT": {
+      "created_at": 1794297003,
+      "track_type": "TRACK_B",
+      "swing_high_line": 2.137569468713446,
+      "entry_low": 2.070024735662435,
+      "entry_high": 2.0921335,
+      "stop_price": 1.9562143707613444,
+      "sl_pct": 6,
+      "tps": [
+        2.301809478131366,
+        2.431164122295359,
+        2.899266290590886
+      ],
+      "tp_pcts": [
+        10.6,
+        16.8,
+        39.3
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
