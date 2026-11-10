@@ -974,29 +974,6 @@
       "sl_alerted": false,
       "tp3_completed": false
     },
-    "BEAMUSDT": {
-      "created_at": 1794286503,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.004444,
-      "entry_low": 0.0043432517701020995,
-      "entry_high": 0.004374017142857143,
-      "stop_price": 0.004097116389090844,
-      "sl_pct": 6,
-      "tps": [
-        0.00487507032,
-        0.0052445498799999985,
-        0.005654502332
-      ],
-      "tp_pcts": [
-        11.8,
-        20.3,
-        29.7
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": true,
-      "tp3_completed": false,
-      "sl_at": 1794286530
-    },
     "SIGNUSDT": {
       "created_at": 1794288903,
       "track_type": "TRACK_A",
