@@ -1021,8 +1021,9 @@
         27.1
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794439204
     },
     "BEATUSDT": {
       "created_at": 1794435904,
