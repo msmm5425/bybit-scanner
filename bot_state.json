@@ -829,8 +829,9 @@
         34.9
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794375687
     },
     "JUPUSDT": {
       "created_at": 1794271504,
