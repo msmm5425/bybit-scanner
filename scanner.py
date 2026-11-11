@@ -4,10 +4,13 @@ import time
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from config import STATE_FILE, KST, to_float, is_tradfi_ticker, strip_multiplier_prefix
+from config import STATE_FILE, KST, to_float, is_tradfi_ticker
 from api import get_scanner_candidates, fetch_verified_1m_klines
 from analyzer import analyze_symbol
 from notifier import build_briefing_message, build_x_post_message, send_telegram_single, fmt_price
+
+# 동일 종목 재알림 최소 쿨타임 (12시간 = 43,200초)
+RE_ALERT_COOLDOWN_SEC = 43200
 
 
 def load_state():
@@ -16,10 +19,14 @@ def load_state():
             with open(STATE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, dict):
+                    if "tracked" not in data or not isinstance(data["tracked"], dict):
+                        data["tracked"] = {}
+                    if "alert_history" not in data or not isinstance(data["alert_history"], dict):
+                        data["alert_history"] = {}
                     return data
         except Exception:
             pass
-    return {"tracked": {}}
+    return {"tracked": {}, "alert_history": {}}
 
 
 def save_state(state):
@@ -78,31 +85,40 @@ def main():
     start_t = time.time()
     state = load_state()
     tracked = state.get("tracked", {})
+    alert_history = state.get("alert_history", {})
     now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
     candidates, pure_crypto_bases, rwa_blocked_bases = get_scanner_candidates()
     sent_count = 0
 
+    # 1. 오래된 알림 히스토리 정리 (24시간 경과분 제거)
+    for h_sym in list(alert_history.keys()):
+        if now_ts - int(alert_history.get(h_sym, 0)) > 86400:
+            del alert_history[h_sym]
+
+    # 2. 기존 추적 종목 관리 및 1분봉 손절 감시
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         t_item = tracked[sym]
-        age_sec = now_ts - int(t_item.get("created_at", 0))
+        created_at = int(t_item.get("created_at", 0))
+        age_sec = now_ts - created_at
         is_sl_done = bool(t_item.get("sl_alerted", False))
         is_tp3_done = bool(t_item.get("tp3_completed", False))
 
-        if (
-            is_tradfi_ticker(base_c)
-            or base_c in rwa_blocked_bases
-            or (pure_crypto_bases and base_c not in pure_crypto_bases and strip_multiplier_prefix(base_c) not in pure_crypto_bases)
-        ):
+        # tracked에 있지만 alert_history에 누락된 경우 동기화
+        if sym not in alert_history and created_at > 0:
+            alert_history[sym] = created_at
+
+        # 일시적 거래소 API 누락으로 삭제되지 않도록 명확한 블랙리스트만 제거
+        if is_tradfi_ticker(base_c) or base_c in rwa_blocked_bases:
             del tracked[sym]
             continue
 
-        if is_sl_done and (now_ts - int(t_item.get("sl_at", t_item.get("created_at", 0))) > 21600):
+        if is_sl_done and (now_ts - int(t_item.get("sl_at", created_at)) > 43200):
             del tracked[sym]
             continue
-        elif is_tp3_done and (now_ts - int(t_item.get("tp3_at", t_item.get("created_at", 0))) > 86400):
+        elif is_tp3_done and (now_ts - int(t_item.get("tp3_at", created_at)) > 86400):
             del tracked[sym]
             continue
         elif age_sec > 604800:
@@ -116,10 +132,20 @@ def main():
     if not candidates:
         print("[알림] 조건을 만족하는 순수 암호화폐 후보군 데이터를 가져오지 못했습니다.")
         state["tracked"] = tracked
+        state["alert_history"] = alert_history
         save_state(state)
         return
 
-    to_analyze = [coin for coin in candidates if coin["symbol"] not in tracked]
+    # 3. 이미 추적 중이거나 최근 12시간 이내 알림이 발송된 종목은 분석 대상에서 완전 제외
+    to_analyze = []
+    for coin in candidates:
+        sym = coin["symbol"]
+        last_alert_ts = int(alert_history.get(sym, 0))
+        if sym in tracked:
+            continue
+        if (now_ts - last_alert_ts) < RE_ALERT_COOLDOWN_SEC:
+            continue
+        to_analyze.append(coin)
 
     results = []
     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -137,7 +163,9 @@ def main():
 
     for res in results:
         symbol = res["symbol"]
-        if symbol in tracked and not tracked[symbol].get("sl_alerted", False):
+        if symbol in tracked:
+            continue
+        if (now_ts - int(alert_history.get(symbol, 0))) < RE_ALERT_COOLDOWN_SEC:
             continue
 
         tracked[symbol] = {
@@ -154,6 +182,7 @@ def main():
             "sl_alerted": False,
             "tp3_completed": False
         }
+        alert_history[symbol] = now_ts
 
         briefing_msg = build_briefing_message(res, now_str)
         send_telegram_single(briefing_msg)
@@ -164,6 +193,7 @@ def main():
         sent_count += 1
 
     state["tracked"] = tracked
+    state["alert_history"] = alert_history
     save_state(state)
 
     elapsed = time.time() - start_t
