@@ -1,11 +1,11 @@
 import os
 import json
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config import STATE_FILE, KST, to_float, is_tradfi_ticker, strip_multiplier_prefix
-from api import get_scanner_candidates, fetch_verified_1m_klines, get_fast_pure_crypto_whitelist
+from api import get_scanner_candidates, fetch_verified_1m_klines
 from analyzer import analyze_symbol
 from notifier import build_briefing_message, build_x_post_message, send_telegram_single, fmt_price
 
@@ -81,7 +81,7 @@ def main():
     now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
-    candidates, pure_crypto_bases, rwa_blocked_bases = get_fast_pure_crypto_whitelist()
+    candidates, pure_crypto_bases, rwa_blocked_bases = get_scanner_candidates()
     sent_count = 0
 
     for sym in list(tracked.keys()):
