@@ -1,27 +1,5 @@
 {
   "tracked": {
-    "INJUSDT": {
-      "created_at": 1794200511,
-      "track_type": "TRACK_B",
-      "swing_high_line": 8.34939,
-      "entry_low": 8.18487,
-      "entry_high": 8.250678,
-      "stop_price": 8.053418520000001,
-      "sl_pct": 2,
-      "tps": [
-        8.601194323572477,
-        9.364447900770134,
-        10.599486051575404
-      ],
-      "tp_pcts": [
-        4.7,
-        14.0,
-        29.0
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": true,
-      "sl_at": 1794387776
-    },
     "1000PEPEUSDT": {
       "created_at": 1794206453,
       "track_type": "TRACK_B",
@@ -41,7 +19,8 @@
         29.8
       ],
       "breakout_alerted": true,
-      "sl_alerted": false
+      "sl_alerted": true,
+      "sl_at": 1794433479
     },
     "SUIUSDT": {
       "created_at": 1794183313,
@@ -106,7 +85,8 @@
         36.1
       ],
       "breakout_alerted": true,
-      "sl_alerted": false
+      "sl_alerted": true,
+      "sl_at": 1794433479
     },
     "ENAUSDT": {
       "created_at": 1794220241,
@@ -234,8 +214,9 @@
         28.0
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794433479
     },
     "LDOUSDT": {
       "created_at": 1794237304,
@@ -344,8 +325,9 @@
         22.6
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794433479
     },
     "AVAXUSDT": {
       "created_at": 1794253504,
@@ -1035,7 +1017,6 @@
     "SUIUSDT": 1794183313,
     "ERAUSDT": 1794187500,
     "MERLUSDT": 1794206453,
-    "MEGAUSDT": 1794215404,
     "ENAUSDT": 1794220241,
     "RENDERUSDT": 1794223204,
     "HYPEUSDT": 1794223804,
