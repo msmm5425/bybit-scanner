@@ -941,6 +941,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "BLUAIUSDT": {
+      "created_at": 1794423604,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.007534345,
+      "entry_low": 0.00739375,
+      "entry_high": 0.007429891428571428,
+      "stop_price": 0.007041229678571428,
+      "sl_pct": 5,
+      "tps": [
+        0.00805364044,
+        0.009076480659999999,
+        0.010003902099999996
+      ],
+      "tp_pcts": [
+        8.7,
+        22.5,
+        35.0
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   },
   "alert_history": {
@@ -986,6 +1008,7 @@
     "GRAMUSDT": 1794280504,
     "SIGNUSDT": 1794288903,
     "SANDUSDT": 1794292204,
-    "NIGHTUSDT": 1794317104
+    "NIGHTUSDT": 1794317104,
+    "BLUAIUSDT": 1794423604
   }
 }
