@@ -149,7 +149,8 @@
         26.9
       ],
       "breakout_alerted": true,
-      "sl_alerted": false
+      "sl_alerted": true,
+      "sl_at": 1794438904
     },
     "NEARUSDT": {
       "created_at": 1794231004,
@@ -260,8 +261,9 @@
         30.2
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794438904
     },
     "ETHFIUSDT": {
       "created_at": 1794248104,
@@ -526,8 +528,9 @@
         24.4
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794438904
     },
     "NIGHTUSDT": {
       "created_at": 1794317104,
@@ -860,8 +863,9 @@
         23.9
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794438904
     },
     "XLMUSDT": {
       "created_at": 1794416103,
@@ -927,8 +931,9 @@
         35.0
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794438904
     },
     "VVVUSDT": {
       "created_at": 1794424204,
