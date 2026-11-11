@@ -989,6 +989,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "ZECUSDT": {
+      "created_at": 1794434704,
+      "track_type": "TRACK_A",
+      "swing_high_line": 1016.8066999999999,
+      "entry_low": 997.8083916666666,
+      "entry_high": 1002.761,
+      "stop_price": 960.2733079999998,
+      "sl_pct": 4,
+      "tps": [
+        1088.7189683858153,
+        1145.2548063636364,
+        1271.27236
+      ],
+      "tp_pcts": [
+        8.8,
+        14.5,
+        27.1
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   },
   "alert_history": {
@@ -1036,6 +1058,7 @@
     "GRAMUSDT": 1794280504,
     "SIGNUSDT": 1794288903,
     "SANDUSDT": 1794292204,
-    "NIGHTUSDT": 1794317104
+    "NIGHTUSDT": 1794317104,
+    "ZECUSDT": 1794434704
   }
 }
