@@ -855,6 +855,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "SIRENUSDT": {
+      "created_at": 1794401104,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.027953099999999995,
+      "entry_low": 0.027461025,
+      "entry_high": 0.02755722857142857,
+      "stop_price": 0.026408761714285713,
+      "sl_pct": 4,
+      "tps": [
+        0.0301558674,
+        0.0315573588,
+        0.0341644342
+      ],
+      "tp_pcts": [
+        9.6,
+        14.7,
+        24.2
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
