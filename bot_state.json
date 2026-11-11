@@ -1217,6 +1217,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "ICPUSDT": {
+      "created_at": 1794381903,
+      "track_type": "TRACK_B",
+      "swing_high_line": 2.602,
+      "entry_low": 2.53800375,
+      "entry_high": 2.545864285714286,
+      "stop_price": 2.4656759973214286,
+      "sl_pct": 3,
+      "tps": [
+        2.7571546399999995,
+        2.8918247599999996,
+        3.1011595017857143
+      ],
+      "tp_pcts": [
+        8.5,
+        13.8,
+        22.0
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
