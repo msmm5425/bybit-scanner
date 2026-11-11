@@ -25,7 +25,7 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [48h 사후검증 & Top 5 피드백 반영 핵심 파라미터]
+# [핵심 파라미터]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 85점 이상 시 알림 발송
 PULLBACK_DRYUP_STRICT = 0.20           # 발화봉 대비 눌림 거래량 20% 이하 건조
@@ -42,7 +42,6 @@ EARLY_VOL_MULT_MIN = 3.2               # 초동 최소 거래량 배수 (3.2x)
 EARLY_VOL_MULT_MAX = 6.5               # 직접 돌파 진입 상한
 EARLY_BREAKOUT_MAX_PCT = 2.5           # 돌파 후 +2.5% 이내 초입만 허용
 
-# [고점 폭락(설거지 차트) 및 상위 프레임(15m/1H) 과열 원천 차단 필터]
 MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
 MAX_PRIOR_PUMP_PCT = 20.0              # 최근 12시간 내 이미 +20% 이상 폭등 이력 시 설거지 경계
 MAX_RETRACEMENT_RATIO = 0.35           # 폭등 후 상승폭의 35% 이상 반납한 역V자 하락 종목 즉시 차단
@@ -406,11 +405,12 @@ def fetch_raw_klines_multi_source(symbol, interval="5m", limit=200):
     base_coin = symbol[:-4].upper()
     clean_base = strip_multiplier_prefix(base_coin)
 
-    bg_gran = "5m" if interval == "5m" else "1H"
-    gt_inter = "5m" if interval == "5m" else "1h"
-    bn_inter = "5m" if interval == "5m" else "1h"
-    by_inter = "5" if interval == "5m" else "60"
-    min_len = 60 if interval == "5m" else 30
+    if interval == "1m":
+        bg_gran, gt_inter, bn_inter, by_inter, min_len = "1m", "1m", "1m", "1", 3
+    elif interval == "5m":
+        bg_gran, gt_inter, bn_inter, by_inter, min_len = "5m", "5m", "5m", "5", 60
+    else:
+        bg_gran, gt_inter, bn_inter, by_inter, min_len = "1H", "1h", "1h", "60", 30
 
     bg_limit = min(int(limit), 200)
     for sym_try in [symbol, f"{clean_base}USDT"]:
@@ -480,7 +480,7 @@ def fetch_raw_klines_multi_source(symbol, interval="5m", limit=200):
     return []
 
 
-def clean_and_scale_df(rows, ref_price=0.0, min_len=30):
+def clean_and_scale_df(rows, ref_price=0.0, min_len=30, allow_fine_scale=True):
     if not rows:
         return pd.DataFrame()
     df = pd.DataFrame(rows, columns=[
@@ -508,17 +508,111 @@ def clean_and_scale_df(rows, ref_price=0.0, min_len=30):
                     df[col] = df[col] * mult
                 last_close = to_float(df["close"].iloc[-1])
                 break
-        fine_ratio = ref_price / last_close if last_close > 0 else 1.0
-        if 0.96 <= fine_ratio <= 1.04:
-            for col in ["open", "high", "low", "close"]:
-                df[col] = df[col] * fine_ratio
+        if allow_fine_scale:
+            fine_ratio = ref_price / last_close if last_close > 0 else 1.0
+            if 0.96 <= fine_ratio <= 1.04:
+                for col in ["open", "high", "low", "close"]:
+                    df[col] = df[col] * fine_ratio
 
     return df
 
 
+def fetch_verified_1m_klines(symbol, entry_ref, limit=25):
+    """
+    [1분봉 정밀 손절/익절 검증 전용]
+    - CoinGecko의 반올림된 last_price(예: 0.004368 -> 0.004)나 타 거래소 동명이인 티커를 차단합니다.
+    - 인위적인 fine_ratio 보정(allow_fine_scale=False)을 끄고 실제 1분봉 가격 그대로 반환합니다.
+    """
+    base_coin = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
+    clean_base = strip_multiplier_prefix(base_coin)
+
+    # 1순위: Bybit V5 API 프록시 (바이비트 원본 1분봉)
+    res = fetch_bybit_fallback("/v5/market/kline", {
+        "category": "linear",
+        "symbol": symbol,
+        "interval": "1",
+        "limit": limit
+    })
+    bybit_rows = res.get("list") or []
+    if isinstance(bybit_rows, list) and len(bybit_rows) >= 2:
+        df = clean_and_scale_df(bybit_rows, ref_price=entry_ref, min_len=2, allow_fine_scale=False)
+        if not df.empty:
+            last_c = to_float(df["close"].iloc[-1])
+            if entry_ref <= 0 or (0.65 <= (last_c / entry_ref) <= 1.55):
+                return df
+
+    # 2순위: Bitget USDT-FUTURES 1분봉
+    for sym_try in [symbol, f"{clean_base}USDT"]:
+        try:
+            r = requests.get(
+                "https://api.bitget.com/api/v2/mix/market/candles",
+                params={"symbol": sym_try, "productType": "USDT-FUTURES", "granularity": "1m", "limit": str(limit)},
+                headers=BROWSER_HEADERS,
+                timeout=4
+            )
+            if r.status_code == 200:
+                bg_data = r.json().get("data") or []
+                if isinstance(bg_data, list) and len(bg_data) >= 2:
+                    df = clean_and_scale_df([x[:7] for x in bg_data], ref_price=entry_ref, min_len=2, allow_fine_scale=False)
+                    if not df.empty:
+                        last_c = to_float(df["close"].iloc[-1])
+                        if entry_ref <= 0 or (0.70 <= (last_c / entry_ref) <= 1.45):
+                            return df
+        except Exception:
+            pass
+
+    # 3순위: Gate.io USDT Futures 1분봉
+    for base_try in [base_coin, clean_base]:
+        try:
+            r = requests.get(
+                "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
+                params={"contract": f"{base_try}_USDT", "interval": "1m", "limit": str(limit)},
+                headers=BROWSER_HEADERS,
+                timeout=4
+            )
+            if r.status_code == 200:
+                gt_data = r.json()
+                if isinstance(gt_data, list) and len(gt_data) >= 2:
+                    rows = [
+                        [int(float(i.get("t", 0))) * 1000, i.get("o", 0), i.get("h", 0), i.get("l", 0), i.get("c", 0), float(i.get("v", 0)) or 1.0, 0]
+                        for i in gt_data
+                    ]
+                    df = clean_and_scale_df(rows, ref_price=entry_ref, min_len=2, allow_fine_scale=False)
+                    if not df.empty:
+                        last_c = to_float(df["close"].iloc[-1])
+                        if entry_ref <= 0 or (0.70 <= (last_c / entry_ref) <= 1.45):
+                            return df
+        except Exception:
+            pass
+
+    # 4순위: Binance Vision 1분봉
+    for sym_try in [symbol, f"{clean_base}USDT"]:
+        try:
+            r = requests.get(
+                "https://data-api.binance.vision/api/v3/klines",
+                params={"symbol": sym_try, "interval": "1m", "limit": str(limit)},
+                headers=BROWSER_HEADERS,
+                timeout=4
+            )
+            if r.status_code == 200:
+                bn_data = r.json()
+                if isinstance(bn_data, list) and len(bn_data) >= 2:
+                    rows = [[x[0], x[1], x[2], x[3], x[4], x[5], x[7]] for x in bn_data]
+                    df = clean_and_scale_df(rows, ref_price=entry_ref, min_len=2, allow_fine_scale=False)
+                    if not df.empty:
+                        last_c = to_float(df["close"].iloc[-1])
+                        if entry_ref <= 0 or (0.70 <= (last_c / entry_ref) <= 1.45):
+                            return df
+        except Exception:
+            pass
+
+    return pd.DataFrame()
+
+
 def get_multi_tf_data(symbol, ref_price=0.0):
     rows_5m = fetch_raw_klines_multi_source(symbol, interval="5m", limit=200)
-    df = clean_and_scale_df(rows_5m, ref_price=ref_price, min_len=60)
+    # 5분봉 초기 조회 시에는 CoinGecko 반올림 오차를 없애기 위해 allow_fine_scale=False 적용 (단위 배수 1000x 등만 보정)
+    df = clean_and_scale_df(rows_5m, ref_price=ref_price, min_len=60, allow_fine_scale=False)
     if df.empty:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
@@ -605,7 +699,7 @@ def get_multi_tf_data(symbol, ref_price=0.0):
 
     curr_p = to_float(df["close"].iloc[-1], default=ref_price)
     rows_1h = fetch_raw_klines_multi_source(symbol, interval="1h", limit=120)
-    df_1h = clean_and_scale_df(rows_1h, ref_price=curr_p, min_len=24)
+    df_1h = clean_and_scale_df(rows_1h, ref_price=curr_p, min_len=24, allow_fine_scale=True)
     if df_1h.empty:
         df_1h = df.groupby(df.index // 12).agg({
             "timestamp": "last",
@@ -1217,7 +1311,6 @@ def build_briefing_message(res, now_str):
 
 
 def build_x_post_message(res):
-    """X(트위터) 업로드 전용 양식: 현재가 삭제 & 정밀 진입 구간 표기"""
     short_sym = res["symbol"].replace("USDT", "")
     return (
         f"${short_sym} ({res['symbol']})\n\n"
@@ -1242,6 +1335,61 @@ def send_telegram_single(text):
         print(f"[Telegram 전송 오류] {e}")
 
 
+def check_tracked_sl_and_tp_1m(symbol, t_item, now_ts):
+    """
+    [알림 발생 시각 이후의 1분봉(1m) 캔들만 사용하여 정밀 손절/3차익절 판정]
+    - CoinGecko의 소수점 반올림 가격(0.004000)은 절대 사용하지 않습니다.
+    - 알림 발생 시각(created_at) 이후에 시작된 1분봉 캔들에서 저가(Low)와 종가(Close)가
+      모두 전략적 손절가(stop_price) 이하로 내려갔을 때만 손절로 확정합니다.
+    """
+    stop_p = to_float(t_item.get("stop_price"))
+    entry_low = to_float(t_item.get("entry_low"))
+    entry_high = to_float(t_item.get("entry_high"))
+    entry_ref = (entry_low + entry_high) / 2.0 if (entry_low > 0 and entry_high > 0) else max(entry_low, entry_high)
+    created_ms = int(t_item.get("created_at", 0)) * 1000
+
+    if stop_p <= 0 or entry_ref <= 0:
+        return False
+
+    df_1m = fetch_verified_1m_klines(symbol, entry_ref=entry_ref, limit=25)
+    if df_1m.empty:
+        return False
+
+    # 반드시 알림이 발송된 시각(created_ms) 이후에 열린 1분봉만 필터링
+    post_1m = df_1m[df_1m["timestamp"] >= created_ms].copy()
+    if post_1m.empty:
+        return False
+
+    # 1) 3차 최종 익절 도달 먼저 확인
+    tps_list = t_item.get("tps") or []
+    if len(tps_list) >= 3 and to_float(tps_list[2]) > 0:
+        if to_float(post_1m["high"].max()) >= to_float(tps_list[2]):
+            t_item["tp3_completed"] = True
+            t_item["tp3_at"] = now_ts
+            return False
+
+    # 2) 1분봉 기준 손절선 이탈 확인:
+    # 알림 이후 1분봉 종가(close)가 손절선 이하로 마감되었거나,
+    # 1분봉 저가(low)와 현재 최신 1분봉 가격(last_close)이 동시에 손절선 이하일 때만 손절 확정
+    min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
+    min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
+    last_1m_close = to_float(post_1m["close"].iloc[-1], default=entry_ref)
+
+    if min_1m_low <= stop_p and (min_1m_close <= stop_p or last_1m_close <= stop_p):
+        trigger_price = min(min_1m_close, last_1m_close)
+        t_item["sl_alerted"] = True
+        t_item["sl_at"] = now_ts
+        sl_msg = (
+            f"⚠️ [손절 기준가 이탈] ${symbol.replace('USDT', '')} ({symbol})\n"
+            f"• 이탈 확인가: {fmt_price(trigger_price)} USDT (전략적 손절선 {fmt_price(stop_p)} 1분봉 이탈 확인)\n"
+            f"• 리스크 관리 원칙 준수를 권장합니다."
+        )
+        send_telegram_single(sl_msg)
+        return True
+
+    return False
+
+
 def main():
     start_t = time.time()
     state = load_state()
@@ -1250,9 +1398,9 @@ def main():
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
     candidates, pure_crypto_bases, rwa_blocked_bases = get_scanner_candidates()
+    sent_count = 0
 
-    # [핵심 수정 1] API 일시 응답 지연 시에도 기존 보유 종목(tracked)이 삭제되지 않도록 보호!
-    # 1차 선취매든 2차 돌파든 한 번 포착된 종목은 손절 후 6시간(또는 3차 익절 후 24시간)이 지나기 전까지 절대 삭제하지 않음
+    # 1) 기존 보유(tracked) 종목 정리 및 1분봉 기반 정밀 손절/익절 검사
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         t_item = tracked[sym]
@@ -1260,69 +1408,37 @@ def main():
         is_sl_done = bool(t_item.get("sl_alerted", False))
         is_tp3_done = bool(t_item.get("tp3_completed", False))
 
-        # 영구 주식/RWA 블랙리스트만 즉시 제거 (일시적인 API 지연으로 인한 pure_crypto_bases 누락 삭제 방지)
-        if is_tradfi_ticker(base_c) or base_c in rwa_blocked_bases:
+        if (
+            is_tradfi_ticker(base_c)
+            or base_c in rwa_blocked_bases
+            or (pure_crypto_bases and base_c not in pure_crypto_bases and strip_multiplier_prefix(base_c) not in pure_crypto_bases)
+        ):
             del tracked[sym]
             continue
 
         if is_sl_done and (now_ts - int(t_item.get("sl_at", t_item.get("created_at", 0))) > 21600):
             del tracked[sym]
+            continue
         elif is_tp3_done and (now_ts - int(t_item.get("tp3_at", t_item.get("created_at", 0))) > 86400):
             del tracked[sym]
-        elif age_sec > 604800:  # 최대 7일 유지
+            continue
+        elif age_sec > 604800:
             del tracked[sym]
+            continue
+
+        # 아직 보유 중인 종목은 1분봉으로 정밀 손절/익절 확인
+        if not is_sl_done and not is_tp3_done:
+            if check_tracked_sl_and_tp_1m(sym, t_item, now_ts):
+                sent_count += 1
 
     if not candidates:
         print("[알림] 조건을 만족하는 순수 암호화폐 후보군 데이터를 가져오지 못했습니다.")
+        state["tracked"] = tracked
         save_state(state)
         return
 
-    sent_count = 0
-    to_analyze = []
-
-    # [핵심 수정 2] 1차가 먼저 왔든 2차가 먼저 왔든 현재 tracked에 있는 모든 코인의 베이스 심볼(1000배수 포함)을 양방향 잠금!
-    locked_clean_bases = {
-        strip_multiplier_prefix(s[:-4].upper())
-        for s in tracked.keys()
-        if s.endswith("USDT")
-    }
-
-    for coin in candidates:
-        symbol = coin["symbol"]
-        curr_p = coin["last_price"]
-        clean_b = strip_multiplier_prefix(symbol[:-4].upper())
-
-        if symbol in tracked:
-            t_info = tracked[symbol]
-
-            # 손절가 이탈 체크 (손절 전인 보유 종목만 1회 발송)
-            if not t_info.get("sl_alerted") and not t_info.get("tp3_completed") and curr_p <= to_float(t_info.get("stop_price")):
-                t_info["sl_alerted"] = True
-                t_info["sl_at"] = now_ts
-                sl_msg = (
-                    f"⚠️ [손절 기준가 이탈] ${symbol.replace('USDT', '')} ({symbol})\n"
-                    f"• 현재가: {fmt_price(curr_p)} USDT (전략적 손절선 {fmt_price(t_info['stop_price'])} 이탈)\n"
-                    f"• 리스크 관리 원칙 준수를 권장합니다."
-                )
-                send_telegram_single(sl_msg)
-                sent_count += 1
-                continue
-
-            # 3차 최종 익절 달성 체크
-            tps_list = t_info.get("tps") or []
-            if len(tps_list) >= 3 and not t_info.get("tp3_completed") and not t_info.get("sl_alerted"):
-                if curr_p >= to_float(tps_list[2]):
-                    t_info["tp3_completed"] = True
-                    t_info["tp3_at"] = now_ts
-
-            # 이미 추적 중인 종목은 1차든 2차든 절대 재분석하지 않고 건너뜀 (2차 선행 후 1차 눌림 중복도 100% 차단)
-            continue
-
-        # 동일 베이스 코인(예: PEPE vs 1000PEPE)이 이미 잠겨 있는 경우에도 건너뜀
-        if clean_b in locked_clean_bases:
-            continue
-
-        to_analyze.append(coin)
+    # 2) 이미 tracked에 있는 종목은 신규 분석 대상(to_analyze)에서 제외 (재알림 원천 차단)
+    to_analyze = [coin for coin in candidates if coin["symbol"] not in tracked]
 
     results = []
     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -1340,10 +1456,7 @@ def main():
 
     for res in results:
         symbol = res["symbol"]
-        clean_b = strip_multiplier_prefix(symbol[:-4].upper())
-
-        # 이중 안전장치: 1차/2차 구분 없이 이미 tracked 또는 locked_clean_bases에 있으면 발송 차단
-        if symbol in tracked or clean_b in locked_clean_bases:
+        if symbol in tracked and not tracked[symbol].get("sl_alerted", False):
             continue
 
         tracked[symbol] = {
@@ -1356,11 +1469,10 @@ def main():
             "sl_pct": res["sl_pct"],
             "tps": res["tps"],
             "tp_pcts": res["tp_pcts"],
-            "breakout_alerted": True,
+            "breakout_alerted": (res["track_type"] == "TRACK_B"),
             "sl_alerted": False,
             "tp3_completed": False
         }
-        locked_clean_bases.add(clean_b)
 
         briefing_msg = build_briefing_message(res, now_str)
         send_telegram_single(briefing_msg)
