@@ -1,27 +1,5 @@
 {
   "tracked": {
-    "DOGEUSDT": {
-      "created_at": 1794187500,
-      "track_type": "TRACK_B",
-      "swing_high_line": 0.070035,
-      "entry_low": 0.06865500000000001,
-      "entry_high": 0.069207,
-      "stop_price": 0.06755238000000001,
-      "sl_pct": 2,
-      "tps": [
-        0.07273120904768765,
-        0.07771157556548049,
-        0.08459692235528023
-      ],
-      "tp_pcts": [
-        5.5,
-        12.7,
-        22.7
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": true,
-      "sl_at": 1794380704
-    },
     "INJUSDT": {
       "created_at": 1794200511,
       "track_type": "TRACK_B",
@@ -457,29 +435,6 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
-    },
-    "STONKUSDT": {
-      "created_at": 1794263404,
-      "track_type": "TRACK_A",
-      "swing_high_line": 0.053794999999999996,
-      "entry_low": 0.052682,
-      "entry_high": 0.053106,
-      "stop_price": 0.04972035999999999,
-      "sl_pct": 6,
-      "tps": [
-        0.059377793483822425,
-        0.06443854334838224,
-        0.07439586869826938
-      ],
-      "tp_pcts": [
-        12.3,
-        21.8,
-        40.7
-      ],
-      "breakout_alerted": false,
-      "sl_alerted": true,
-      "tp3_completed": false,
-      "sl_at": 1794380704
     },
     "JUPUSDT": {
       "created_at": 1794271504,
