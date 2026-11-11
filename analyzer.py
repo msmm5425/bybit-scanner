@@ -349,11 +349,11 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
 
     for fib_ratio, fib_name in [
         (1.618, "Fib 1.618"),
-        (2.130, "Fib 2.13"),
-        (2.530, "Fib 2.53(1차표준)"),
-        (3.060, "Fib 3.06"),
-        (3.870, "Fib 3.87(2차표준)"),
-        (4.790, "Fib 4.79(3차확장)"),
+        (2.130, "Fib 2.13(1차표준)"),
+        (2.530, "Fib 2.53(15m매물대)"),
+        (3.060, "Fib 3.06(2차표준)"),
+        (3.860, "Fib 3.86(3차확장)"),
+        (4.790, "Fib 4.79(대시세)"),
     ]:
         fib_p = recent_low + wave_height * fib_ratio
         if fib_p > avg_entry * 1.03:
@@ -414,7 +414,6 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
     atr5 = to_float(df_5m["atr14"].iloc[-1], default=avg_entry * 0.01)
     vol_unit_pct = max(2.2, min(6.5, (atr5 * 1.85 / avg_entry) * 100.0))
 
-    # 1차 TP: +10% 표준 타겟 (최소 +7.5% ~ +12.5% 탐색)
     min_tp1_pct = max(round(sl_pct * 1.7, 1), round(vol_unit_pct * 2.4, 1), 7.5)
     tp1_choice = None
     for p, pct, lbl in valid_levels:
@@ -423,9 +422,8 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
             break
     if not tp1_choice:
         fallback_tp1_pct = round(max(10.0, min_tp1_pct), 1)
-        tp1_choice = (avg_entry * (1.0 + fallback_tp1_pct / 100.0), fallback_tp1_pct, "Fib 2.53(15m매물대)")
+        tp1_choice = (avg_entry * (1.0 + fallback_tp1_pct / 100.0), fallback_tp1_pct, "Fib 2.13(15m매물대)")
 
-    # 2차 TP: +15% 표준 타겟 (최소 +13.5% ~ +19.5% 탐색)
     min_tp2_pct = max(tp1_choice[1] + max(4.5, vol_unit_pct * 1.7), round(sl_pct * 2.9, 1), 13.5)
     tp2_choice = None
     for p, pct, lbl in valid_levels:
@@ -434,9 +432,8 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
             break
     if not tp2_choice:
         fallback_tp2_pct = round(max(15.0, min_tp2_pct), 1)
-        tp2_choice = (avg_entry * (1.0 + fallback_tp2_pct / 100.0), fallback_tp2_pct, "Fib 3.87(1H핵심고점)")
+        tp2_choice = (avg_entry * (1.0 + fallback_tp2_pct / 100.0), fallback_tp2_pct, "Fib 3.06(1H핵심고점)")
 
-    # 3차 TP: +22% 표준 타겟 (최소 +20.5% 이상 탐색)
     min_tp3_pct = max(tp2_choice[1] + max(6.5, vol_unit_pct * 2.3), round(sl_pct * 4.2, 1), 21.0)
     tp3_choice = None
     for p, pct, lbl in valid_levels:
@@ -445,7 +442,7 @@ def calc_structural_fib_3tps(df_5m, df_15m, df_1h, df_4h, avg_entry, sl_pct):
             break
     if not tp3_choice:
         fallback_tp3_pct = round(max(22.0, min_tp3_pct), 1)
-        tp3_choice = (avg_entry * (1.0 + fallback_tp3_pct / 100.0), fallback_tp3_pct, "1H Fib 1.12(48h고점)")
+        tp3_choice = (avg_entry * (1.0 + fallback_tp3_pct / 100.0), fallback_tp3_pct, "Fib 3.86(48h고점)")
 
     tps = [tp1_choice[0], tp2_choice[0], tp3_choice[0]]
     tp_pcts = [tp1_choice[1], tp2_choice[1], tp3_choice[1]]
@@ -566,26 +563,26 @@ def analyze_symbol(coin):
     recent_3_vol_ratio = (closed_3_min_vol / ref_vol_ma20) if ref_vol_ma20 > 0 else 1.0
 
     max_wick_6 = to_float(df.iloc[-6:-1]["lower_wick_ratio"].max(), default=0.0)
+    curr_wick = to_float(curr.get("lower_wick_ratio"), default=0.0)
+    max_wick_all6 = max(max_wick_6, curr_wick)
+
     pre8_min_rsi6 = to_float(df.iloc[-9:-1]["rsi6"].min(), default=50.0)
     curr_rsi6 = to_float(curr["rsi6"], default=50.0)
 
-    # [신규 알파 1] RSI 과매도 스러스트 & MACD 히스토그램 양전환 골든크로스 ($ERA 패턴)
     cond_rsi_thrust = bool(pre8_min_rsi6 <= 36.0 and curr_rsi6 >= 54.0 and (curr_rsi6 - pre8_min_rsi6) >= 20.0)
     macd_curr = to_float(curr.get("macd_hist"), default=0.0)
     macd_prev = to_float(prev.get("macd_hist"), default=0.0)
     cond_macd_golden = bool(macd_curr > 0 and (macd_prev <= 0 or to_float(df["macd_hist"].iloc[-3], default=0.0) <= 0))
 
-    # [신규 알파 2] 비정배열 유동성 스윕(Spring) 반전 ($INIT, $BTW, $ERA 5종목 중 3종목 적중)
     cond_spring = bool(
         (not ma_short_aligned)
-        and max_wick_6 >= 1.4
+        and max_wick_all6 >= 1.4
         and current_price > ma20_5m
     )
 
     recent_squeeze = bool(df.iloc[-7:-1]["ttm_squeeze_on"].any())
     cond_ttm_squeeze = bool(recent_squeeze and current_price > ma20_5m and curr["close"] > curr["open"])
 
-    # [신규 알파 3] BB스퀴즈(하위 30%) + VWAP 장대양봉 돌파 ($B2 패턴)
     min_bbw_rank_5 = to_float(df.iloc[-6:-1]["bbw_pct_rank"].min(), default=50.0)
     vwap12_val = to_float(curr.get("vwap12"), default=current_price)
     cond_bb_vwap_breakout = bool(
@@ -603,6 +600,12 @@ def analyze_symbol(coin):
     cond_strong_short_squeeze = bool(funding_rate <= -0.015)
     cond_clean_funding = bool(funding_rate <= 0.010)
 
+    # [신규 알파 4 - NIGHTUSDT 패턴] 미결제약정(OI) 탄탄한 유입 및 포지션 유지 강도
+    turnover_m = to_float(coin["turnover_24h"]) / 1_000_000.0
+    oi_m = to_float(coin["oi_value"]) / 1_000_000.0
+    oi_turnover_ratio = (oi_m / turnover_m) if turnover_m > 0 else 0.0
+    cond_strong_oi = bool(oi_m >= 2.0 and oi_turnover_ratio >= 0.25)
+
     # =====================================================================
     # Track A 채점 (1차 선취매 / 눌림 타점)
     # =====================================================================
@@ -617,13 +620,12 @@ def analyze_symbol(coin):
             tags_a.append("단기 정배열(5>20>50) 안착")
         elif cond_spring and (obv_accum or has_cvd_div or cond_rsi_thrust or box_range_pct <= PRE_BOX_RANGE_MAX_PCT):
             score_a += 25
-            tags_a.append(f"유동성 스윕(Spring)+MA20 돌파(꼬리 {max_wick_6:.1f}x)")
+            tags_a.append(f"유동성 스윕(Spring)+MA20 돌파(꼬리 {max_wick_all6:.1f}x)")
 
         if box_range_pct <= PRE_BOX_TIGHT_PCT and (obv_accum or has_cvd_div):
             score_a += 25
             tags_a.append(f"초응축({box_range_pct:.1f}%)+{'CVD 다이버전스' if has_cvd_div else 'OBV 선행매집'}")
         elif box_range_pct <= 4.5 and (cond_ema_ribbon or recent_3_vol_ratio <= PRE_VOL_POCKET_MAX_RATIO):
-            # $BTW(3.3%), $B2(2.9%)처럼 초응축 박스권에서 OBV가 중립일 때 사각지대 보완
             score_a += 22
             tags_a.append(f"극초응축 박스({box_range_pct:.1f}%)+수평에너지 압축")
         elif box_range_pct <= PRE_BOX_RANGE_MAX_PCT and (obv_accum and has_cvd_div):
@@ -655,6 +657,10 @@ def analyze_symbol(coin):
             score_a += 8
             tags_a.append("RSI 스러스트+MACD 양전환")
 
+        if cond_strong_oi:
+            score_a += 8
+            tags_a.append(f"OI 실수급 유입(OI {oi_m:.1f}M·비중 {oi_turnover_ratio*100:.0f}%)")
+
         if cond_strong_short_squeeze:
             score_a += 15
             tags_a.append(f"강력 숏스퀴즈 수급({funding_rate:+.4f}%)")
@@ -663,7 +669,7 @@ def analyze_symbol(coin):
             tags_a.append(f"청정 펀딩 수급({funding_rate:+.4f}%)")
 
     # =====================================================================
-    # Track B 채점 (2차 돌파 / S/R Flip·MA20 리테스트 타점)
+    # Track B 채점 (2차 돌파 / S/R Flip·눌림목 스탑헌팅 리테스트 타점)
     # =====================================================================
     score_b = 0
     tags_b = []
@@ -699,6 +705,16 @@ def analyze_symbol(coin):
         and pullback_vol_vs_peak <= PULLBACK_DRYUP_STRICT
     )
 
+    # [신규 알파 5 - NIGHTUSDT 전문가 타점] 돌파 후 눌림목에서 롱 청산 스윕(아랫꼬리) 후 말아올림
+    cond_pullback_sweep = bool(
+        (peak_breakout_mult >= 2.5 or cond_strong_oi)
+        and 1.0 <= drawdown_from_high_pct <= 5.5
+        and max_wick_all6 >= 1.35
+        and current_price >= ma50_5m * 0.998
+        and htf_bullish
+        and (has_cvd_div or obv_accum or cond_strong_oi)
+    )
+
     max_vol_mult_2 = max(curr_vol_mult, prev_vol_mult)
 
     if cond_sr_flip_retest:
@@ -708,6 +724,9 @@ def analyze_symbol(coin):
         sup_name = "MA20" if ma20_err_pct <= 0.70 else "MA50"
         score_b += 25
         tags_b.append(f"돌파후 5m {sup_name} 칼지지(눌림거래량 {pullback_vol_vs_peak*100:.0f}%)")
+    elif cond_pullback_sweep:
+        score_b += 24
+        tags_b.append(f"눌림목 롱청산 스윕(꼬리 {max_wick_all6:.1f}x) 후 지지 반등")
     elif reclaimed_bb_mid and is_early_breakout and EARLY_VOL_MULT_MIN <= max_vol_mult_2 <= EARLY_VOL_MULT_MAX and drawdown_from_high_pct <= 4.5:
         score_b += 22
         if cond_spring:
@@ -719,7 +738,7 @@ def analyze_symbol(coin):
         to_float(df.iloc[-8:-2]["volume"].min() / ref_vol_ma20, default=1.0)
         if ref_vol_ma20 > 0 else 1.0
     )
-    if (cond_sr_flip_retest or cond_ma_pullback_retest) and peak_breakout_mult >= EARLY_VOL_MULT_MIN:
+    if (cond_sr_flip_retest or cond_ma_pullback_retest or cond_pullback_sweep) and peak_breakout_mult >= EARLY_VOL_MULT_MIN:
         score_b += 15
         tags_b.append(f"초동수급 폭발({peak_breakout_mult:.1f}배)")
     elif EARLY_VOL_MULT_MIN <= max_vol_mult_2 <= EARLY_VOL_MULT_MAX and max(to_float(curr["body_ratio"]), to_float(prev["body_ratio"])) >= 0.50:
@@ -737,7 +756,6 @@ def analyze_symbol(coin):
         score_b += 18
         tags_b.append(f"박스응축({box_range_pct:.1f}%)+OBV 선행매집")
     elif box_range_pct <= PRE_BOX_TIGHT_PCT and (cond_ema_ribbon or cond_spring):
-        # $BTW(3.3%), $B2(2.9%)처럼 OBV 중립이지만 5.2% 이내 초응축 + 리본/Spring 결합 시 매집 인정
         score_b += 18
         tags_b.append(f"초응축 박스({box_range_pct:.1f}%)+스프링 응축돌파")
     elif has_cvd_div:
@@ -760,6 +778,10 @@ def analyze_symbol(coin):
     if cond_rsi_thrust and cond_macd_golden:
         score_b += 8
         tags_b.append("RSI 과매도 스러스트+MACD 골든크로스")
+
+    if cond_strong_oi:
+        score_b += 8
+        tags_b.append(f"OI 실수급 유입(OI {oi_m:.1f}M·비중 {oi_turnover_ratio*100:.0f}%)")
 
     if cond_strong_short_squeeze:
         score_b += 15
@@ -809,8 +831,8 @@ def analyze_symbol(coin):
         "score": final_score,
         "change_24h": coin["change_24h"],
         "last_price": current_price,
-        "turnover_m": coin["turnover_24h"] / 1_000_000.0,
-        "oi_m": coin["oi_value"] / 1_000_000.0,
+        "turnover_m": turnover_m,
+        "oi_m": oi_m,
         "funding_rate": coin["funding_rate"],
         "rsi6_15m": rsi6_15m,
         "kdj_j_15m": kdj_j_15m,
