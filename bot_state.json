@@ -384,8 +384,9 @@
         26.6
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794381303
     },
     "CHIPUSDT": {
       "created_at": 1794229503,
