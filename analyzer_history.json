@@ -55,7 +55,7 @@
     {
       "date_str": "2026-11-09",
       "saved_at": 1794200023,
-      "reviewed_48h": false,
+      "reviewed_48h": true,
       "coins": [
         {
           "symbol": "JCTUSDT",
@@ -153,6 +153,58 @@
           "box_low": 0.4499172289510079,
           "box_high": 0.4661613092494028,
           "wave_height": 0.02908407024014087
+        }
+      ]
+    },
+    {
+      "date_str": "2026-11-11",
+      "saved_at": 1794374557,
+      "reviewed_48h": false,
+      "coins": [
+        {
+          "symbol": "INITUSDT",
+          "ign_ts_ms": 1794366000000,
+          "ign_time": "11/11 12:00 KST",
+          "ign_price": 0.22707,
+          "box_low": 0.18651,
+          "box_high": 0.22485,
+          "wave_height": 0.040559999999999985
+        },
+        {
+          "symbol": "ARIAUSDT",
+          "ign_ts_ms": 1794344100000,
+          "ign_time": "11/11 05:55 KST",
+          "ign_price": 0.22090717800035142,
+          "box_low": 0.21479441222983658,
+          "box_high": 0.22035872430152872,
+          "wave_height": 0.006112765770514839
+        },
+        {
+          "symbol": "BTWUSDT",
+          "ign_ts_ms": 1794367500000,
+          "ign_time": "11/11 12:25 KST",
+          "ign_price": 1.1866301941525232,
+          "box_low": 1.1235685895315404,
+          "box_high": 1.161119545026591,
+          "wave_height": 0.06306160462098287
+        },
+        {
+          "symbol": "ERAUSDT",
+          "ign_ts_ms": 1794363900000,
+          "ign_time": "11/11 11:25 KST",
+          "ign_price": 0.08058349236641223,
+          "box_low": 0.07777814885496184,
+          "box_high": 0.08176574427480916,
+          "wave_height": 0.002805343511450384
+        },
+        {
+          "symbol": "B2USDT",
+          "ign_ts_ms": 1794372000000,
+          "ign_time": "11/11 13:40 KST",
+          "ign_price": 0.48739481151195785,
+          "box_low": 0.46646980137819216,
+          "box_high": 0.4801895014187272,
+          "wave_height": 0.020925010133765687
         }
       ]
     }
