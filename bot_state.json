@@ -1243,6 +1243,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "DOSUSDT": {
+      "created_at": 1794388804,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.16658,
+      "entry_low": 0.162835,
+      "entry_high": 0.163582,
+      "stop_price": 0.15668016,
+      "sl_pct": 4,
+      "tps": [
+        0.17617195000000002,
+        0.19083257000000003,
+        0.20514888
+      ],
+      "tp_pcts": [
+        7.9,
+        16.9,
+        25.7
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
