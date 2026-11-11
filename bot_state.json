@@ -237,8 +237,9 @@
         24.7
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794437100
     },
     "USELESSUSDT": {
       "created_at": 1794237604,
@@ -724,8 +725,9 @@
         31.5
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794437100
     },
     "SOLUSDT": {
       "created_at": 1794398704,
@@ -834,8 +836,9 @@
         22.0
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794437100
     },
     "ADAUSDT": {
       "created_at": 1794412503,
@@ -900,8 +903,9 @@
         29.4
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794437100
     },
     "BLUAIUSDT": {
       "created_at": 1794423604,
@@ -944,8 +948,9 @@
         30.2
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794437100
     },
     "NXPCUSDT": {
       "created_at": 1794424804,
@@ -1034,6 +1039,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "XCNUSDT": {
+      "created_at": 1794437100,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.0036073099999999994,
+      "entry_low": 0.003543042857142857,
+      "entry_high": 0.0035570342857142857,
+      "stop_price": 0.0034080370285714283,
+      "sl_pct": 4,
+      "tps": [
+        0.0038892059999999997,
+        0.004104470608,
+        0.004378299852
+      ],
+      "tp_pcts": [
+        9.6,
+        15.6,
+        23.3
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   },
   "alert_history": {
@@ -1083,6 +1110,7 @@
     "GRAMUSDT": 1794280504,
     "SIGNUSDT": 1794288903,
     "SANDUSDT": 1794292204,
-    "NIGHTUSDT": 1794317104
+    "NIGHTUSDT": 1794317104,
+    "XCNUSDT": 1794437100
   }
 }
