@@ -19,7 +19,8 @@
         22.7
       ],
       "breakout_alerted": true,
-      "sl_alerted": false
+      "sl_alerted": true,
+      "sl_at": 1794380704
     },
     "RSRUSDT": {
       "created_at": 1794162273,
@@ -809,8 +810,9 @@
         40.7
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794380704
     },
     "NXPCUSDT": {
       "created_at": 1794263404,
