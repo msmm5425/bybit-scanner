@@ -1173,6 +1173,50 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "XMRUSDT": {
+      "created_at": 1794381604,
+      "track_type": "TRACK_A",
+      "swing_high_line": 578.0729499999999,
+      "entry_low": 567.8591454876819,
+      "entry_high": 569.871718,
+      "stop_price": 546.1108144740872,
+      "sl_pct": 4,
+      "tps": [
+        614.5883600000001,
+        648.4345319999999,
+        721.8608849999999
+      ],
+      "tp_pcts": [
+        8.0,
+        14.0,
+        26.9
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
+    },
+    "ZROUSDT": {
+      "created_at": 1794381604,
+      "track_type": "TRACK_A",
+      "swing_high_line": 1.5762949999999998,
+      "entry_low": 1.5467947507042155,
+      "entry_high": 1.554272857142857,
+      "stop_price": 1.4885124517665949,
+      "sl_pct": 4,
+      "tps": [
+        1.720899304,
+        1.8453491055999998,
+        1.9732974959999998
+      ],
+      "tp_pcts": [
+        11.0,
+        19.0,
+        27.3
+      ],
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   }
 }
