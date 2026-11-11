@@ -814,8 +814,9 @@
         23.9
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794438303
     },
     "TAOUSDT": {
       "created_at": 1794412503,
