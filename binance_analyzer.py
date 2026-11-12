@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import requests
@@ -6,7 +7,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 
-# 1. 환경변수 및 기본 설정 (외부 모듈 import 실패 시에도 100% 단독 작동)
+# 1. 환경변수 및 설정 로드 (config.py 및 GitHub Secrets 모두 호환)
 try:
     import config as cfg
     TELEGRAM_BOT_TOKEN = getattr(cfg, "TELEGRAM_BOT_TOKEN", "")
@@ -38,6 +39,11 @@ if not TELEGRAM_CHAT_ID:
     ).strip()
 
 HISTORY_FILE = "analyzer_history.json"
+# GitHub Actions(미국 서버) 지역 차단 우회를 위해 api.bytick.com을 1순위로 호출
+BYBIT_ENDPOINTS = [
+    "https://api.bytick.com",
+    "https://api.bybit.com",
+]
 
 
 def to_float(value, default=0.0):
@@ -66,20 +72,23 @@ def fmt_price(price):
 
 
 def fetch_klines(symbol, interval="5", limit=200):
-    url = "[https://api.bybit.com/v5/market/kline](https://api.bybit.com/v5/market/kline)"
+    # 1순위: 우회 도메인(api.bytick.com) 및 기본 도메인 직접 호출
     params = {
         "category": "linear",
         "symbol": symbol,
         "interval": str(interval),
         "limit": int(limit),
     }
-    for _ in range(2):
+    for base_url in BYBIT_ENDPOINTS:
+        url = f"{base_url}/v5/market/kline"
         try:
             resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=10)
+            if resp.status_code != 200:
+                continue
             data = resp.json()
             rows = data.get("result", {}).get("list", [])
             if not rows:
-                return pd.DataFrame()
+                continue
             df = pd.DataFrame(
                 rows,
                 columns=["timestamp", "open", "high", "low", "close", "volume", "turnover"],
@@ -88,61 +97,77 @@ def fetch_klines(symbol, interval="5", limit=200):
             for col in ["open", "high", "low", "close", "volume", "turnover"]:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
             df = df.dropna(subset=["timestamp", "close"]).sort_values("timestamp").reset_index(drop=True)
-            return df
+            if not df.empty:
+                return df
         except Exception:
-            time.sleep(0.3)
+            time.sleep(0.2)
+
+    # 2순위: 기존 api.py의 fetch_klines 폴백 호출
+    try:
+        from api import fetch_klines as api_fetch_klines
+        df = api_fetch_klines(symbol, str(interval), limit=int(limit))
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            return df
+    except Exception:
+        pass
+
     return pd.DataFrame()
 
 
-def fetch_candidates_safe():
+def fetch_top_gainer_candidates():
+    rwa_blocked = set()
     try:
         from api import get_scanner_candidates
         res = get_scanner_candidates()
+        if isinstance(res, tuple) and len(res) >= 3 and isinstance(res[2], (set, list)):
+            rwa_blocked = set(res[2])
         if isinstance(res, tuple) and len(res) >= 1 and res[0]:
-            return res[0]
-        elif isinstance(res, list) and res:
-            return res
+            cands = res[0]
+            if isinstance(cands, list) and len(cands) >= 5:
+                return cands
     except Exception as e:
-        print(f"[api.get_scanner_candidates 우회 호출] {e}")
+        print(f"[api 후보군 참조 안내] {e}")
 
-    # 단독 실행용 Bybit 선물 티커 직접 수집
-    url = "[https://api.bybit.com/v5/market/tickers](https://api.bybit.com/v5/market/tickers)"
-    try:
-        resp = requests.get(url, params={"category": "linear"}, headers=BROWSER_HEADERS, timeout=12)
-        items = resp.json().get("result", {}).get("list", [])
-        candidates = []
-        for it in items:
-            sym = str(it.get("symbol", ""))
-            if not sym.endswith("USDT"):
+    # 우회 도메인 포함 바이비트 선물 전체 티커 직접 수집
+    for base_url in BYBIT_ENDPOINTS:
+        url = f"{base_url}/v5/market/tickers"
+        try:
+            resp = requests.get(url, params={"category": "linear"}, headers=BROWSER_HEADERS, timeout=12)
+            if resp.status_code != 200:
                 continue
-            base = sym[:-4].upper()
-            if is_tradfi_ticker(base):
+            items = resp.json().get("result", {}).get("list", [])
+            if not items:
                 continue
-            turnover_m = to_float(it.get("turnover24h")) / 1e6
-            if turnover_m < 3.0:
-                continue
-            candidates.append({
-                "symbol": sym,
-                "base_coin": base,
-                "price": to_float(it.get("lastPrice")),
-                "change_24h": to_float(it.get("price24hPcnt")) * 100.0,
-                "turnover_m": turnover_m,
-                "oi_m": to_float(it.get("openInterestValue")) / 1e6,
-                "funding_pct": to_float(it.get("fundingRate")) * 100.0,
-            })
-        return candidates
-    except Exception as e:
-        print(f"[후보군 단독 조회 오류] {e}")
-        return []
+            candidates = []
+            for it in items:
+                sym = str(it.get("symbol", ""))
+                if not sym.endswith("USDT"):
+                    continue
+                base = sym[:-4].upper()
+                if is_tradfi_ticker(base) or base in rwa_blocked:
+                    continue
+                turnover_m = to_float(it.get("turnover24h")) / 1e6
+                if turnover_m < 3.0:
+                    continue
+                candidates.append({
+                    "symbol": sym,
+                    "base_coin": base,
+                    "price": to_float(it.get("lastPrice")),
+                    "change_24h": to_float(it.get("price24hPcnt")) * 100.0,
+                    "turnover_m": turnover_m,
+                    "oi_m": to_float(it.get("openInterestValue")) / 1e6,
+                    "funding_pct": to_float(it.get("fundingRate")) * 100.0,
+                })
+            if candidates:
+                return candidates
+        except Exception as e:
+            print(f"[티커 조회 재시도] {base_url}: {e}")
+
+    return []
 
 
 def send_telegram_chunked(text):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[텔레그램 토큰 미설정 - 콘솔 출력]\n" + text)
-        return
-
-    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){TELEGRAM_BOT_TOKEN}/sendMessage"
-    max_len = 3850
+    max_len = 3800
     lines = text.split("\n")
     chunks = []
     current = []
@@ -159,16 +184,35 @@ def send_telegram_chunked(text):
     if current:
         chunks.append("\n".join(current))
 
+    sent_any = False
     for chunk in chunks:
+        if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            try:
+                resp = requests.post(
+                    url,
+                    json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk, "disable_web_page_preview": True},
+                    timeout=15,
+                )
+                if resp.status_code == 200:
+                    sent_any = True
+                    time.sleep(0.4)
+                    continue
+                else:
+                    print(f"[텔레그램 API 응답 오류] {resp.status_code}: {resp.text}")
+            except Exception as e:
+                print(f"[텔레그램 직접 전송 예외] {e}")
+
+        # 폴백: notifier.py의 send_telegram_single 호출
         try:
-            requests.post(
-                url,
-                json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk, "disable_web_page_preview": True},
-                timeout=12,
-            )
+            from notifier import send_telegram_single
+            send_telegram_single(chunk)
+            sent_any = True
             time.sleep(0.4)
         except Exception as e:
-            print(f"[텔레그램 전송 오류] {e}")
+            print(f"[notifier 폴백 전송 실패] {e}")
+
+    return sent_any
 
 
 def calc_rsi(series, period=6):
@@ -225,221 +269,234 @@ def save_json_file(path, data):
 # [1. 전문가급 급등 Top 5 초동 발화점 심층 역추적 엔진]
 # =====================================================================
 def reverse_engineer_top_coin(coin):
-    symbol = coin["symbol"]
-    df_5m = fetch_klines(symbol, "5", limit=200)
-    df_1h = fetch_klines(symbol, "60", limit=80)
+    try:
+        symbol = coin["symbol"]
+        df_5m = fetch_klines(symbol, "5", limit=200)
+        if df_5m.empty or len(df_5m) < 30:
+            print(f"[캔들 부족 스킵] {symbol}: 5분봉 {len(df_5m)}개")
+            return None
 
-    if df_5m.empty or len(df_5m) < 60 or df_1h.empty or len(df_1h) < 20:
+        df_1h = fetch_klines(symbol, "60", limit=80)
+
+        for p in (5, 20, 50, 112):
+            df_5m[f"ma{p}"] = df_5m["close"].rolling(p, min_periods=3).mean()
+            df_5m[f"ema{p}"] = df_5m["close"].ewm(span=p, adjust=False).mean()
+
+        df_5m["vol_ma20"] = df_5m["volume"].rolling(20, min_periods=3).mean().shift(1).bfill()
+        df_5m["vol_mult"] = (df_5m["volume"] / df_5m["vol_ma20"].replace(0, np.nan)).fillna(1.0)
+        atr_5m = calc_atr(df_5m, 14)
+
+        ribbon_max = df_5m[["ema5", "ema20", "ema50"]].max(axis=1)
+        ribbon_min = df_5m[["ema5", "ema20", "ema50"]].min(axis=1)
+        df_5m["ribbon_spread"] = (ribbon_max - ribbon_min) / df_5m["close"].replace(0, np.nan) * 100.0
+
+        obv, cvd, _ = calc_obv_and_cvd(df_5m)
+        df_5m["obv"] = obv
+        df_5m["cvd"] = cvd
+
+        start_idx = min(20, max(5, len(df_5m) // 5))
+        search_df = df_5m.iloc[start_idx:-2].copy()
+        if search_df.empty:
+            search_df = df_5m.iloc[:-1].copy()
+
+        overall_low = to_float(search_df["low"].min(), to_float(df_5m["close"].iloc[-1]))
+        overall_high = to_float(df_5m["high"].max(), to_float(df_5m["close"].iloc[-1]))
+        price_ceiling_for_ignition = overall_low + (overall_high - overall_low) * 0.50
+
+        ign_candidates = search_df[
+            (search_df["close"] > search_df["open"])
+            & (search_df["vol_mult"] >= 2.2)
+            & (search_df["close"] <= price_ceiling_for_ignition * 1.05)
+        ]
+        if ign_candidates.empty:
+            ign_candidates = search_df[(search_df["close"] > search_df["open"]) & (search_df["vol_mult"] >= 1.8)]
+        if ign_candidates.empty:
+            ign_idx = search_df["vol_mult"].idxmax()
+        else:
+            ign_idx = ign_candidates.index[0]
+
+        ign_pos = df_5m.index.get_loc(ign_idx)
+        ign_row = df_5m.iloc[ign_pos]
+        ign_price = to_float(ign_row["close"])
+        ign_open = to_float(ign_row["open"], ign_price)
+        ign_high = to_float(ign_row["high"], ign_price)
+        ign_low = to_float(ign_row["low"], ign_price)
+        ign_vol = to_float(ign_row["volume"], 1.0)
+        ign_vol_mult = to_float(ign_row["vol_mult"], 3.0)
+        ign_ts_ms = int(ign_row["timestamp"])
+        ign_dt = datetime.fromtimestamp(ign_ts_ms / 1000.0, tz=KST)
+        ign_time_str = ign_dt.strftime("%m/%d %H:%M KST")
+        ign_minute = ign_dt.minute
+
+        post_df = df_5m.iloc[ign_pos:]
+        peak_pos_rel = post_df["high"].idxmax()
+        peak_pos = df_5m.index.get_loc(peak_pos_rel)
+        peak_high = to_float(post_df["high"].max(), ign_price)
+        pump_from_ign_pct = max(1.0, (peak_high - ign_price) / max(ign_price, 1e-8) * 100.0)
+        hours_to_peak = max(0.2, round((peak_pos - ign_pos) * 5.0 / 60.0, 1))
+
+        pre_start = max(0, ign_pos - 24)
+        pre_df = df_5m.iloc[pre_start:ign_pos]
+        if pre_df.empty:
+            pre_df = df_5m.iloc[:max(1, ign_pos)]
+        pre_high = to_float(pre_df["high"].max(), ign_price)
+        pre_low = to_float(pre_df["low"].min(), ign_price)
+        pre_box_pct = max(1.2, (pre_high - pre_low) / max(pre_low, 1e-8) * 100.0)
+
+        pre5_df = df_5m.iloc[max(0, ign_pos - 6):ign_pos]
+        if pre5_df.empty:
+            pre5_df = pre_df
+        vol_ma20_at_ign = to_float(ign_row["vol_ma20"], 1.0)
+        pre5_min_vol_ratio = to_float(pre5_df["volume"].min(), vol_ma20_at_ign) / max(vol_ma20_at_ign, 1e-8)
+        pre5_min_ribbon = to_float(pre5_df["ribbon_spread"].min(), 2.5)
+
+        ma5_i = to_float(ign_row["ma5"], ign_price)
+        ma20_i = to_float(ign_row["ma20"], ign_price)
+        ma50_i = to_float(ign_row["ma50"], ign_price)
+        ma112_i = to_float(ign_row["ma112"], ign_price)
+
+        full_aligned = ma5_i > ma20_i > ma50_i > ma112_i
+        short_aligned = ma5_i > ma20_i > ma50_i
+
+        body_s = (pre5_df["close"] - pre5_df["open"]).abs().replace(0, 1e-8)
+        l_wick = pre5_df[["open", "close"]].min(axis=1) - pre5_df["low"]
+        spring_wick_ratio = to_float((l_wick / body_s).max(), 0.0)
+        cond_spring = (not short_aligned) and (spring_wick_ratio >= 1.4) and (ign_price > ma20_i)
+
+        obv_up = to_float(pre_df["obv"].iloc[-1], 0) > to_float(pre_df["obv"].iloc[:10].mean(), 0) if len(pre_df) >= 6 else True
+        cvd_up = to_float(pre_df["cvd"].iloc[-1], 0) > to_float(pre_df["cvd"].iloc[:10].mean(), 0) if len(pre_df) >= 6 else True
+
+        bb_std = df_5m["close"].rolling(20, min_periods=5).std()
+        bb_u = df_5m["ma20"] + 2.0 * bb_std
+        bb_l = df_5m["ma20"] - 2.0 * bb_std
+        kc_u = df_5m["ma20"] + 1.5 * atr_5m
+        kc_l = df_5m["ma20"] - 1.5 * atr_5m
+        ttm_sqz = bool(((bb_u < kc_u) & (bb_l > kc_l)).iloc[max(0, ign_pos - 8):max(1, ign_pos)].any())
+
+        after_4 = df_5m.iloc[ign_pos + 1: min(len(df_5m), ign_pos + 5)]
+        if not after_4.empty:
+            pullback_low = to_float(after_4["low"].min(), ign_price)
+            pullback_min_vol = to_float(after_4["volume"].min(), ign_vol)
+            dryup_ratio = pullback_min_vol / max(ign_vol, 1e-8)
+        else:
+            pullback_low = ign_low
+            dryup_ratio = 0.25
+
+        sr_err_pct = abs(pullback_low - pre_high) / max(pre_high, 1e-8) * 100.0
+        impulse_len = max(ign_high - pre_high, ign_price * 0.004)
+        bull_flag_line = ign_high - impulse_len * 0.382
+        candle_mid_fvg = (ign_open + ign_high) / 2.0
+
+        is_sr_flip = sr_err_pct <= 1.25 and dryup_ratio <= 0.35
+        is_bull_flag = (pullback_low >= bull_flag_line) and (dryup_ratio <= 0.40)
+        is_fvg_50_hold = (pullback_low >= candle_mid_fvg * 0.998) and (dryup_ratio <= 0.45)
+        is_pocket_pivot = (pre5_min_vol_ratio <= 0.38) and (ign_vol_mult >= 3.2)
+
+        pre_peak_df = df_5m.iloc[ign_pos: peak_pos + 1]
+        min_after_ign = to_float(pre_peak_df["low"].min(), ign_low)
+        mae_pct = max(1.5, (ign_price - min_after_ign) / max(ign_price, 1e-8) * 100.0)
+
+        if not df_1h.empty and len(df_1h) >= 5:
+            ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=3).mean().iloc[-1], ign_price)
+            htf_aligned = to_float(df_5m["close"].iloc[-1]) >= ma20_1h * 0.99
+        else:
+            htf_aligned = to_float(df_5m["close"].iloc[-1]) >= ma112_i * 0.99
+
+        turnover_m = to_float(coin.get("turnover_m"), to_float(coin.get("turnover24h")) / 1e6)
+        oi_m = to_float(coin.get("oi_m"), to_float(coin.get("openInterestValue")) / 1e6)
+        funding_pct = to_float(
+            coin.get("funding_pct") if "funding_pct" in coin else to_float(coin.get("fundingRate")) * 100.0
+        )
+        change_24h = to_float(
+            coin.get("change_24h") if "change_24h" in coin else to_float(coin.get("price24hPcnt")) * 100.0
+        )
+        oi_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0
+
+        alphas = []
+        if is_bull_flag:
+            alphas.append(f"High-Tight Bull Flag 공중눌림(돌파봉 상단 38.2% 사수·거래량 {int(round(dryup_ratio*100))}% 건조)")
+        if is_pocket_pivot:
+            alphas.append(f"포켓피벗(Pocket Pivot) 초동 직격(발화전 거래량 {int(round(pre5_min_vol_ratio*100))}% 극건조 후 {ign_vol_mult:.1f}배 폭발)")
+        if is_fvg_50_hold and not is_bull_flag:
+            alphas.append("장대양봉 중심값(50% Equilibrium/FVG) 칼지지 반등")
+        if cond_spring:
+            alphas.append(f"유동성 스윕(Spring 아랫꼬리 {spring_wick_ratio:.1f}배 스탑헌팅 후 MA20 탈환)")
+        if cvd_up:
+            alphas.append("CVD 강세/흡수 다이버전스(선행 시장가 매수 누적)")
+        if ttm_sqz:
+            alphas.append("TTM 켈트너 스퀴즈 폭발(BB⊂KC 변동성 압축 후 상단 분출)")
+        if pre5_min_ribbon <= 1.8:
+            alphas.append(f"이평선 리본 초밀집 확산(5·20·50 이격 {pre5_min_ribbon:.1f}% 수렴 후 분출)")
+        if ign_minute in (0, 5, 10):
+            alphas.append(f"정각 오프닝 드라이브({ign_dt.strftime('%H:%M')} 새 1시간봉 시동 수급)")
+        elif ign_minute in (45, 50, 55):
+            alphas.append(f"정각 마감 전 종가관리 피벗({ign_dt.strftime('%H:%M')} 선취매 수급)")
+        if htf_aligned:
+            alphas.append("상위프레임(1H 중심선) 구조적 지지 반등")
+        if is_sr_flip:
+            alphas.append(f"돌파후 박스상단 S/R Flip 리테스트(오차 {sr_err_pct:.2f}%·거래량 {int(round(dryup_ratio*100))}% 건조)")
+        if funding_pct <= 0.012:
+            alphas.append(f"숏스퀴즈/청정 수급(펀딩 {funding_pct:+.4f}%·OI비중 {int(round(oi_ratio))}%)")
+
+        if is_sr_flip:
+            post_pattern_str = f"전고점 S/R Flip 칼지지(오차 {sr_err_pct:.2f}%) (거래량 {int(round(dryup_ratio*100))}% 수준 건조)"
+        elif is_bull_flag:
+            post_pattern_str = f"High-Tight Bull Flag 공중눌림(상단 38.2% 지지) (거래량 {int(round(dryup_ratio*100))}% 수준 건조)"
+        elif is_fvg_50_hold:
+            post_pattern_str = f"장대양봉 50%(FVG) 중심선 지지 반등 (거래량 {int(round(dryup_ratio*100))}% 수준 건조)"
+        else:
+            post_pattern_str = f"단기 자율 눌림 후 반등 (거래량 {int(round(dryup_ratio*100))}% 수준 건조)"
+
+        if full_aligned:
+            ma_str = "[✅ 완전 정배열(5>20>50>112)]"
+        elif short_aligned:
+            ma_str = "[✅ 단기 정배열(5>20>50)]"
+        else:
+            ma_str = "[⚠️ 비정배열(역배열/혼조 돌파)]"
+
+        obv_str = "[✅ 우상향 선행매집]" if (obv_up or cvd_up) else "[➖ 중립/횡보]"
+
+        return {
+            "symbol": symbol,
+            "base": symbol.replace("USDT", ""),
+            "price": to_float(df_5m["close"].iloc[-1]),
+            "change_24h": change_24h,
+            "turnover_m": turnover_m,
+            "oi_m": oi_m,
+            "oi_ratio": oi_ratio,
+            "funding_pct": funding_pct,
+            "ign_time_str": ign_time_str,
+            "ign_price": ign_price,
+            "peak_high": peak_high,
+            "pump_from_ign_pct": pump_from_ign_pct,
+            "hours_to_peak": hours_to_peak,
+            "ma_str": ma_str,
+            "full_aligned": full_aligned,
+            "short_aligned": short_aligned,
+            "cond_spring": cond_spring,
+            "pre_box_pct": pre_box_pct,
+            "obv_str": obv_str,
+            "obv_up": obv_up,
+            "cvd_up": cvd_up,
+            "ign_vol_mult": ign_vol_mult,
+            "pre5_min_vol_ratio": pre5_min_vol_ratio,
+            "pre5_min_ribbon": pre5_min_ribbon,
+            "dryup_ratio": dryup_ratio,
+            "is_sr_flip": is_sr_flip,
+            "is_bull_flag": is_bull_flag,
+            "is_fvg_50_hold": is_fvg_50_hold,
+            "is_pocket_pivot": is_pocket_pivot,
+            "ttm_sqz": ttm_sqz,
+            "htf_aligned": htf_aligned,
+            "post_pattern_str": post_pattern_str,
+            "alphas": alphas,
+            "mae_pct": mae_pct,
+            "support_line": pre_low,
+            "swing_high_line": ign_high,
+        }
+    except Exception as e:
+        print(f"[종목 분석 예외] {coin.get('symbol')}: {e}")
         return None
-
-    for p in (5, 20, 50, 112):
-        df_5m[f"ma{p}"] = df_5m["close"].rolling(p, min_periods=5).mean()
-        df_5m[f"ema{p}"] = df_5m["close"].ewm(span=p, adjust=False).mean()
-
-    df_5m["vol_ma20"] = df_5m["volume"].rolling(20, min_periods=5).mean().shift(1)
-    df_5m["vol_mult"] = df_5m["volume"] / df_5m["vol_ma20"].replace(0, np.nan)
-    atr_5m = calc_atr(df_5m, 14)
-
-    ribbon_max = df_5m[["ema5", "ema20", "ema50"]].max(axis=1)
-    ribbon_min = df_5m[["ema5", "ema20", "ema50"]].min(axis=1)
-    df_5m["ribbon_spread"] = (ribbon_max - ribbon_min) / df_5m["close"].replace(0, np.nan) * 100.0
-
-    obv, cvd, _ = calc_obv_and_cvd(df_5m)
-    df_5m["obv"] = obv
-    df_5m["cvd"] = cvd
-
-    search_df = df_5m.iloc[25:-3].copy()
-    if search_df.empty:
-        return None
-
-    overall_low = to_float(search_df["low"].min(), to_float(df_5m["close"].iloc[-1]))
-    overall_high = to_float(df_5m["high"].iloc[-60:].max(), to_float(df_5m["close"].iloc[-1]))
-    price_ceiling_for_ignition = overall_low + (overall_high - overall_low) * 0.45
-
-    ign_candidates = search_df[
-        (search_df["close"] > search_df["open"])
-        & (search_df["vol_mult"] >= 2.5)
-        & (search_df["close"] <= price_ceiling_for_ignition * 1.05)
-    ]
-    if ign_candidates.empty:
-        ign_candidates = search_df[(search_df["close"] > search_df["open"]) & (search_df["vol_mult"] >= 2.0)]
-    if ign_candidates.empty:
-        ign_idx = search_df["vol_mult"].idxmax()
-    else:
-        ign_idx = ign_candidates.index[0]
-
-    ign_pos = df_5m.index.get_loc(ign_idx)
-    ign_row = df_5m.iloc[ign_pos]
-    ign_price = to_float(ign_row["close"])
-    ign_open = to_float(ign_row["open"], ign_price)
-    ign_high = to_float(ign_row["high"], ign_price)
-    ign_low = to_float(ign_row["low"], ign_price)
-    ign_vol = to_float(ign_row["volume"], 1.0)
-    ign_vol_mult = to_float(ign_row["vol_mult"], 3.0)
-    ign_ts_ms = int(ign_row["timestamp"])
-    ign_dt = datetime.fromtimestamp(ign_ts_ms / 1000.0, tz=KST)
-    ign_time_str = ign_dt.strftime("%m/%d %H:%M KST")
-    ign_minute = ign_dt.minute
-
-    post_df = df_5m.iloc[ign_pos:]
-    peak_pos_rel = post_df["high"].idxmax()
-    peak_pos = df_5m.index.get_loc(peak_pos_rel)
-    peak_high = to_float(post_df["high"].max(), ign_price)
-    pump_from_ign_pct = (peak_high - ign_price) / max(ign_price, 1e-8) * 100.0
-    hours_to_peak = max(0.2, round((peak_pos - ign_pos) * 5.0 / 60.0, 1))
-
-    pre_start = max(0, ign_pos - 24)
-    pre_df = df_5m.iloc[pre_start:ign_pos]
-    pre_high = to_float(pre_df["high"].max(), ign_price)
-    pre_low = to_float(pre_df["low"].min(), ign_price)
-    pre_box_pct = (pre_high - pre_low) / max(pre_low, 1e-8) * 100.0
-
-    pre5_df = df_5m.iloc[max(0, ign_pos - 6):ign_pos]
-    vol_ma20_at_ign = to_float(ign_row["vol_ma20"], 1.0)
-    pre5_min_vol_ratio = to_float(pre5_df["volume"].min(), vol_ma20_at_ign) / max(vol_ma20_at_ign, 1e-8)
-    pre5_min_ribbon = to_float(pre5_df["ribbon_spread"].min(), 2.5)
-
-    ma5_i = to_float(ign_row["ma5"], ign_price)
-    ma20_i = to_float(ign_row["ma20"], ign_price)
-    ma50_i = to_float(ign_row["ma50"], ign_price)
-    ma112_i = to_float(ign_row["ma112"], ign_price)
-
-    full_aligned = ma5_i > ma20_i > ma50_i > ma112_i
-    short_aligned = ma5_i > ma20_i > ma50_i
-
-    body_s = (pre5_df["close"] - pre5_df["open"]).abs().replace(0, 1e-8)
-    l_wick = pre5_df[["open", "close"]].min(axis=1) - pre5_df["low"]
-    spring_wick_ratio = to_float((l_wick / body_s).max(), 0.0)
-    cond_spring = (not short_aligned) and (spring_wick_ratio >= 1.4) and (ign_price > ma20_i)
-
-    obv_up = to_float(pre_df["obv"].iloc[-1], 0) > to_float(pre_df["obv"].iloc[:10].mean(), 0) if len(pre_df) >= 12 else False
-    cvd_up = to_float(pre_df["cvd"].iloc[-1], 0) > to_float(pre_df["cvd"].iloc[:10].mean(), 0) if len(pre_df) >= 12 else False
-
-    bb_std = df_5m["close"].rolling(20, min_periods=5).std()
-    bb_u = df_5m["ma20"] + 2.0 * bb_std
-    bb_l = df_5m["ma20"] - 2.0 * bb_std
-    kc_u = df_5m["ma20"] + 1.5 * atr_5m
-    kc_l = df_5m["ma20"] - 1.5 * atr_5m
-    ttm_sqz = bool(((bb_u < kc_u) & (bb_l > kc_l)).iloc[max(0, ign_pos - 8):ign_pos].any())
-
-    after_4 = df_5m.iloc[ign_pos + 1: min(len(df_5m), ign_pos + 5)]
-    if not after_4.empty:
-        pullback_low = to_float(after_4["low"].min(), ign_price)
-        pullback_min_vol = to_float(after_4["volume"].min(), ign_vol)
-        dryup_ratio = pullback_min_vol / max(ign_vol, 1e-8)
-    else:
-        pullback_low = ign_low
-        dryup_ratio = 0.25
-
-    sr_err_pct = abs(pullback_low - pre_high) / max(pre_high, 1e-8) * 100.0
-    impulse_len = max(ign_high - pre_high, ign_price * 0.004)
-    bull_flag_line = ign_high - impulse_len * 0.382
-    candle_mid_fvg = (ign_open + ign_high) / 2.0
-
-    is_sr_flip = sr_err_pct <= 1.25 and dryup_ratio <= 0.35
-    is_bull_flag = (pullback_low >= bull_flag_line) and (dryup_ratio <= 0.40)
-    is_fvg_50_hold = (pullback_low >= candle_mid_fvg * 0.998) and (dryup_ratio <= 0.45)
-    is_pocket_pivot = (pre5_min_vol_ratio <= 0.38) and (ign_vol_mult >= 3.4)
-
-    pre_peak_df = df_5m.iloc[ign_pos: peak_pos + 1]
-    min_after_ign = to_float(pre_peak_df["low"].min(), ign_low)
-    mae_pct = max(1.5, (ign_price - min_after_ign) / max(ign_price, 1e-8) * 100.0)
-
-    ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=5).mean().iloc[-1], ign_price)
-    htf_aligned = to_float(df_5m["close"].iloc[-1]) >= ma20_1h * 0.99
-
-    turnover_m = to_float(coin.get("turnover_m"), to_float(coin.get("turnover24h")) / 1e6)
-    oi_m = to_float(coin.get("oi_m"), to_float(coin.get("openInterestValue")) / 1e6)
-    funding_pct = to_float(
-        coin.get("funding_pct") if "funding_pct" in coin else to_float(coin.get("fundingRate")) * 100.0
-    )
-    change_24h = to_float(
-        coin.get("change_24h") if "change_24h" in coin else to_float(coin.get("price24hPcnt")) * 100.0
-    )
-    oi_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0
-
-    alphas = []
-    if is_bull_flag:
-        alphas.append(f"High-Tight Bull Flag 공중눌림(돌파봉 상단 38.2% 사수·거래량 {int(round(dryup_ratio*100))}% 건조)")
-    if is_pocket_pivot:
-        alphas.append(f"포켓피벗(Pocket Pivot) 초동 직격(발화전 거래량 {int(round(pre5_min_vol_ratio*100))}% 극건조 후 {ign_vol_mult:.1f}배 폭발)")
-    if is_fvg_50_hold and not is_bull_flag:
-        alphas.append("장대양봉 중심값(50% Equilibrium/FVG) 칼지지 반등")
-    if cond_spring:
-        alphas.append(f"유동성 스윕(Spring 아랫꼬리 {spring_wick_ratio:.1f}배 스탑헌팅 후 MA20 탈환)")
-    if cvd_up:
-        alphas.append("CVD 강세/흡수 다이버전스(선행 시장가 매수 누적)")
-    if ttm_sqz:
-        alphas.append("TTM 켈트너 스퀴즈 폭발(BB⊂KC 변동성 압축 후 상단 분출)")
-    if pre5_min_ribbon <= 1.8:
-        alphas.append(f"이평선 리본 초밀집 확산(5·20·50 이격 {pre5_min_ribbon:.1f}% 수렴 후 분출)")
-    if ign_minute in (0, 5, 10):
-        alphas.append(f"정각 오프닝 드라이브({ign_dt.strftime('%H:%M')} 새 1시간봉 시동 수급)")
-    elif ign_minute in (45, 50, 55):
-        alphas.append(f"정각 마감 전 종가관리 피벗({ign_dt.strftime('%H:%M')} 선취매 수급)")
-    if htf_aligned:
-        alphas.append("상위프레임(1H 중심선) 구조적 지지 반등")
-    if is_sr_flip:
-        alphas.append(f"돌파후 박스상단 S/R Flip 리테스트(오차 {sr_err_pct:.2f}%·거래량 {int(round(dryup_ratio*100))}% 건조)")
-    if funding_pct <= 0.012:
-        alphas.append(f"숏스퀴즈/청정 수급(펀딩 {funding_pct:+.4f}%·OI비중 {int(round(oi_ratio))}%)")
-
-    if is_sr_flip:
-        post_pattern_str = f"전고점 S/R Flip 칼지지(오차 {sr_err_pct:.2f}%) (거래량 {int(round(dryup_ratio*100))}% 수준 건조)"
-    elif is_bull_flag:
-        post_pattern_str = f"High-Tight Bull Flag 공중눌림(상단 38.2% 지지) (거래량 {int(round(dryup_ratio*100))}% 수준 건조)"
-    elif is_fvg_50_hold:
-        post_pattern_str = f"장대양봉 50%(FVG) 중심선 지지 반등 (거래량 {int(round(dryup_ratio*100))}% 수준 건조)"
-    else:
-        post_pattern_str = f"단기 자율 눌림 후 반등 (거래량 {int(round(dryup_ratio*100))}% 수준 건조)"
-
-    if full_aligned:
-        ma_str = "[✅ 완전 정배열(5>20>50>112)]"
-    elif short_aligned:
-        ma_str = "[✅ 단기 정배열(5>20>50)]"
-    else:
-        ma_str = "[⚠️ 비정배열(역배열/혼조 돌파)]"
-
-    obv_str = "[✅ 우상향 선행매집]" if (obv_up or cvd_up) else "[➖ 중립/횡보]"
-
-    return {
-        "symbol": symbol,
-        "base": symbol.replace("USDT", ""),
-        "price": to_float(df_5m["close"].iloc[-1]),
-        "change_24h": change_24h,
-        "turnover_m": turnover_m,
-        "oi_m": oi_m,
-        "oi_ratio": oi_ratio,
-        "funding_pct": funding_pct,
-        "ign_time_str": ign_time_str,
-        "ign_price": ign_price,
-        "peak_high": peak_high,
-        "pump_from_ign_pct": pump_from_ign_pct,
-        "hours_to_peak": hours_to_peak,
-        "ma_str": ma_str,
-        "full_aligned": full_aligned,
-        "short_aligned": short_aligned,
-        "cond_spring": cond_spring,
-        "pre_box_pct": pre_box_pct,
-        "obv_str": obv_str,
-        "obv_up": obv_up,
-        "cvd_up": cvd_up,
-        "ign_vol_mult": ign_vol_mult,
-        "pre5_min_vol_ratio": pre5_min_vol_ratio,
-        "pre5_min_ribbon": pre5_min_ribbon,
-        "dryup_ratio": dryup_ratio,
-        "is_sr_flip": is_sr_flip,
-        "is_bull_flag": is_bull_flag,
-        "is_fvg_50_hold": is_fvg_50_hold,
-        "is_pocket_pivot": is_pocket_pivot,
-        "ttm_sqz": ttm_sqz,
-        "htf_aligned": htf_aligned,
-        "post_pattern_str": post_pattern_str,
-        "alphas": alphas,
-        "mae_pct": mae_pct,
-        "support_line": pre_low,
-        "swing_high_line": ign_high,
-    }
 
 
 # =====================================================================
@@ -726,10 +783,12 @@ def main():
     now_dt = datetime.now(KST)
     now_str = now_dt.strftime("%Y-%m-%d %H:%M KST")
 
-    candidates = fetch_candidates_safe()
+    candidates = fetch_top_gainer_candidates()
     if not candidates:
-        print("[알림] Top 5 후보군 조회 실패")
-        return
+        err_msg = f"⚠️ [{now_str}] Bybit Top 5 후보군 티커 조회에 실패했습니다. (네트워크 응답 확인 필요)"
+        print(err_msg)
+        send_telegram_chunked(err_msg)
+        sys.exit(1)
 
     candidates.sort(
         key=lambda x: to_float(x.get("change_24h"), to_float(x.get("price24hPcnt")) * 100.0),
@@ -737,7 +796,7 @@ def main():
     )
 
     analyzed_top5 = []
-    for c in candidates[:12]:
+    for c in candidates[:15]:
         res = reverse_engineer_top_coin(c)
         if res:
             analyzed_top5.append(res)
@@ -745,8 +804,10 @@ def main():
             break
 
     if not analyzed_top5:
-        print("[알림] 분석 가능한 상위 종목 없음")
-        return
+        err_msg = f"⚠️ [{now_str}] 상위 종목 5분봉 캔들 수집에 실패했습니다. (Bybit 엔드포인트 확인 필요)"
+        print(err_msg)
+        send_telegram_chunked(err_msg)
+        sys.exit(1)
 
     num_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
     msg_lines = [
@@ -868,7 +929,11 @@ def main():
     )
 
     full_report = "\n".join(msg_lines)
-    send_telegram_chunked(full_report)
+    ok = send_telegram_chunked(full_report)
+    if not ok:
+        print("[치명적 오류] 텔레그램 메시지 전송 실패 (토큰 또는 CHAT_ID 확인 필요)")
+        sys.exit(1)
+
     print(f"[{now_str}] 전문가급 Top 5 역추적 + 오답 노트 브리핑 전송 완료")
 
 
