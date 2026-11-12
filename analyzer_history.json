@@ -1,212 +1,252 @@
-{
-  "cohorts": [
-    {
-      "date_str": "2026-11-08",
-      "saved_at": 1794122056,
-      "reviewed_48h": true,
-      "coins": [
-        {
-          "symbol": "METUSDT",
-          "ign_ts_ms": 1794077700000,
-          "ign_time": "11/08 03:55 KST",
-          "ign_price": 0.3221317212853961,
-          "box_low": 0.29737511931275845,
-          "box_high": 0.3186796054724785,
-          "wave_height": 0.024756601972637626
-        },
-        {
-          "symbol": "ICNTUSDT",
-          "ign_ts_ms": 1794118800000,
-          "ign_time": "11/08 15:20 KST",
-          "ign_price": 0.31287031346035643,
-          "box_low": 0.2948647818070067,
-          "box_high": 0.309578979717271,
-          "wave_height": 0.018005531653349727
-        },
-        {
-          "symbol": "ERAUSDT",
-          "ign_ts_ms": 1794114300000,
-          "ign_time": "11/08 14:05 KST",
-          "ign_price": 0.07666008828875616,
-          "box_low": 0.07383082316281485,
-          "box_high": 0.0759802648662685,
-          "wave_height": 0.0028292651259413104
-        },
-        {
-          "symbol": "BMTUSDT",
-          "ign_ts_ms": 1794111300000,
-          "ign_time": "11/08 13:15 KST",
-          "ign_price": 0.02528078620136382,
-          "box_low": 0.023455675892499,
-          "box_high": 0.024769354191736863,
-          "wave_height": 0.0018251103088648205
-        },
-        {
-          "symbol": "RSRUSDT",
-          "ign_ts_ms": 1794081600000,
-          "ign_time": "11/08 05:00 KST",
-          "ign_price": 0.001564,
-          "box_low": 0.001542,
-          "box_high": 0.001566,
-          "wave_height": 3.91e-05
-        }
-      ]
-    },
-    {
-      "date_str": "2026-11-09",
-      "saved_at": 1794200023,
-      "reviewed_48h": true,
-      "coins": [
-        {
-          "symbol": "JCTUSDT",
-          "ign_ts_ms": 1794168300000,
-          "ign_time": "11/09 05:05 KST",
-          "ign_price": 0.02066,
-          "box_low": 0.012473,
-          "box_high": 0.016259,
-          "wave_height": 0.008187000000000002
-        },
-        {
-          "symbol": "HANAUSDT",
-          "ign_ts_ms": 1794198600000,
-          "ign_time": "11/09 13:30 KST",
-          "ign_price": 0.01909,
-          "box_low": 0.01459,
-          "box_high": 0.01837,
-          "wave_height": 0.004499999999999999
-        },
-        {
-          "symbol": "RSRUSDT",
-          "ign_ts_ms": 1794167400000,
-          "ign_time": "11/09 04:50 KST",
-          "ign_price": 0.001732,
-          "box_low": 0.001661,
-          "box_high": 0.001722,
-          "wave_height": 7.10000000000001e-05
-        },
-        {
-          "symbol": "ICNTUSDT",
-          "ign_ts_ms": 1794164700000,
-          "ign_time": "11/09 04:05 KST",
-          "ign_price": 0.3667661777394305,
-          "box_low": 0.3566284153005464,
-          "box_high": 0.36546131722749486,
-          "wave_height": 0.01013776243888409
-        },
-        {
-          "symbol": "MERLUSDT",
-          "ign_ts_ms": 1794162300000,
-          "ign_time": "11/09 03:25 KST",
-          "ign_price": 0.029241204437400952,
-          "box_low": 0.028681141045958796,
-          "box_high": 0.029300158478605384,
-          "wave_height": 0.0007310301109350239
-        }
-      ]
-    },
-    {
-      "date_str": "2026-11-10",
-      "saved_at": 1794285757,
-      "reviewed_48h": false,
-      "coins": [
-        {
-          "symbol": "INITUSDT",
-          "ign_ts_ms": 1794250800000,
-          "ign_time": "11/10 04:00 KST",
-          "ign_price": 0.14828407934893184,
-          "box_low": 0.13196841302136317,
-          "box_high": 0.14528992878942015,
-          "wave_height": 0.016315666327568673
-        },
-        {
-          "symbol": "PIEVERSEUSDT",
-          "ign_ts_ms": 1794255600000,
-          "ign_time": "11/10 05:20 KST",
-          "ign_price": 2.0650122302405327,
-          "box_low": 1.9052766644263361,
-          "box_high": 2.2276032162638155,
-          "wave_height": 0.15973556581419657
-        },
-        {
-          "symbol": "EDGEUSDT",
-          "ign_ts_ms": 1794280200000,
-          "ign_time": "11/10 12:10 KST",
-          "ign_price": 0.4198094663124849,
-          "box_low": 0.39967399178942287,
-          "box_high": 0.4228449649843033,
-          "wave_height": 0.020135474523062025
-        },
-        {
-          "symbol": "ARIAUSDT",
-          "ign_ts_ms": 1794273900000,
-          "ign_time": "11/10 10:25 KST",
-          "ign_price": 0.1824723472847535,
-          "box_low": 0.17754738480351287,
-          "box_high": 0.18063170474125953,
-          "wave_height": 0.004924962481240636
-        },
-        {
-          "symbol": "BRUSDT",
-          "ign_ts_ms": 1794278100000,
-          "ign_time": "11/10 11:35 KST",
-          "ign_price": 0.47900129919114875,
-          "box_low": 0.4499172289510079,
-          "box_high": 0.4661613092494028,
-          "wave_height": 0.02908407024014087
-        }
-      ]
-    },
-    {
-      "date_str": "2026-11-11",
-      "saved_at": 1794374557,
-      "reviewed_48h": false,
-      "coins": [
-        {
-          "symbol": "INITUSDT",
-          "ign_ts_ms": 1794366000000,
-          "ign_time": "11/11 12:00 KST",
-          "ign_price": 0.22707,
-          "box_low": 0.18651,
-          "box_high": 0.22485,
-          "wave_height": 0.040559999999999985
-        },
-        {
-          "symbol": "ARIAUSDT",
-          "ign_ts_ms": 1794344100000,
-          "ign_time": "11/11 05:55 KST",
-          "ign_price": 0.22090717800035142,
-          "box_low": 0.21479441222983658,
-          "box_high": 0.22035872430152872,
-          "wave_height": 0.006112765770514839
-        },
-        {
-          "symbol": "BTWUSDT",
-          "ign_ts_ms": 1794367500000,
-          "ign_time": "11/11 12:25 KST",
-          "ign_price": 1.1866301941525232,
-          "box_low": 1.1235685895315404,
-          "box_high": 1.161119545026591,
-          "wave_height": 0.06306160462098287
-        },
-        {
-          "symbol": "ERAUSDT",
-          "ign_ts_ms": 1794363900000,
-          "ign_time": "11/11 11:25 KST",
-          "ign_price": 0.08058349236641223,
-          "box_low": 0.07777814885496184,
-          "box_high": 0.08176574427480916,
-          "wave_height": 0.002805343511450384
-        },
-        {
-          "symbol": "B2USDT",
-          "ign_ts_ms": 1794372000000,
-          "ign_time": "11/11 13:40 KST",
-          "ign_price": 0.48739481151195785,
-          "box_low": 0.46646980137819216,
-          "box_high": 0.4801895014187272,
-          "wave_height": 0.020925010133765687
-        }
-      ]
-    }
-  ]
-}
+[
+  {
+    "date_str": "cohorts",
+    "timestamp": 1794351651,
+    "coins": [
+      {
+        "date_str": "2026-11-08",
+        "saved_at": 1794122056,
+        "reviewed_48h": true,
+        "coins": [
+          {
+            "symbol": "METUSDT",
+            "ign_ts_ms": 1794077700000,
+            "ign_time": "11/08 03:55 KST",
+            "ign_price": 0.3221317212853961,
+            "box_low": 0.29737511931275845,
+            "box_high": 0.3186796054724785,
+            "wave_height": 0.024756601972637626
+          },
+          {
+            "symbol": "ICNTUSDT",
+            "ign_ts_ms": 1794118800000,
+            "ign_time": "11/08 15:20 KST",
+            "ign_price": 0.31287031346035643,
+            "box_low": 0.2948647818070067,
+            "box_high": 0.309578979717271,
+            "wave_height": 0.018005531653349727
+          },
+          {
+            "symbol": "ERAUSDT",
+            "ign_ts_ms": 1794114300000,
+            "ign_time": "11/08 14:05 KST",
+            "ign_price": 0.07666008828875616,
+            "box_low": 0.07383082316281485,
+            "box_high": 0.0759802648662685,
+            "wave_height": 0.0028292651259413104
+          },
+          {
+            "symbol": "BMTUSDT",
+            "ign_ts_ms": 1794111300000,
+            "ign_time": "11/08 13:15 KST",
+            "ign_price": 0.02528078620136382,
+            "box_low": 0.023455675892499,
+            "box_high": 0.024769354191736863,
+            "wave_height": 0.0018251103088648205
+          },
+          {
+            "symbol": "RSRUSDT",
+            "ign_ts_ms": 1794081600000,
+            "ign_time": "11/08 05:00 KST",
+            "ign_price": 0.001564,
+            "box_low": 0.001542,
+            "box_high": 0.001566,
+            "wave_height": 3.91e-05
+          }
+        ]
+      },
+      {
+        "date_str": "2026-11-09",
+        "saved_at": 1794200023,
+        "reviewed_48h": true,
+        "coins": [
+          {
+            "symbol": "JCTUSDT",
+            "ign_ts_ms": 1794168300000,
+            "ign_time": "11/09 05:05 KST",
+            "ign_price": 0.02066,
+            "box_low": 0.012473,
+            "box_high": 0.016259,
+            "wave_height": 0.008187000000000002
+          },
+          {
+            "symbol": "HANAUSDT",
+            "ign_ts_ms": 1794198600000,
+            "ign_time": "11/09 13:30 KST",
+            "ign_price": 0.01909,
+            "box_low": 0.01459,
+            "box_high": 0.01837,
+            "wave_height": 0.004499999999999999
+          },
+          {
+            "symbol": "RSRUSDT",
+            "ign_ts_ms": 1794167400000,
+            "ign_time": "11/09 04:50 KST",
+            "ign_price": 0.001732,
+            "box_low": 0.001661,
+            "box_high": 0.001722,
+            "wave_height": 7.10000000000001e-05
+          },
+          {
+            "symbol": "ICNTUSDT",
+            "ign_ts_ms": 1794164700000,
+            "ign_time": "11/09 04:05 KST",
+            "ign_price": 0.3667661777394305,
+            "box_low": 0.3566284153005464,
+            "box_high": 0.36546131722749486,
+            "wave_height": 0.01013776243888409
+          },
+          {
+            "symbol": "MERLUSDT",
+            "ign_ts_ms": 1794162300000,
+            "ign_time": "11/09 03:25 KST",
+            "ign_price": 0.029241204437400952,
+            "box_low": 0.028681141045958796,
+            "box_high": 0.029300158478605384,
+            "wave_height": 0.0007310301109350239
+          }
+        ]
+      },
+      {
+        "date_str": "2026-11-10",
+        "saved_at": 1794285757,
+        "reviewed_48h": false,
+        "coins": [
+          {
+            "symbol": "INITUSDT",
+            "ign_ts_ms": 1794250800000,
+            "ign_time": "11/10 04:00 KST",
+            "ign_price": 0.14828407934893184,
+            "box_low": 0.13196841302136317,
+            "box_high": 0.14528992878942015,
+            "wave_height": 0.016315666327568673
+          },
+          {
+            "symbol": "PIEVERSEUSDT",
+            "ign_ts_ms": 1794255600000,
+            "ign_time": "11/10 05:20 KST",
+            "ign_price": 2.0650122302405327,
+            "box_low": 1.9052766644263361,
+            "box_high": 2.2276032162638155,
+            "wave_height": 0.15973556581419657
+          },
+          {
+            "symbol": "EDGEUSDT",
+            "ign_ts_ms": 1794280200000,
+            "ign_time": "11/10 12:10 KST",
+            "ign_price": 0.4198094663124849,
+            "box_low": 0.39967399178942287,
+            "box_high": 0.4228449649843033,
+            "wave_height": 0.020135474523062025
+          },
+          {
+            "symbol": "ARIAUSDT",
+            "ign_ts_ms": 1794273900000,
+            "ign_time": "11/10 10:25 KST",
+            "ign_price": 0.1824723472847535,
+            "box_low": 0.17754738480351287,
+            "box_high": 0.18063170474125953,
+            "wave_height": 0.004924962481240636
+          },
+          {
+            "symbol": "BRUSDT",
+            "ign_ts_ms": 1794278100000,
+            "ign_time": "11/10 11:35 KST",
+            "ign_price": 0.47900129919114875,
+            "box_low": 0.4499172289510079,
+            "box_high": 0.4661613092494028,
+            "wave_height": 0.02908407024014087
+          }
+        ]
+      },
+      {
+        "date_str": "2026-11-11",
+        "saved_at": 1794374557,
+        "reviewed_48h": false,
+        "coins": [
+          {
+            "symbol": "INITUSDT",
+            "ign_ts_ms": 1794366000000,
+            "ign_time": "11/11 12:00 KST",
+            "ign_price": 0.22707,
+            "box_low": 0.18651,
+            "box_high": 0.22485,
+            "wave_height": 0.040559999999999985
+          },
+          {
+            "symbol": "ARIAUSDT",
+            "ign_ts_ms": 1794344100000,
+            "ign_time": "11/11 05:55 KST",
+            "ign_price": 0.22090717800035142,
+            "box_low": 0.21479441222983658,
+            "box_high": 0.22035872430152872,
+            "wave_height": 0.006112765770514839
+          },
+          {
+            "symbol": "BTWUSDT",
+            "ign_ts_ms": 1794367500000,
+            "ign_time": "11/11 12:25 KST",
+            "ign_price": 1.1866301941525232,
+            "box_low": 1.1235685895315404,
+            "box_high": 1.161119545026591,
+            "wave_height": 0.06306160462098287
+          },
+          {
+            "symbol": "ERAUSDT",
+            "ign_ts_ms": 1794363900000,
+            "ign_time": "11/11 11:25 KST",
+            "ign_price": 0.08058349236641223,
+            "box_low": 0.07777814885496184,
+            "box_high": 0.08176574427480916,
+            "wave_height": 0.002805343511450384
+          },
+          {
+            "symbol": "B2USDT",
+            "ign_ts_ms": 1794372000000,
+            "ign_time": "11/11 13:40 KST",
+            "ign_price": 0.48739481151195785,
+            "box_low": 0.46646980137819216,
+            "box_high": 0.4801895014187272,
+            "wave_height": 0.020925010133765687
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "date_str": "2026-11-13",
+    "timestamp": 1794524442,
+    "coins": [
+      {
+        "symbol": "MAGMAUSDT",
+        "ign_price": 0.25454,
+        "support_line": 0.24528,
+        "swing_high_line": 0.26284
+      },
+      {
+        "symbol": "AKEUSDT",
+        "ign_price": 0.0029171,
+        "support_line": 0.0021538,
+        "swing_high_line": 0.0033394
+      },
+      {
+        "symbol": "HANAUSDT",
+        "ign_price": 0.01507,
+        "support_line": 0.01322,
+        "swing_high_line": 0.01513
+      },
+      {
+        "symbol": "PLUMEUSDT",
+        "ign_price": 0.01339,
+        "support_line": 0.01327,
+        "swing_high_line": 0.01343
+      },
+      {
+        "symbol": "TIAUSDT",
+        "ign_price": 0.4416,
+        "support_line": 0.4317,
+        "swing_high_line": 0.4427
+      }
+    ]
+  }
+]
