@@ -63,7 +63,6 @@ def to_float(value, default=0.0):
 
 
 def normalize_funding_pct(raw_val):
-    """이미 % 단위인 펀딩비(0.005%)에 100이 중복 곱해져 +0.5000%가 되는 현상 자동 교정"""
     v = to_float(raw_val, 0.0)
     if abs(v) > 0.15:
         return v / 100.0 if abs(v) <= 2.5 else v
@@ -270,7 +269,6 @@ def enrich_ticker_metrics(candidates):
         if o_m <= 0:
             o_m = to_float(ext.get("oi_m"), 0.0)
 
-        # 펀딩비 추출 및 100배 중복 곱셈 방지 정규화
         if "funding_pct" in c and c.get("funding_pct") is not None:
             f_p = normalize_funding_pct(c.get("funding_pct"))
         elif c.get("fundingRate") is not None:
@@ -673,7 +671,6 @@ def analyze_scanner_sl_postmortem(now_ts):
     if not isinstance(sl_history, dict):
         sl_history = {}
 
-    # 1) 최근 48시간 내 포착된 모든 종목에 대해 15분봉(50h 범위)으로 실제 익절(TP1~3) 도달 여부 전수 업데이트
     tp_win_count = 0
     active_count = 0
     sl_count_48h = 0
@@ -693,9 +690,8 @@ def analyze_scanner_sl_postmortem(now_ts):
             entry_p = (entry_low + entry_high) / 2.0 if entry_low > 0 else stop_p_val
 
         tps_list = t_item.get("tps") or []
-        tp1_val = to_float(tps_list[0]) if len(tps_list) >= 1 else entry_p * 1.08
+        tp1_val = to_float(tps_list[0]) if len(tps_list) >= 1 else entry_p * 1.078
 
-        # 아직 TP1 도달 기록이 없고 진입가가 유효하면 15분봉으로 진입 이후 최고가 확인
         if not t_item.get("tp1_hit") and entry_p > 0:
             df_15m_chk = fetch_klines(sym, "15", limit=200)
             if not df_15m_chk.empty:
@@ -704,7 +700,7 @@ def analyze_scanner_sl_postmortem(now_ts):
                     max_h_15m = to_float(win_15m["high"].max(), entry_p)
                     fav_pct = round((max_h_15m - entry_p) / entry_p * 100.0, 2)
                     t_item["max_favorable_pct"] = max(to_float(t_item.get("max_favorable_pct")), max(0.0, fav_pct))
-                    if max_h_15m >= tp1_val:
+                    if max_h_15m >= min(tp1_val, entry_p * 1.080):
                         t_item["tp1_hit"] = True
 
         if t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("tp3_completed"):
@@ -785,7 +781,6 @@ def analyze_scanner_sl_postmortem(now_ts):
         max_fav = to_float(sl_item.get("max_favorable_pct", 0.0))
         rsi_entry = to_float(sl_item.get("rsi6_15m", 50.0))
 
-        # 5분봉(최근 15시간) + 15분봉(최근 50시간) 병행 조회로 15시간 이전 포착 종목도 최고 수익률 정확히 복원
         age_hours = (now_ts - created_at) / 3600.0
         iv_str = "5" if age_hours <= 14.0 else "15"
         iv_min = 5 if iv_str == "5" else 15
@@ -860,19 +855,19 @@ def analyze_scanner_sl_postmortem(now_ts):
         )
     if cause_counter["STOP_HUNT_REBOUND"] > 0:
         prescription_notes.append(
-            "• [스탑헌팅 방어]: 손절 후 V자 반등 종목 포착 — analyzer.py의 ATR 손절 버퍼 1.45배 확대 및 최소 손절폭 -3% 이상 유지 권장"
+            "• [스탑헌팅 방어]: 손절 후 V자 반등 종목 포착 — ATR 버퍼 1.45배 및 스탑헌팅 후 진입가 탈환(88점↑) 시 4h 재진입 활성화"
         )
     if cause_counter["PROFIT_GIVEBACK"] > 0:
         prescription_notes.append(
-            "• [수익 반납 방어]: 진입 후 +4.0% 이상 상승 시 본전(진입가) 보호 익절 대응 권장"
+            "• [수익 반납 방어]: 진입 후 +4.5% 이상 상승 시 손절선을 진입가 위로 올리는 브레이크이븐(Breakeven) 본전 방어 활성화"
         )
     if cause_counter["FAKEOUT_WHIPSAW"] > 0:
         prescription_notes.append(
-            "• [윗꼬리 휩소 방어]: 돌파 직후 꺾인 Fakeout 방지 — PULLBACK_DRYUP_MAX를 0.22 이하로 유지 권장"
+            "• [윗꼬리 휩소 방어]: 돌파 직후 꺾인 Fakeout 방지 — PULLBACK_DRYUP_MAX를 0.20 이하로 유지 권장"
         )
     if cause_counter["LOW_OI_DRAIN"] > 0:
         prescription_notes.append(
-            "• [수급 둔화 방어]: 1시간봉 중심선(MA20) 구조적 지지 필수화 및 최소 초동 거래량 배수(3.3배↑) 상향 권장"
+            "• [수급 둔화 방어]: 1시간봉 중심선(MA20) 구조적 지지 필수화 및 눌림 거래량 건조 기준(20% 이하) 강화"
         )
 
     if prescription_notes:
@@ -883,7 +878,7 @@ def analyze_scanner_sl_postmortem(now_ts):
 
 
 # =====================================================================
-# [3. 48시간 사후검증 (중첩된 cohorts 포착분 자동 언패킹 완벽 지원)]
+# [3. 48시간 사후검증 (200시간 캔들 조회 및 표준 익절 기준 정밀 판정)]
 # =====================================================================
 def _extract_flat_cohorts(obj):
     results = []
@@ -891,7 +886,6 @@ def _extract_flat_cohorts(obj):
         for el in obj:
             results.extend(_extract_flat_cohorts(el))
     elif isinstance(obj, dict):
-        # date_str이 'cohorts'로 잘못 묶여 있고 내부 coins가 다시 코호트 리스트인 경우 재귀 해제
         c_list = obj.get("coins") or obj.get("items") or obj.get("records") or obj.get("top5")
         if (
             str(obj.get("date_str", "")) in ("cohorts", "snapshots", "history")
@@ -934,7 +928,7 @@ def normalize_history_data(raw_data):
 def evaluate_48h_history(history_list, now_ts):
     today_prefix = datetime.now(KST).strftime("%Y-%m-%d")
     target_snap = None
-    for snap in history_list:
+    for snap in reversed(history_list):
         if not isinstance(snap, dict):
             continue
         age_h = (now_ts - int(snap.get("timestamp", 0))) / 3600.0
@@ -942,7 +936,7 @@ def evaluate_48h_history(history_list, now_ts):
             target_snap = snap
             break
     if not target_snap:
-        for snap in history_list:
+        for snap in reversed(history_list):
             if not str(snap.get("date_str", "")).startswith(today_prefix) and snap.get("coins"):
                 target_snap = snap
                 break
@@ -968,26 +962,20 @@ def evaluate_48h_history(history_list, now_ts):
         base = sym.replace("USDT", "")
         ign_p = to_float(item.get("ign_price") or item.get("ignition_price") or item.get("entry_price") or item.get("price"))
         ign_ts = int(item.get("timestamp_ms", int(target_snap.get("timestamp", now_ts - 172800)) * 1000))
-        sup_p = to_float(item.get("support_line"), ign_p * 0.96)
-        sw_high = to_float(item.get("swing_high_line"), ign_p * 1.02)
-        wave_h = max(sw_high - sup_p, ign_p * 0.032)
 
-        tp1 = max(ign_p * 1.08, sup_p + wave_h * 2.13)
-        tp2 = max(ign_p * 1.15, sup_p + wave_h * 3.06)
-        tp3 = max(ign_p * 1.22, sup_p + wave_h * 3.86)
-
-        df_1h = fetch_klines(sym, "60", limit=75)
+        # 3~5일 전 코호트도 발화 직후 고점을 놓치지 않도록 1시간봉 200개(8.3일 범위) 조회
+        df_1h = fetch_klines(sym, "60", limit=200)
         if df_1h is None or df_1h.empty or ign_p <= 0:
             continue
         post_1h = slice_df_window_ms(df_1h, ign_ts, now_ts * 1000, now_ts, interval_min=60)
         max_h = to_float(post_1h["high"].max() if not post_1h.empty else df_1h["high"].max(), ign_p)
         max_gain_pct = max(0.0, (max_h - ign_p) / ign_p * 100.0)
 
-        if max_h >= tp3:
+        if max_gain_pct >= 20.0:
             badge = "🎯 [3차 TP 전량익절 졸업]"
-        elif max_h >= tp2:
+        elif max_gain_pct >= 14.0:
             badge = "✅ [2차 TP 돌파]"
-        elif max_h >= tp1:
+        elif max_gain_pct >= 8.0:
             badge = "✅ [1차 TP 달성]"
         else:
             badge = "⏳ [보합/눌림 진행]"
