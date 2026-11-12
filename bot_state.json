@@ -1137,6 +1137,28 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "KITEUSDT": {
+      "created_at": 1794462603,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.12957,
+      "entry_low": 0.12564485714285714,
+      "entry_high": 0.1264558857142857,
+      "stop_price": 0.12100835657142855,
+      "sl_pct": 4,
+      "tps": [
+        0.1367201118,
+        0.14485948044,
+        0.15416135939999995
+      ],
+      "tp_pcts": [
+        8.5,
+        14.9,
+        22.3
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   },
   "alert_history": {
@@ -1190,6 +1212,7 @@
     "SIGNUSDT": 1794288903,
     "SANDUSDT": 1794292204,
     "NIGHTUSDT": 1794317104,
-    "COREUSDT": 1794374711
+    "COREUSDT": 1794374711,
+    "KITEUSDT": 1794462603
   }
 }
