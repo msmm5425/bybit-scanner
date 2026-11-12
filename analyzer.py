@@ -277,19 +277,24 @@ def analyze_symbol(coin):
     if bb_mid_ext_pct > allowed_bb_ext:
         return None
 
-    # [오답노트 유형5 처방 반영] 1H 중심선 구조적 지지 필수화 (Top 5 100% 적중 조건)
+    # 4. 1H 상위프레임 구조적 지지 확인 (오답 노트 처방: 수급 둔화 종목 원천 차단)
     ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
     ema20_1h = to_float(df_1h["close"].ewm(span=20, adjust=False).mean().iloc[-1], close)
-    htf_support_ok = (close >= ma20_1h * 0.990) or (close >= ema20_1h * 0.990)
-    if not htf_support_ok:
+    htf_support_ok = (close >= ma20_1h * 0.992) or (close >= ema20_1h * 0.992)
+
+    if not htf_support_ok and rsi6_1h < 50.0:
         return None
 
     btc_dumping, _ = get_btc_market_regime()
+    if btc_dumping and not htf_support_ok:
+        return None
 
     if close >= ma20_1h and rsi6_1h >= 55.0:
         htf_status = f"1H 상승우위(RSI6 {int(round(rsi6_1h))})"
+    elif htf_support_ok:
+        htf_status = f"1H 바닥반전시도(RSI6 {int(round(rsi6_1h))})"
     else:
-        htf_status = f"1H 중심선지지(RSI6 {int(round(rsi6_1h))})"
+        htf_status = f"1H 단기반등시도(RSI6 {int(round(rsi6_1h))})"
 
     vol_ma20_series = df_5m["volume"].rolling(20, min_periods=5).mean().shift(1)
     recent_window = df_5m.iloc[-6:]
@@ -305,12 +310,10 @@ def analyze_symbol(coin):
     curr_vol = to_float(df_5m["volume"].iloc[-1], ignition_vol)
     curr_vol_mult = curr_vol / max(vol_ma20_curr, 1e-8)
 
-    pre_slice_vols = df_5m["volume"].iloc[-7:-1]
-    non_zero_pre_vols = pre_slice_vols[pre_slice_vols > 0]
-    pre5_min_vol = to_float(non_zero_pre_vols.min() if not non_zero_pre_vols.empty else pre_slice_vols.min(), vol_ma20_curr)
-    pre_vol_pocket_ratio = max(0.05, pre5_min_vol / max(vol_ma20_curr, 1e-8))
+    pre5_min_vol = to_float(df_5m["volume"].iloc[-7:-1].min(), vol_ma20_curr)
+    pre_vol_pocket_ratio = pre5_min_vol / max(vol_ma20_curr, 1e-8)
 
-    pullback_vol_ratio = max(0.03, curr_vol / max(ignition_vol, 1e-8))
+    pullback_vol_ratio = curr_vol / max(ignition_vol, 1e-8)
     effective_dryup_ratio = min(pullback_vol_ratio, curr_vol_mult * 0.65)
     pullback_low = to_float(df_5m["low"].iloc[-2:].min(), close)
 
@@ -337,7 +340,7 @@ def analyze_symbol(coin):
     kc_lower = df_5m["ma20"] - 1.5 * atr_5m
     ttm_squeeze = bool(((bb_upper < kc_upper) & (bb_lower > kc_lower)).iloc[-8:-1].any())
 
-    cond_ema_ribbon = (pre5_min_ribbon_spread <= cfg.EMA_RIBBON_MAX_SPREAD_PCT) and (close > ma50 * 0.996)
+    cond_ema_ribbon = (pre5_min_ribbon_spread <= cfg.EMA_RIBBON_MAX_SPREAD_PCT) and (close > ma50)
     cond_vol_pocket = (pre_vol_pocket_ratio <= cfg.PRE_VOL_POCKET_MAX_RATIO) and (vol_mult >= cfg.EARLY_VOL_MULT_MIN)
 
     turnover_m = to_float(coin.get("turnover_m"))
@@ -348,11 +351,11 @@ def analyze_symbol(coin):
     if oi_m <= 0:
         oi_m = to_float(coin.get("openInterestValue")) / 1e6
 
-    # 펀딩비 100배 중복 곱셈 방지 보정
-    if "funding_pct" in coin and coin.get("funding_pct") is not None:
-        funding_pct = cfg.normalize_funding_pct(coin.get("funding_pct"), already_pct=True)
+    if "funding_pct" in coin:
+        raw_f = to_float(coin.get("funding_pct"))
+        funding_pct = cfg.normalize_funding_pct(raw_f) if hasattr(cfg, "normalize_funding_pct") else raw_f
     else:
-        funding_pct = cfg.normalize_funding_pct(coin.get("fundingRate"), already_pct=False)
+        funding_pct = to_float(coin.get("fundingRate")) * 100.0
 
     if "change_24h" in coin:
         change_24h = to_float(coin.get("change_24h"))
@@ -379,7 +382,7 @@ def analyze_symbol(coin):
         and (vol_mult >= cfg.EARLY_VOL_MULT_MIN)
     )
 
-    # 2) CROSSUSDT 18:10 패턴: 공중 눌림(High-Tight Bull Flag)
+    # 2) 공중 눌림(High-Tight Bull Flag)
     impulse_range = max(ignition_high - prev_box_high, close * 0.004)
     flag_support_line = ignition_high - (impulse_range * cfg.BULL_FLAG_MAX_RETRACE)
     cond_bull_flag = (
@@ -403,21 +406,22 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 4) SOONUSDT 19:50 패턴: 포켓 피벗(Pocket Pivot) 초동 양봉 직격 (Top 5 중 3종목 적중)
+    # 4) 포켓 피벗(Pocket Pivot) 초동 양봉 직격 (08:21 Top 5 중 3종목 적중 핵심 전략)
     cond_pocket_pivot = (
         is_current_ignition
         and (close > open_p)
-        and (0.4 <= curr_candle_gain_pct <= 3.5)
+        and (0.4 <= curr_candle_gain_pct <= 3.8)
         and (upper_wick_ratio <= 0.36)
         and (-0.5 <= breakout_diff_pct <= cfg.EARLY_BREAKOUT_MAX_PCT)
         and (cfg.EARLY_VOL_MULT_MIN <= curr_vol_mult <= cfg.EARLY_VOL_MULT_MAX)
         and (pre_vol_pocket_ratio <= 0.40 or pre_box_range_pct <= cfg.PRE_BOX_TIGHT_PCT or cond_ema_ribbon)
-        and (ma_short_aligned or cond_spring or cond_ema_ribbon)
+        and htf_support_ok
     )
 
-    # 5) Track A (박스권 선취매 & 거래량 건조 눌림)
+    # 5) Track A (박스권 선취매 & 거래량 건조 눌림 - 1H 구조적 지지 필수 동반)
     cond_track_a_pullback = (
-        (close <= prev_box_high * 1.008)
+        htf_support_ok
+        and (close <= prev_box_high * 1.008)
         and (close >= ma20 * 0.995)
         and (effective_dryup_ratio <= cfg.PULLBACK_DRYUP_MAX)
         and (ma_short_aligned or cond_spring or cond_ema_ribbon)
@@ -464,7 +468,7 @@ def analyze_symbol(coin):
         reasons.append(f"유동성 스윕(Spring 아랫꼬리 {lower_wick_ratio_max6:.1f}배) 반전")
     elif cond_ema_ribbon:
         score += 13
-        reasons.append(f"바닥 이평리본 초밀집({pre5_min_ribbon_spread:.1f}%) 반전")
+        reasons.append(f"바닥 이평리본 수렴 돌파({pre5_min_ribbon_spread:.1f}%)")
 
     if htf_support_ok:
         score += 10
@@ -523,7 +527,7 @@ def analyze_symbol(coin):
     if score < active_threshold:
         return None
 
-    # [오답노트 유형2($Q 스탑헌팅) 처방 반영] ATR 버퍼 확대(1.40~1.45배) 및 최소 손절폭 -3% 보장
+    # 오답 노트($Q 스탑헌팅 후 +5.1% 반등) 처방 반영: ATR 버퍼 1.45배 및 최소 손절폭 -3% 보장
     atr_val = to_float(atr_5m.iloc[-1], close * 0.008)
     support_line = max(prev_box_low, min(ma50, ignition_low))
     swing_high_line = max(prev_box_high, ignition_high)
@@ -531,19 +535,18 @@ def analyze_symbol(coin):
     entry_low = close * 0.9975
     entry_high = close * 1.0010
 
+    atr_mult_b = getattr(cfg, "SL_ATR_MULT_TRACK_B", 1.45)
+    atr_mult_a = getattr(cfg, "SL_ATR_MULT_TRACK_A", 1.45)
+
     if track_type == "TRACK_B":
-        atr_mult = getattr(cfg, "SL_ATR_MULT_TRACK_B", 1.40)
-        raw_stop = min(prev_box_high, flag_support_line, ignition_low) - (atr_mult * atr_val)
-        sl_note = "S/R·포켓피벗지지선+스탑헌팅방어버퍼"
+        raw_stop = min(prev_box_high, flag_support_line, ignition_low) - (atr_mult_b * atr_val)
+        sl_note = "S/R·포켓피벗지지선+스탑헌팅방어버퍼(1.45x)"
     else:
-        atr_mult = getattr(cfg, "SL_ATR_MULT_TRACK_A", 1.45)
-        raw_stop = support_line - (atr_mult * atr_val)
-        sl_note = "15m/1H 매집지지선+스탑헌팅방어버퍼"
+        raw_stop = support_line - (atr_mult_a * atr_val)
+        sl_note = "15m/1H 매집지지선+스탑헌팅방어버퍼(1.45x)"
 
     raw_sl_pct = (close - raw_stop) / max(close, 1e-8) * 100.0
-    sl_min = getattr(cfg, "SL_MIN_PCT", 3)
-    sl_max = getattr(cfg, "SL_MAX_PCT", 5)
-    sl_pct_int = int(np.clip(round(raw_sl_pct), sl_min, sl_max))
+    sl_pct_int = int(np.clip(round(raw_sl_pct), 3, 5))
     stop_price = close * (1.0 - sl_pct_int / 100.0)
 
     wave_height = max(swing_high_line - support_line, close * 0.032)
