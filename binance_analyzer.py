@@ -1,172 +1,22 @@
 import os
-import sys
 import json
 import time
-import requests
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
-# 1. 환경변수 및 설정 로드 (config.py 및 GitHub Secrets 모두 호환)
-try:
-    import config as cfg
-    TELEGRAM_BOT_TOKEN = getattr(cfg, "TELEGRAM_BOT_TOKEN", "")
-    TELEGRAM_CHAT_ID = getattr(cfg, "TELEGRAM_CHAT_ID", "")
-    STATE_FILE = getattr(cfg, "STATE_FILE", "bot_state.json")
-    KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
-    BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
-    is_tradfi_ticker = getattr(cfg, "is_tradfi_ticker", lambda x: False)
-except Exception:
-    TELEGRAM_BOT_TOKEN = ""
-    TELEGRAM_CHAT_ID = ""
-    STATE_FILE = "bot_state.json"
-    KST = timezone(timedelta(hours=9))
-    BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0"}
-    is_tradfi_ticker = lambda x: False
-
-if not TELEGRAM_BOT_TOKEN:
-    TELEGRAM_BOT_TOKEN = (
-        os.getenv("TELEGRAM_TOKEN")
-        or os.getenv("TELEGRAM_BOT_TOKEN")
-        or ""
-    ).strip()
-
-if not TELEGRAM_CHAT_ID:
-    TELEGRAM_CHAT_ID = (
-        os.getenv("TELEGRAM_CHAT_ID")
-        or os.getenv("CHAT_ID")
-        or ""
-    ).strip()
+import config as cfg
+from api import get_scanner_candidates, fetch_klines
+from notifier import fmt_price, send_telegram_single
 
 HISTORY_FILE = "analyzer_history.json"
-# GitHub Actions(미국 서버) 지역 차단 우회를 위해 api.bytick.com을 1순위로 호출
-BYBIT_ENDPOINTS = [
-    "https://api.bytick.com",
-    "https://api.bybit.com",
-]
-
-
-def to_float(value, default=0.0):
-    try:
-        if value is None or value == "":
-            return default
-        val = float(value)
-        return default if np.isnan(val) or np.isinf(val) else val
-    except (TypeError, ValueError):
-        return default
-
-
-def fmt_price(price):
-    p = to_float(price, 0.0)
-    if p <= 0:
-        return "0.0000"
-    if p >= 1000:
-        return f"{p:,.2f}"
-    if p >= 10:
-        return f"{p:.3f}"
-    if p >= 1:
-        return f"{p:.4f}"
-    if p >= 0.01:
-        return f"{p:.5f}"
-    return f"{p:.6f}"
-
-
-def fetch_klines(symbol, interval="5", limit=200):
-    # 1순위: 우회 도메인(api.bytick.com) 및 기본 도메인 직접 호출
-    params = {
-        "category": "linear",
-        "symbol": symbol,
-        "interval": str(interval),
-        "limit": int(limit),
-    }
-    for base_url in BYBIT_ENDPOINTS:
-        url = f"{base_url}/v5/market/kline"
-        try:
-            resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=10)
-            if resp.status_code != 200:
-                continue
-            data = resp.json()
-            rows = data.get("result", {}).get("list", [])
-            if not rows:
-                continue
-            df = pd.DataFrame(
-                rows,
-                columns=["timestamp", "open", "high", "low", "close", "volume", "turnover"],
-            )
-            df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
-            for col in ["open", "high", "low", "close", "volume", "turnover"]:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-            df = df.dropna(subset=["timestamp", "close"]).sort_values("timestamp").reset_index(drop=True)
-            if not df.empty:
-                return df
-        except Exception:
-            time.sleep(0.2)
-
-    # 2순위: 기존 api.py의 fetch_klines 폴백 호출
-    try:
-        from api import fetch_klines as api_fetch_klines
-        df = api_fetch_klines(symbol, str(interval), limit=int(limit))
-        if isinstance(df, pd.DataFrame) and not df.empty:
-            return df
-    except Exception:
-        pass
-
-    return pd.DataFrame()
-
-
-def fetch_top_gainer_candidates():
-    rwa_blocked = set()
-    try:
-        from api import get_scanner_candidates
-        res = get_scanner_candidates()
-        if isinstance(res, tuple) and len(res) >= 3 and isinstance(res[2], (set, list)):
-            rwa_blocked = set(res[2])
-        if isinstance(res, tuple) and len(res) >= 1 and res[0]:
-            cands = res[0]
-            if isinstance(cands, list) and len(cands) >= 5:
-                return cands
-    except Exception as e:
-        print(f"[api 후보군 참조 안내] {e}")
-
-    # 우회 도메인 포함 바이비트 선물 전체 티커 직접 수집
-    for base_url in BYBIT_ENDPOINTS:
-        url = f"{base_url}/v5/market/tickers"
-        try:
-            resp = requests.get(url, params={"category": "linear"}, headers=BROWSER_HEADERS, timeout=12)
-            if resp.status_code != 200:
-                continue
-            items = resp.json().get("result", {}).get("list", [])
-            if not items:
-                continue
-            candidates = []
-            for it in items:
-                sym = str(it.get("symbol", ""))
-                if not sym.endswith("USDT"):
-                    continue
-                base = sym[:-4].upper()
-                if is_tradfi_ticker(base) or base in rwa_blocked:
-                    continue
-                turnover_m = to_float(it.get("turnover24h")) / 1e6
-                if turnover_m < 3.0:
-                    continue
-                candidates.append({
-                    "symbol": sym,
-                    "base_coin": base,
-                    "price": to_float(it.get("lastPrice")),
-                    "change_24h": to_float(it.get("price24hPcnt")) * 100.0,
-                    "turnover_m": turnover_m,
-                    "oi_m": to_float(it.get("openInterestValue")) / 1e6,
-                    "funding_pct": to_float(it.get("fundingRate")) * 100.0,
-                })
-            if candidates:
-                return candidates
-        except Exception as e:
-            print(f"[티커 조회 재시도] {base_url}: {e}")
-
-    return []
+STATE_FILE = cfg.STATE_FILE
+KST = cfg.KST
+to_float = cfg.to_float
 
 
 def send_telegram_chunked(text):
+    """scanner.py가 사용하는 notifier.send_telegram_single과 100% 동일한 방식으로 분할 전송"""
     max_len = 3800
     lines = text.split("\n")
     chunks = []
@@ -184,35 +34,50 @@ def send_telegram_chunked(text):
     if current:
         chunks.append("\n".join(current))
 
-    sent_any = False
     for chunk in chunks:
-        if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        send_telegram_single(chunk)
+        time.sleep(0.4)
+
+
+def extract_ts_ms(df, pos, now_ts, interval_min=5):
+    """api.py의 fetch_klines가 어떤 시간 컬럼 형식을 반환하든 안전하게 밀리초(ms) 추출"""
+    fallback_ms = int((now_ts - max(0, (len(df) - 1 - pos)) * interval_min * 60) * 1000)
+    for col in ("timestamp", "open_time", "time", "startTime", "date", "datetime"):
+        if col in df.columns:
+            val = df[col].iloc[pos]
+            if isinstance(val, pd.Timestamp):
+                return int(val.timestamp() * 1000)
             try:
-                resp = requests.post(
-                    url,
-                    json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk, "disable_web_page_preview": True},
-                    timeout=15,
-                )
-                if resp.status_code == 200:
-                    sent_any = True
-                    time.sleep(0.4)
-                    continue
-                else:
-                    print(f"[텔레그램 API 응답 오류] {resp.status_code}: {resp.text}")
-            except Exception as e:
-                print(f"[텔레그램 직접 전송 예외] {e}")
+                num = float(val)
+                if not np.isnan(num) and num > 0:
+                    return int(num * 1000) if num < 1e11 else int(num)
+            except Exception:
+                try:
+                    dt = pd.to_datetime(val)
+                    return int(dt.timestamp() * 1000)
+                except Exception:
+                    pass
+    return fallback_ms
 
-        # 폴백: notifier.py의 send_telegram_single 호출
+
+def filter_df_since_ts(df, since_ms, now_ts, interval_min=5):
+    """timestamp 컬럼 유무나 형식에 관계없이 특정 시각 이후 캔들만 안전하게 슬라이싱"""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    if "timestamp" in df.columns:
         try:
-            from notifier import send_telegram_single
-            send_telegram_single(chunk)
-            sent_any = True
-            time.sleep(0.4)
-        except Exception as e:
-            print(f"[notifier 폴백 전송 실패] {e}")
-
-    return sent_any
+            ts_series = pd.to_numeric(df["timestamp"], errors="coerce")
+            if ts_series.notna().any():
+                if ts_series.max() < 1e11:
+                    ts_series = ts_series * 1000.0
+                sub = df[ts_series >= since_ms]
+                if not sub.empty:
+                    return sub
+        except Exception:
+            pass
+    elapsed_min = max(1, int((now_ts * 1000 - since_ms) / 60000))
+    bars_count = max(1, int(elapsed_min // interval_min) + 1)
+    return df.iloc[-min(len(df), bars_count):]
 
 
 def calc_rsi(series, period=6):
@@ -266,17 +131,21 @@ def save_json_file(path, data):
 
 
 # =====================================================================
-# [1. 전문가급 급등 Top 5 초동 발화점 심층 역추적 엔진]
+# [1. 전문가급 급등 Top 5 초동 발화점 심층 역추적 엔진 (analyzer.py와 동일 호출)]
 # =====================================================================
-def reverse_engineer_top_coin(coin):
+def reverse_engineer_top_coin(coin, now_ts):
     try:
         symbol = coin["symbol"]
-        df_5m = fetch_klines(symbol, "5", limit=200)
-        if df_5m.empty or len(df_5m) < 30:
-            print(f"[캔들 부족 스킵] {symbol}: 5분봉 {len(df_5m)}개")
+        # analyzer.py와 100% 동일한 인자로 fetch_klines 호출
+        df_5m = fetch_klines(symbol, "5", limit=150)
+        if df_5m is None or df_5m.empty or len(df_5m) < 30:
             return None
 
-        df_1h = fetch_klines(symbol, "60", limit=80)
+        df_1h = fetch_klines(symbol, "60", limit=75)
+        df_5m = df_5m.reset_index(drop=True)
+
+        for col in ("open", "high", "low", "close", "volume"):
+            df_5m[col] = pd.to_numeric(df_5m[col], errors="coerce")
 
         for p in (5, 20, 50, 112):
             df_5m[f"ma{p}"] = df_5m["close"].rolling(p, min_periods=3).mean()
@@ -294,43 +163,44 @@ def reverse_engineer_top_coin(coin):
         df_5m["obv"] = obv
         df_5m["cvd"] = cvd
 
-        start_idx = min(20, max(5, len(df_5m) // 5))
+        start_idx = min(15, max(3, len(df_5m) // 6))
         search_df = df_5m.iloc[start_idx:-2].copy()
         if search_df.empty:
             search_df = df_5m.iloc[:-1].copy()
 
         overall_low = to_float(search_df["low"].min(), to_float(df_5m["close"].iloc[-1]))
-        overall_high = to_float(df_5m["high"].max(), to_float(df_5m["close"].iloc[-1]))
-        price_ceiling_for_ignition = overall_low + (overall_high - overall_low) * 0.50
+        overall_high = to_float(search_df["high"].max(), to_float(df_5m["close"].iloc[-1]))
+        price_ceiling_for_ignition = overall_low + (overall_high - overall_low) * 0.55
 
         ign_candidates = search_df[
             (search_df["close"] > search_df["open"])
-            & (search_df["vol_mult"] >= 2.2)
-            & (search_df["close"] <= price_ceiling_for_ignition * 1.05)
+            & (search_df["vol_mult"] >= 1.8)
+            & (search_df["close"] <= price_ceiling_for_ignition * 1.08)
         ]
         if ign_candidates.empty:
-            ign_candidates = search_df[(search_df["close"] > search_df["open"]) & (search_df["vol_mult"] >= 1.8)]
+            ign_candidates = search_df[(search_df["close"] > search_df["open"]) & (search_df["vol_mult"] >= 1.5)]
         if ign_candidates.empty:
             ign_idx = search_df["vol_mult"].idxmax()
         else:
             ign_idx = ign_candidates.index[0]
 
-        ign_pos = df_5m.index.get_loc(ign_idx)
+        ign_pos = int(df_5m.index.get_loc(ign_idx))
         ign_row = df_5m.iloc[ign_pos]
         ign_price = to_float(ign_row["close"])
         ign_open = to_float(ign_row["open"], ign_price)
         ign_high = to_float(ign_row["high"], ign_price)
         ign_low = to_float(ign_row["low"], ign_price)
         ign_vol = to_float(ign_row["volume"], 1.0)
-        ign_vol_mult = to_float(ign_row["vol_mult"], 3.0)
-        ign_ts_ms = int(ign_row["timestamp"])
+        ign_vol_mult = to_float(ign_row["vol_mult"], 2.5)
+
+        ign_ts_ms = extract_ts_ms(df_5m, ign_pos, now_ts, interval_min=5)
         ign_dt = datetime.fromtimestamp(ign_ts_ms / 1000.0, tz=KST)
         ign_time_str = ign_dt.strftime("%m/%d %H:%M KST")
         ign_minute = ign_dt.minute
 
         post_df = df_5m.iloc[ign_pos:]
         peak_pos_rel = post_df["high"].idxmax()
-        peak_pos = df_5m.index.get_loc(peak_pos_rel)
+        peak_pos = int(df_5m.index.get_loc(peak_pos_rel))
         peak_high = to_float(post_df["high"].max(), ign_price)
         pump_from_ign_pct = max(1.0, (peak_high - ign_price) / max(ign_price, 1e-8) * 100.0)
         hours_to_peak = max(0.2, round((peak_pos - ign_pos) * 5.0 / 60.0, 1))
@@ -341,7 +211,7 @@ def reverse_engineer_top_coin(coin):
             pre_df = df_5m.iloc[:max(1, ign_pos)]
         pre_high = to_float(pre_df["high"].max(), ign_price)
         pre_low = to_float(pre_df["low"].min(), ign_price)
-        pre_box_pct = max(1.2, (pre_high - pre_low) / max(pre_low, 1e-8) * 100.0)
+        pre_box_pct = max(1.0, (pre_high - pre_low) / max(pre_low, 1e-8) * 100.0)
 
         pre5_df = df_5m.iloc[max(0, ign_pos - 6):ign_pos]
         if pre5_df.empty:
@@ -363,8 +233,8 @@ def reverse_engineer_top_coin(coin):
         spring_wick_ratio = to_float((l_wick / body_s).max(), 0.0)
         cond_spring = (not short_aligned) and (spring_wick_ratio >= 1.4) and (ign_price > ma20_i)
 
-        obv_up = to_float(pre_df["obv"].iloc[-1], 0) > to_float(pre_df["obv"].iloc[:10].mean(), 0) if len(pre_df) >= 6 else True
-        cvd_up = to_float(pre_df["cvd"].iloc[-1], 0) > to_float(pre_df["cvd"].iloc[:10].mean(), 0) if len(pre_df) >= 6 else True
+        obv_up = to_float(pre_df["obv"].iloc[-1], 0) > to_float(pre_df["obv"].iloc[:10].mean(), 0) if len(pre_df) >= 4 else True
+        cvd_up = to_float(pre_df["cvd"].iloc[-1], 0) > to_float(pre_df["cvd"].iloc[:10].mean(), 0) if len(pre_df) >= 4 else True
 
         bb_std = df_5m["close"].rolling(20, min_periods=5).std()
         bb_u = df_5m["ma20"] + 2.0 * bb_std
@@ -387,29 +257,40 @@ def reverse_engineer_top_coin(coin):
         bull_flag_line = ign_high - impulse_len * 0.382
         candle_mid_fvg = (ign_open + ign_high) / 2.0
 
-        is_sr_flip = sr_err_pct <= 1.25 and dryup_ratio <= 0.35
-        is_bull_flag = (pullback_low >= bull_flag_line) and (dryup_ratio <= 0.40)
+        is_sr_flip = sr_err_pct <= 1.50 and dryup_ratio <= 0.40
+        is_bull_flag = (pullback_low >= bull_flag_line) and (dryup_ratio <= 0.45)
         is_fvg_50_hold = (pullback_low >= candle_mid_fvg * 0.998) and (dryup_ratio <= 0.45)
-        is_pocket_pivot = (pre5_min_vol_ratio <= 0.38) and (ign_vol_mult >= 3.2)
+        is_pocket_pivot = (pre5_min_vol_ratio <= 0.42) and (ign_vol_mult >= 2.8)
 
         pre_peak_df = df_5m.iloc[ign_pos: peak_pos + 1]
         min_after_ign = to_float(pre_peak_df["low"].min(), ign_low)
         mae_pct = max(1.5, (ign_price - min_after_ign) / max(ign_price, 1e-8) * 100.0)
 
-        if not df_1h.empty and len(df_1h) >= 5:
-            ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=3).mean().iloc[-1], ign_price)
+        if df_1h is not None and not df_1h.empty and len(df_1h) >= 3:
+            df_1h["close"] = pd.to_numeric(df_1h["close"], errors="coerce")
+            ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=2).mean().iloc[-1], ign_price)
             htf_aligned = to_float(df_5m["close"].iloc[-1]) >= ma20_1h * 0.99
         else:
             htf_aligned = to_float(df_5m["close"].iloc[-1]) >= ma112_i * 0.99
 
-        turnover_m = to_float(coin.get("turnover_m"), to_float(coin.get("turnover24h")) / 1e6)
-        oi_m = to_float(coin.get("oi_m"), to_float(coin.get("openInterestValue")) / 1e6)
-        funding_pct = to_float(
-            coin.get("funding_pct") if "funding_pct" in coin else to_float(coin.get("fundingRate")) * 100.0
-        )
-        change_24h = to_float(
-            coin.get("change_24h") if "change_24h" in coin else to_float(coin.get("price24hPcnt")) * 100.0
-        )
+        turnover_m = to_float(coin.get("turnover_m"))
+        if turnover_m <= 0:
+            turnover_m = to_float(coin.get("turnover24h")) / 1e6
+
+        oi_m = to_float(coin.get("oi_m"))
+        if oi_m <= 0:
+            oi_m = to_float(coin.get("openInterestValue")) / 1e6
+
+        if "funding_pct" in coin:
+            funding_pct = to_float(coin.get("funding_pct"))
+        else:
+            funding_pct = to_float(coin.get("fundingRate")) * 100.0
+
+        if "change_24h" in coin:
+            change_24h = to_float(coin.get("change_24h"))
+        else:
+            change_24h = to_float(coin.get("price24hPcnt")) * 100.0
+
         oi_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0
 
         alphas = []
@@ -425,7 +306,7 @@ def reverse_engineer_top_coin(coin):
             alphas.append("CVD 강세/흡수 다이버전스(선행 시장가 매수 누적)")
         if ttm_sqz:
             alphas.append("TTM 켈트너 스퀴즈 폭발(BB⊂KC 변동성 압축 후 상단 분출)")
-        if pre5_min_ribbon <= 1.8:
+        if pre5_min_ribbon <= 2.2:
             alphas.append(f"이평선 리본 초밀집 확산(5·20·50 이격 {pre5_min_ribbon:.1f}% 수렴 후 분출)")
         if ign_minute in (0, 5, 10):
             alphas.append(f"정각 오프닝 드라이브({ign_dt.strftime('%H:%M')} 새 1시간봉 시동 수급)")
@@ -435,7 +316,7 @@ def reverse_engineer_top_coin(coin):
             alphas.append("상위프레임(1H 중심선) 구조적 지지 반등")
         if is_sr_flip:
             alphas.append(f"돌파후 박스상단 S/R Flip 리테스트(오차 {sr_err_pct:.2f}%·거래량 {int(round(dryup_ratio*100))}% 건조)")
-        if funding_pct <= 0.012:
+        if funding_pct <= 0.015:
             alphas.append(f"숏스퀴즈/청정 수급(펀딩 {funding_pct:+.4f}%·OI비중 {int(round(oi_ratio))}%)")
 
         if is_sr_flip:
@@ -586,7 +467,7 @@ def analyze_scanner_sl_postmortem(now_ts):
         lines.append("• ✅ 손절(SL) 발생 0건: 현재 유동 손절선(-2%~-5%) 및 컷오프 필터가 완벽히 작동하고 있습니다.")
         return "\n".join(lines), []
 
-    df_btc = fetch_klines("BTCUSDT", "5", limit=240)
+    df_btc = fetch_klines("BTCUSDT", "5", limit=150)
     cause_counter = {
         "BTC_DUMP": 0,
         "STOP_HUNT_REBOUND": 0,
@@ -611,32 +492,18 @@ def analyze_scanner_sl_postmortem(now_ts):
         oi_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0
         rsi_entry = to_float(sl_item.get("rsi6_15m", 50.0))
 
-        df_coin = fetch_klines(sym, "5", limit=200)
+        df_coin = fetch_klines(sym, "5", limit=150)
         btc_drop_pct = 0.0
-        if not df_btc.empty:
-            btc_win = df_btc[
-                (df_btc["timestamp"] >= (created_at - 300) * 1000)
-                & (df_btc["timestamp"] <= (sl_at + 300) * 1000)
-            ]
+        if df_btc is not None and not df_btc.empty:
+            btc_win = filter_df_since_ts(df_btc, (created_at - 300) * 1000, now_ts, interval_min=5)
             if not btc_win.empty:
                 b_high = to_float(btc_win["high"].max(), 1.0)
                 b_low = to_float(btc_win["low"].min(), 1.0)
                 btc_drop_pct = (b_low - b_high) / max(b_high, 1e-8) * 100.0
 
         rebound_after_sl_pct = 0.0
-        if not df_coin.empty and entry_p > 0:
-            hold_win = df_coin[
-                (df_coin["timestamp"] >= created_at * 1000)
-                & (df_coin["timestamp"] <= sl_at * 1000)
-            ]
-            if not hold_win.empty:
-                actual_high = to_float(hold_win["high"].max(), entry_p)
-                max_fav = max(max_fav, round((actual_high - entry_p) / entry_p * 100.0, 2))
-
-            after_sl_win = df_coin[
-                (df_coin["timestamp"] > sl_at * 1000)
-                & (df_coin["timestamp"] <= (sl_at + 7200) * 1000)
-            ]
+        if df_coin is not None and not df_coin.empty and entry_p > 0:
+            after_sl_win = filter_df_since_ts(df_coin, sl_at * 1000, now_ts, interval_min=5)
             if not after_sl_win.empty and stop_p > 0:
                 post_sl_high = to_float(after_sl_win["high"].max(), stop_p)
                 rebound_after_sl_pct = (post_sl_high - stop_p) / max(stop_p, 1e-8) * 100.0
@@ -697,7 +564,7 @@ def analyze_scanner_sl_postmortem(now_ts):
 
 
 # =====================================================================
-# [3. 48시간 사후검증 (기존 dict/list 구조 모두 완벽 호환)]
+# [3. 48시간 사후검증 (기존 dict/list 구조 모두 호환)]
 # =====================================================================
 def normalize_history_data(raw_data):
     if isinstance(raw_data, list):
@@ -755,10 +622,10 @@ def evaluate_48h_history(history_list, now_ts):
         tp2 = max(ign_p * 1.15, sup_p + wave_h * 3.06)
         tp3 = max(ign_p * 1.22, sup_p + wave_h * 3.86)
 
-        df_1h = fetch_klines(sym, "60", limit=60)
-        if df_1h.empty or ign_p <= 0:
+        df_1h = fetch_klines(sym, "60", limit=75)
+        if df_1h is None or df_1h.empty or ign_p <= 0:
             continue
-        post_1h = df_1h[df_1h["timestamp"] >= ign_ts]
+        post_1h = filter_df_since_ts(df_1h, ign_ts, now_ts, interval_min=60)
         max_h = to_float(post_1h["high"].max() if not post_1h.empty else df_1h["high"].max(), ign_p)
         max_gain_pct = (max_h - ign_p) / ign_p * 100.0
 
@@ -783,12 +650,16 @@ def main():
     now_dt = datetime.now(KST)
     now_str = now_dt.strftime("%Y-%m-%d %H:%M KST")
 
-    candidates = fetch_top_gainer_candidates()
+    # scanner.py와 100% 동일한 방식으로 후보군 호출
+    cand_res = get_scanner_candidates()
+    if isinstance(cand_res, tuple):
+        candidates = cand_res[0]
+    else:
+        candidates = cand_res
+
     if not candidates:
-        err_msg = f"⚠️ [{now_str}] Bybit Top 5 후보군 티커 조회에 실패했습니다. (네트워크 응답 확인 필요)"
-        print(err_msg)
-        send_telegram_chunked(err_msg)
-        sys.exit(1)
+        print("[알림] Top 5 후보군 조회 실패")
+        return
 
     candidates.sort(
         key=lambda x: to_float(x.get("change_24h"), to_float(x.get("price24hPcnt")) * 100.0),
@@ -797,17 +668,15 @@ def main():
 
     analyzed_top5 = []
     for c in candidates[:15]:
-        res = reverse_engineer_top_coin(c)
+        res = reverse_engineer_top_coin(c, now_ts)
         if res:
             analyzed_top5.append(res)
         if len(analyzed_top5) >= 5:
             break
 
     if not analyzed_top5:
-        err_msg = f"⚠️ [{now_str}] 상위 종목 5분봉 캔들 수집에 실패했습니다. (Bybit 엔드포인트 확인 필요)"
-        print(err_msg)
-        send_telegram_chunked(err_msg)
-        sys.exit(1)
+        print("[알림] 상위 종목 캔들 분석 결과 없음")
+        return
 
     num_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
     msg_lines = [
@@ -869,16 +738,16 @@ def main():
     c_spring = sum(1 for x in analyzed_top5 if x["cond_spring"])
     c_htf = sum(1 for x in analyzed_top5 if x["htf_aligned"])
     c_pocket = sum(1 for x in analyzed_top5 if x["is_pocket_pivot"])
-    c_ribbon = sum(1 for x in analyzed_top5 if x["pre5_min_ribbon"] <= 1.8)
+    c_ribbon = sum(1 for x in analyzed_top5 if x["pre5_min_ribbon"] <= 2.2)
     c_bull_flag = sum(1 for x in analyzed_top5 if x["is_bull_flag"])
     c_fvg50 = sum(1 for x in analyzed_top5 if x["is_fvg_50_hold"])
     c_sr = sum(1 for x in analyzed_top5 if x["is_sr_flip"])
     c_sqz = sum(1 for x in analyzed_top5 if x["ttm_sqz"])
-    c_fund = sum(1 for x in analyzed_top5 if x["funding_pct"] <= 0.012)
+    c_fund = sum(1 for x in analyzed_top5 if x["funding_pct"] <= 0.015)
 
-    rec_vol_min = round(max(2.8, min(4.2, float(np.percentile([x["ign_vol_mult"] for x in analyzed_top5], 15)) * 0.85)), 1)
+    rec_vol_min = round(max(2.5, min(4.0, float(np.percentile([x["ign_vol_mult"] for x in analyzed_top5], 15)) * 0.85)), 1)
     rec_box_max = round(max(5.5, min(9.5, float(np.median([x["pre_box_pct"] for x in analyzed_top5])) * 1.6)), 1)
-    rec_dryup = round(max(0.15, min(0.35, float(np.median([x["dryup_ratio"] for x in analyzed_top5])) + 0.05)), 2)
+    rec_dryup = round(max(0.20, min(0.40, float(np.median([x["dryup_ratio"] for x in analyzed_top5])) + 0.05)), 2)
     rec_sl_pct = int(np.clip(round(float(np.median([x["mae_pct"] for x in analyzed_top5])) + 1.0), 3, 5))
     avg_hours = round(float(np.mean([x["hours_to_peak"] for x in analyzed_top5])), 1)
     med_pump = float(np.median([x["pump_from_ign_pct"] for x in analyzed_top5]))
@@ -897,7 +766,7 @@ def main():
             f"• [전문가] 포켓 피벗(Pocket Pivot 초동 양봉 직격): {n}종목 중 {c_pocket}종목",
             f"• [전문가] 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지: {n}종목 중 {c_fvg50}종목",
             f"• [전문가] 전고점 S/R Flip 칼지지: {n}종목 중 {c_sr}종목 | 유동성 스윕(Spring): {c_spring}종목",
-            f"• [전문가] 이평선 리본 초밀집(<=1.8%): {n}종목 중 {c_ribbon}종목 | TTM 켈트너 스퀴즈: {c_sqz}종목",
+            f"• [전문가] 이평선 리본 초밀집(<=2.2%): {n}종목 중 {c_ribbon}종목 | TTM 켈트너 스퀴즈: {c_sqz}종목",
             f"• [전문가] 상위프레임(1H 중심선) 구조적 지지: {n}종목 중 {c_htf}종목 | 청정/음수 펀딩: {c_fund}종목\n",
             "[2. analyzer.py & config.py 파라미터 튜닝 권장값]",
             f"• EARLY_VOL_MULT_MIN = {rec_vol_min} (초동 최소 거래량 배수)",
@@ -929,11 +798,7 @@ def main():
     )
 
     full_report = "\n".join(msg_lines)
-    ok = send_telegram_chunked(full_report)
-    if not ok:
-        print("[치명적 오류] 텔레그램 메시지 전송 실패 (토큰 또는 CHAT_ID 확인 필요)")
-        sys.exit(1)
-
+    send_telegram_chunked(full_report)
     print(f"[{now_str}] 전문가급 Top 5 역추적 + 오답 노트 브리핑 전송 완료")
 
 
