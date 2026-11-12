@@ -330,7 +330,8 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false,
-      "tp3_completed": false
+      "tp3_completed": true,
+      "tp3_at": 1794478803
     },
     "ATOMUSDT": {
       "created_at": 1794279604,
