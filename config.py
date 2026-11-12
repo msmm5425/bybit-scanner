@@ -19,32 +19,30 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [2026-11-13 08:21 Top 5 리포트 + 오답 노트(스탑헌팅·수급둔화 방어) 반영]
+# [2026-11-13 08:21 KST Top 5 리포트 + 오답 노트(스탑헌팅·수급둔화 방어) 반영]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 평시 85점 이상 알림 발송
 BTC_DUMP_SCORE_THRESHOLD = 90          # BTC 15분봉 급락(-0.7%↓) 시 컷오프 90점으로 자동 상향
 BTC_DUMP_DROP_15M_PCT = -0.70          # BTC 15분봉 최근 3캔들 고점 대비 -0.70% 이하 시 위험장 판정
 
 PULLBACK_DRYUP_STRICT = 0.15           # 발화봉 대비 눌림 거래량 15% 이하 극건조
-PULLBACK_DRYUP_MAX = 0.24              # [튜닝] 0.28 -> 0.24 (리포트 권장 0.20 반영해 수급 둔화 차단)
+PULLBACK_DRYUP_MAX = 0.22              # [튜닝] 0.28 -> 0.22 (08:21 리포트 권장 0.20 반영해 수급둔화 휩소 차단)
 SR_FLIP_DRYUP_RATIO_MAX = 0.22         # 돌파 후 S/R Flip 리테스트 거래량 상한
 SR_FLIP_TOLERANCE_PCT = 1.20           # 전고점 S/R Flip 칼지지 허용 오차 (1.20% 이내)
 
-PRE_BOX_RANGE_MAX_PCT = 8.3            # [튜닝] 리포트 권장값 8.3% 반영
+PRE_BOX_RANGE_MAX_PCT = 8.3            # [튜닝] 8.4 -> 8.3% (08:21 리포트 권장값 8.3% 반영)
 PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한 (14.0%)
 PRE_BOX_TIGHT_PCT = 5.2                # 5.2% 이내 초응축 시 가산점 및 첫 발화 이격 완화
-EMA_RIBBON_MAX_SPREAD_PCT = 2.0        # Top 5 전원(5/5) 적중한 5·20·50 이평선 리본 초밀집 기준
+EMA_RIBBON_MAX_SPREAD_PCT = 1.8        # [튜닝] Top 5 전원(0.4%~1.6%) 적중한 이평선 리본 초밀집 기준 (1.8%)
 PRE_VOL_POCKET_MAX_RATIO = 0.40        # 발화 직전 5캔들 최저거래량 / vol_ma20 (40% 이하)
 
-EARLY_VOL_MULT_MIN = 3.3               # [튜닝] 2.8 -> 3.3x (리포트 권장 3.9x 반영해 약한 돌파 차단)
+EARLY_VOL_MULT_MIN = 3.3               # [튜닝] 2.8 -> 3.3x (리포트 권장 3.9x 반영해 약한 수급 돌파 차단)
 EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 돌파 대응 상한
 EARLY_BREAKOUT_MAX_PCT = 4.2           # 정각 오프닝 장대양봉 후 10분차 공중 눌림(Bull Flag) 허용 (4.2%)
 BULL_FLAG_MAX_RETRACE = 0.382          # 돌파 양봉 상단 38.2% 이내 공중 지지 기준
 
-SL_ATR_MULT_TRACK_B = 1.40             # [오답노트 처방] $Q 스탑헌팅 방어를 위해 돌파 타점 ATR 버퍼 확대
-SL_ATR_MULT_TRACK_A = 1.45             # [오답노트 처방] 선취매 타점 ATR 손절 버퍼 1.45배 확대
-SL_MIN_PCT = 3                         # [오답노트 처방] 아랫꼬리 스탑헌팅 방어를 위해 최소 손절폭 -3% 보장
-SL_MAX_PCT = 5                         # 최대 손절폭 -5% 제한
+SL_ATR_MULT_TRACK_B = 1.45             # [신규] 오답 노트($Q 스탑헌팅 후 +5.1% 반등) 처방: 돌파 타점 ATR 버퍼 확대
+SL_ATR_MULT_TRACK_A = 1.45             # [신규] 선취매 타점 ATR 손절 버퍼 1.45배 확대
 
 MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
 MAX_PRIOR_PUMP_PCT = 20.0              # 최근 12시간 내 이미 +20% 이상 폭등 이력 시 설거지 경계
@@ -105,7 +103,7 @@ TRADFI_BLACKLIST = {
     "SPOT", "SNAP", "PINS", "DJT", "GME", "AMC", "CVNA", "RIVN", "LCID",
     "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD", "CNH", "HKD", "SGD",
     "TRY", "MXN", "ZAR", "SEK", "NOK", "PLN", "INR", "BRL", "KRW",
-    "USDJPY", "USDEUR", "USDGBP", "USDCNH", "USDKRW", "USDMXN", "USDTRY", "USDZAR"
+    "USDJPY", "USDEUR", "USDGBP", "USDCNH", "USDKRW", "USDDMXN", "USDTRY", "USDZAR"
 }
 
 
@@ -119,20 +117,12 @@ def to_float(value, default=0.0):
         return default
 
 
-def normalize_funding_pct(raw_val, already_pct=False):
-    """펀딩비 100배 중복 곱셈(+0.005% -> +0.5000%) 왜곡을 자동으로 감지해 실제 %로 보정"""
+def normalize_funding_pct(raw_val):
+    """펀딩비 단위가 이미 %인지 소수점(rate)인지 자동 판별해 100배 과표기(+0.5000%) 방지"""
     v = to_float(raw_val, 0.0)
-    if v == 0.0:
-        return 0.0
-    if already_pct:
-        # 이미 % 단위로 들어온 값이 또 100배 곱해져 0.25% 이상으로 튄 경우 원복
-        if abs(v) >= 0.20:
-            return v / 100.0
-        return v
-    # raw fundingRate(보통 0.0001 = 0.01%)인데 이미 *100 되어 0.005 형태로 들어온 경우 감지
-    if abs(v) >= 0.0025:
-        return v
-    return v * 100.0
+    if abs(v) > 0.15:
+        return v / 100.0 if abs(v) <= 2.5 else v
+    return v
 
 
 def strip_multiplier_prefix(base_coin):
