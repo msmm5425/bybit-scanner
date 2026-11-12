@@ -1066,8 +1066,9 @@
         23.3
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794458103
     },
     "CTUSDT": {
       "created_at": 1794444604,
@@ -1110,8 +1111,9 @@
         28.8
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794458103
     }
   },
   "alert_history": {
