@@ -1,3 +1,4 @@
+import time
 import inspect
 import requests
 import numpy as np
@@ -6,71 +7,137 @@ import pandas as pd
 import config as cfg
 import api as api_mod
 
+_BTC_REGIME_CACHE = {"ts": 0, "is_dumping": False, "drop_pct": 0.0}
 
-def _normalize_df(raw):
-    if isinstance(raw, pd.DataFrame):
-        if raw.empty:
-            return pd.DataFrame()
+
+def _normalize_df(raw, expected_interval_min=None):
+    df = pd.DataFrame()
+    if isinstance(raw, pd.DataFrame) and not raw.empty:
         df = raw.copy()
-        for col in ("open", "high", "low", "close", "volume"):
-            if col not in df.columns:
-                return pd.DataFrame()
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-        return df.dropna(subset=["close"]).reset_index(drop=True)
-    if isinstance(raw, list) and len(raw) > 0:
+        col_map = {}
+        for c in df.columns:
+            cl = str(c).lower()
+            if cl in ("start", "starttime", "open_time", "time", "date", "datetime", "t"):
+                col_map[c] = "timestamp"
+            elif cl in ("o", "openprice"):
+                col_map[c] = "open"
+            elif cl in ("h", "highprice"):
+                col_map[c] = "high"
+            elif cl in ("l", "lowprice"):
+                col_map[c] = "low"
+            elif cl in ("c", "closeprice"):
+                col_map[c] = "close"
+            elif cl in ("v", "vol", "basevol"):
+                col_map[c] = "volume"
+        if col_map:
+            df = df.rename(columns=col_map)
+    elif isinstance(raw, list) and len(raw) > 0:
         try:
+            if isinstance(raw[0], dict):
+                return _normalize_df(pd.DataFrame(raw), expected_interval_min)
             cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(raw[0])]
             df = pd.DataFrame(raw, columns=cols)
-            df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
-            for col in ("open", "high", "low", "close", "volume"):
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-            return df.dropna(subset=["close"]).sort_values("timestamp").reset_index(drop=True)
         except Exception:
             return pd.DataFrame()
-    return pd.DataFrame()
+
+    if df.empty:
+        return pd.DataFrame()
+
+    for col in ("open", "high", "low", "close", "volume"):
+        if col not in df.columns:
+            return pd.DataFrame()
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    if "timestamp" in df.columns:
+        ts = pd.to_numeric(df["timestamp"], errors="coerce")
+        if ts.notna().any():
+            if ts.max() < 1e11:
+                ts = ts * 1000.0
+            df["timestamp"] = ts
+            df = df.sort_values("timestamp")
+            # 요청한 타임프레임(5m, 15m, 60m)과 실제 캔들 시간 간격이 일치하는지 검증
+            if expected_interval_min is not None and len(df) >= 5:
+                median_diff_sec = df["timestamp"].diff().median() / 1000.0
+                target_sec = expected_interval_min * 60.0
+                if not (target_sec * 0.6 <= median_diff_sec <= target_sec * 1.4):
+                    return pd.DataFrame()
+
+    return df.dropna(subset=["close"]).reset_index(drop=True)
 
 
 def fetch_klines(symbol, interval="5", limit=150):
-    candidate_names = (
-        "fetch_klines", "fetch_kline", "get_klines", "get_kline",
-        "fetch_bybit_klines", "get_bybit_klines", "fetch_candles",
-        "get_candles", "fetch_kline_df", "get_kline_df", "fetch_ohlcv", "get_ohlcv",
-    )
-    excluded = {
-        "get_scanner_candidates", "fetch_verified_1m_klines",
-        "to_float", "is_tradfi_ticker", "strip_multiplier_prefix", "strip_tokenized_suffix",
-    }
-    funcs = [getattr(api_mod, n) for n in candidate_names if callable(getattr(api_mod, n, None))]
-    for name, fn in inspect.getmembers(api_mod, inspect.isfunction):
-        if name not in excluded and name not in candidate_names and not name.startswith("_"):
-            if fn.__module__ == api_mod.__name__:
-                funcs.append(fn)
-
-    for fn in funcs:
-        for args in [(symbol, str(interval), int(limit)), (symbol, int(interval), int(limit)), (symbol, str(interval))]:
-            try:
-                df = _normalize_df(fn(*args))
-                if not df.empty:
-                    return df
-            except Exception:
+    iv_min = int(interval)
+    # 1순위: api.py 내부의 캔들 조회 함수 중 타임프레임 인자를 받는 함수 호출 및 간격 검증
+    if api_mod is not None:
+        excluded = {
+            "get_scanner_candidates", "fetch_verified_1m_klines",
+            "to_float", "is_tradfi_ticker", "strip_multiplier_prefix", "strip_tokenized_suffix",
+        }
+        for name, fn in inspect.getmembers(api_mod, inspect.isfunction):
+            if name in excluded or name.startswith("_") or fn.__module__ != api_mod.__name__:
                 continue
+            for args in [(symbol, str(interval), int(limit)), (symbol, int(interval), int(limit))]:
+                try:
+                    df = _normalize_df(fn(*args), expected_interval_min=iv_min)
+                    if not df.empty and len(df) >= 20:
+                        return df
+                except Exception:
+                    continue
 
-    # 멀티 거래소/미러 폴백
     headers = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
+    base = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
+    clean_base = cfg.strip_multiplier_prefix(base)
+
+    # 2순위A: Bybit 글로벌/미러 엔드포인트
     for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com", "https://api.bybit.com"):
         try:
             r = requests.get(
                 f"{host}/v5/market/kline",
                 params={"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)},
                 headers=headers,
-                timeout=6,
+                timeout=5,
             )
             if r.status_code == 200:
-                df = _normalize_df(r.json().get("result", {}).get("list", []))
-                if not df.empty:
+                df = _normalize_df(r.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
+                if not df.empty and len(df) >= 20:
                     return df
         except Exception:
             pass
+
+    # 2순위B: Gate.io 선물 (미국 GitHub Actions 서버 무차단 & 정확한 5m/15m/1h 지원)
+    gate_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h", 240: "4h"}.get(iv_min, "5m")
+    for contract in (f"{base}_USDT", f"{clean_base}_USDT"):
+        try:
+            r = requests.get(
+                "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
+                params={"contract": contract, "interval": gate_iv, "limit": int(limit)},
+                headers=headers,
+                timeout=5,
+            )
+            if r.status_code == 200:
+                df = _normalize_df(r.json(), expected_interval_min=iv_min)
+                if not df.empty and len(df) >= 20:
+                    return df
+        except Exception:
+            pass
+
+    # 2순위C: Bitget 선물
+    bg_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1H", 240: "4H"}.get(iv_min, "5m")
+    for bg_sym in (symbol, f"{clean_base}USDT"):
+        try:
+            r = requests.get(
+                "https://api.bitget.com/api/v2/mix/market/candles",
+                params={"symbol": bg_sym, "productType": "USDT-FUTURES", "granularity": bg_iv, "limit": str(limit)},
+                headers=headers,
+                timeout=5,
+            )
+            if r.status_code == 200:
+                df = _normalize_df(r.json().get("data", []), expected_interval_min=iv_min)
+                if not df.empty and len(df) >= 20:
+                    return df
+        except Exception:
+            pass
+
     return pd.DataFrame()
 
 
@@ -118,6 +185,31 @@ def calc_obv_and_cvd(df):
     net_delta = df["volume"] * (2.0 * buy_ratio - 1.0)
     cvd = net_delta.cumsum()
     return obv, cvd, net_delta
+
+
+def get_btc_market_regime():
+    """오답 노트 처방 반영: BTCUSDT 15분봉 도미노 투매 감지 시 컷오프 상향(85->90점)"""
+    now = time.time()
+    if now - _BTC_REGIME_CACHE["ts"] < 60:
+        return _BTC_REGIME_CACHE["is_dumping"], _BTC_REGIME_CACHE["drop_pct"]
+
+    df_btc = fetch_klines("BTCUSDT", "15", limit=35)
+    is_dumping = False
+    drop_pct = 0.0
+    if not df_btc.empty and len(df_btc) >= 10:
+        c_now = cfg.to_float(df_btc["close"].iloc[-1])
+        h_recent3 = cfg.to_float(df_btc["high"].iloc[-3:].max(), c_now)
+        ma20_btc = cfg.to_float(df_btc["close"].rolling(20, min_periods=5).mean().iloc[-1], c_now)
+        rsi_btc = cfg.to_float(calc_rsi(df_btc["close"], 6).iloc[-1], 50.0)
+        drop_pct = (c_now - h_recent3) / max(h_recent3, 1e-8) * 100.0
+        drop_threshold = getattr(cfg, "BTC_DUMP_DROP_15M_PCT", -0.70)
+        if drop_pct <= drop_threshold or (c_now < ma20_btc * 0.992 and rsi_btc < 32.0):
+            is_dumping = True
+
+    _BTC_REGIME_CACHE["ts"] = now
+    _BTC_REGIME_CACHE["is_dumping"] = is_dumping
+    _BTC_REGIME_CACHE["drop_pct"] = drop_pct
+    return is_dumping, drop_pct
 
 
 def analyze_symbol(coin):
@@ -191,9 +283,15 @@ def analyze_symbol(coin):
     if bb_mid_ext_pct > allowed_bb_ext:
         return None
 
+    # 1H 상위프레임 구조적 지지 확인 (오늘 Top 5 전원 적중 핵심 지표)
     ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
     ema20_1h = to_float(df_1h["close"].ewm(span=20, adjust=False).mean().iloc[-1], close)
     htf_support_ok = (close >= ma20_1h * 0.992) or (close >= ema20_1h * 0.992)
+
+    # BTC 급락장일 때 상위프레임(1H) 지지가 없는 종목은 즉시 차단
+    btc_dumping, _ = get_btc_market_regime()
+    if btc_dumping and not htf_support_ok:
+        return None
 
     if close >= ma20_1h and rsi6_1h >= 55.0:
         htf_status = f"1H 상승우위(RSI6 {int(round(rsi6_1h))})"
@@ -208,6 +306,7 @@ def analyze_symbol(coin):
     ignition_idx = vol_ratios.idxmax()
     vol_mult = to_float(vol_ratios.loc[ignition_idx], 1.0)
     ignition_vol = to_float(df_5m.loc[ignition_idx, "volume"], 1.0)
+    ignition_open = to_float(df_5m.loc[ignition_idx, "open"], close)
     ignition_high = to_float(df_5m.loc[ignition_idx, "high"], close)
     ignition_low = to_float(df_5m.loc[ignition_idx, "low"], close)
 
@@ -231,9 +330,11 @@ def analyze_symbol(coin):
     ma_full_aligned = (ma5 > ma20 > ma50 > ma112) and (close >= ma20)
     ma_short_aligned = (ma5 > ma20 > ma50) and (close >= ma20)
 
-    body_len = (df_5m["close"] - df_5m["open"]).abs().replace(0, 1e-8)
-    lower_wick = df_5m[["open", "close"]].min(axis=1) - df_5m["low"]
-    lower_wick_ratio_max6 = to_float((lower_wick / body_len).iloc[-6:].max(), 0.0)
+    # 도지(Doji) 캔들에서 아랫꼬리 배수가 240,000배로 튀는 현상 방지 (최소 몸통 0.15% 보정)
+    min_body_floor = df_5m["close"] * 0.0015
+    body_len = np.maximum((df_5m["close"] - df_5m["open"]).abs(), min_body_floor)
+    lower_wick = (df_5m[["open", "close"]].min(axis=1) - df_5m["low"]).clip(lower=0.0)
+    lower_wick_ratio_max6 = min(15.0, to_float((lower_wick / body_len).iloc[-6:].max(), 0.0))
     cond_spring = (not ma_short_aligned) and (lower_wick_ratio_max6 >= 1.4) and (close > ma20)
 
     bb_std = df_5m["close"].rolling(20, min_periods=10).std()
@@ -275,6 +376,7 @@ def analyze_symbol(coin):
     upper_wick_ratio = (high_p - max(open_p, close)) / curr_range
     curr_candle_gain_pct = (close - open_p) / max(open_p, 1e-8) * 100.0
 
+    # 1) 전고점 S/R Flip 칼지지
     cond_sr_flip_retest = (
         (not is_current_ignition)
         and (close >= prev_box_high * 0.996)
@@ -284,6 +386,7 @@ def analyze_symbol(coin):
         and (vol_mult >= cfg.EARLY_VOL_MULT_MIN)
     )
 
+    # 2) CROSSUSDT 18:10 패턴: 공중 눌림(High-Tight Bull Flag)
     impulse_range = max(ignition_high - prev_box_high, close * 0.004)
     flag_support_line = ignition_high - (impulse_range * cfg.BULL_FLAG_MAX_RETRACE)
     cond_bull_flag = (
@@ -296,25 +399,38 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
+    # 3) 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지
+    fvg_mid_line = (ignition_open + ignition_high) * 0.5
+    cond_fvg_mid_hold = (
+        (not is_current_ignition)
+        and (close > prev_box_high)
+        and (breakout_diff_pct <= cfg.EARLY_BREAKOUT_MAX_PCT)
+        and (pullback_low >= fvg_mid_line * 0.998)
+        and (pullback_vol_ratio <= cfg.PULLBACK_DRYUP_MAX)
+        and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
+    )
+
+    # 4) SOONUSDT 19:50 패턴: 포켓 피벗(Pocket Pivot) 초동 양봉 직격
     cond_pocket_pivot = (
         is_current_ignition
         and (close > open_p)
         and (0.4 <= curr_candle_gain_pct <= 3.5)
-        and (upper_wick_ratio <= 0.42)
+        and (upper_wick_ratio <= 0.36)
         and (-0.5 <= breakout_diff_pct <= cfg.EARLY_BREAKOUT_MAX_PCT)
         and (cfg.EARLY_VOL_MULT_MIN <= curr_vol_mult <= cfg.EARLY_VOL_MULT_MAX)
         and (pre_vol_pocket_ratio <= 0.40 or pre_box_range_pct <= cfg.PRE_BOX_TIGHT_PCT or cond_ema_ribbon)
         and (ma_short_aligned or cond_spring or htf_support_ok)
     )
 
+    # 5) Track A (박스권 선취매 & 거래량 건조 눌림)
     cond_track_a_pullback = (
         (close <= prev_box_high * 1.008)
         and (close >= ma20 * 0.995)
         and (effective_dryup_ratio <= cfg.PULLBACK_DRYUP_MAX)
-        and (ma_short_aligned or cond_spring)
+        and (ma_short_aligned or cond_spring or (cond_ema_ribbon and htf_support_ok))
     )
 
-    is_track_b = cond_sr_flip_retest or cond_bull_flag or cond_pocket_pivot
+    is_track_b = cond_sr_flip_retest or cond_bull_flag or cond_fvg_mid_hold or cond_pocket_pivot
     if not is_track_b and not cond_track_a_pullback:
         return None
 
@@ -330,6 +446,9 @@ def analyze_symbol(coin):
         elif cond_bull_flag:
             score += 20
             reasons.append(f"공중눌림 Bull Flag 칼지지(상단38.2%·MA5 사수/눌림거래량 {int(round(pullback_vol_ratio * 100))}%)")
+        elif cond_fvg_mid_hold:
+            score += 20
+            reasons.append(f"장대양봉 50%(FVG) 중심선 칼지지(눌림거래량 {int(round(pullback_vol_ratio * 100))}%)")
         elif cond_pocket_pivot:
             score += 20
             reasons.append(f"포켓피벗 초동양봉 직격(직전거래량 {int(round(pre_vol_pocket_ratio * 100))}% 건조 후 {curr_vol_mult:.1f}배 발화)")
@@ -350,6 +469,9 @@ def analyze_symbol(coin):
     elif cond_spring:
         score += 14
         reasons.append(f"유동성 스윕(Spring 아랫꼬리 {lower_wick_ratio_max6:.1f}배) 반전")
+    elif cond_ema_ribbon and ttm_squeeze:
+        score += 13
+        reasons.append("바닥 리본응축+스퀴즈 반전")
 
     if htf_support_ok:
         score += 10
@@ -404,7 +526,8 @@ def analyze_symbol(coin):
         score += 5
 
     score = int(min(100, score))
-    if score < cfg.SCORE_THRESHOLD:
+    active_threshold = getattr(cfg, "BTC_DUMP_SCORE_THRESHOLD", 90) if btc_dumping else cfg.SCORE_THRESHOLD
+    if score < active_threshold:
         return None
 
     atr_val = to_float(atr_5m.iloc[-1], close * 0.008)
@@ -415,20 +538,20 @@ def analyze_symbol(coin):
     entry_high = close * 1.0010
 
     if track_type == "TRACK_B":
-        raw_stop = min(prev_box_high, flag_support_line, ignition_low) - (1.0 * atr_val)
+        raw_stop = min(prev_box_high, flag_support_line, ignition_low) - (1.1 * atr_val)
         sl_note = "S/R·포켓피벗지지선+단기변동성버퍼"
     else:
-        raw_stop = support_line - (1.2 * atr_val)
+        raw_stop = support_line - (1.25 * atr_val)
         sl_note = "15m/1H 매집지지선+ATR버퍼"
 
     raw_sl_pct = (close - raw_stop) / max(close, 1e-8) * 100.0
-    sl_pct_int = int(np.clip(round(raw_sl_pct), 2, 5))
+    sl_pct_int = int(np.clip(round(raw_sl_pct), 3, 5))
     stop_price = close * (1.0 - sl_pct_int / 100.0)
 
     wave_height = max(swing_high_line - support_line, close * 0.032)
-    tp1 = max(close * 1.078, support_line + wave_height * 2.13)
-    tp2 = max(close * 1.150, support_line + wave_height * 3.06)
-    tp3 = max(close * 1.225, support_line + wave_height * 3.86)
+    tp1 = max(close * 1.080, support_line + wave_height * 2.13)
+    tp2 = max(close * 1.145, support_line + wave_height * 3.06)
+    tp3 = max(close * 1.210, support_line + wave_height * 3.86)
 
     tp1_pct = round((tp1 - close) / close * 100.0, 1)
     tp2_pct = round((tp2 - close) / close * 100.0, 1)
