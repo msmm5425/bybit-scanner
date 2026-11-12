@@ -19,22 +19,22 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [2026-11-11 Top 5 역추적 & 48h 사후검증 피드백 반영 파라미터]
+# [2026-11-12 Top 5 역추적 피드백 반영 파라미터]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 85점 이상 시 알림 발송
-PULLBACK_DRYUP_STRICT = 0.15           # 발화봉 대비 눌림 거래량 15% 이하 극건조 (피드백 반영)
+PULLBACK_DRYUP_STRICT = 0.15           # 발화봉 대비 눌림 거래량 15% 이하 극건조
 PULLBACK_DRYUP_MAX = 0.35              # 선취매/자율눌림 거래량 수축 허용 상한 (35% 이하)
 SR_FLIP_DRYUP_RATIO_MAX = 0.20         # 돌파 후 S/R Flip 및 MA20/50 리테스트 거래량 상한
 SR_FLIP_TOLERANCE_PCT = 1.20           # 전고점 S/R Flip 칼지지 허용 오차 (1.20% 이내)
 
-PRE_BOX_RANGE_MAX_PCT = 8.2            # 직전 2시간 박스권 표준 응축 상한 (8.2% - 피드백 반영)
+PRE_BOX_RANGE_MAX_PCT = 8.2            # 직전 2시간 박스권 표준 응축 상한 (8.2%)
 PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한 (14.0%)
-PRE_BOX_TIGHT_PCT = 5.2                # 5.2% 이내 초응축 시 가산점 (중앙값 3.3% 반영)
+PRE_BOX_TIGHT_PCT = 5.2                # 5.2% 이내 초응축 시 가산점
 EMA_RIBBON_MAX_SPREAD_PCT = 1.8        # 5·20·50 이평선 리본 초밀집 수렴 기준 (1.8% 이내)
 PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20 (35% 이하)
 
 EARLY_VOL_MULT_MIN = 3.2               # 초동 최소 거래량 배수 (3.2x)
-EARLY_VOL_MULT_MAX = 16.0              # 초응축 돌파 시 초동 수급 상한 확대 (9.3x~15.9x 대응)
+EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 돌파 대응 상한 확대 ($PRL 68.7x 등)
 EARLY_BREAKOUT_MAX_PCT = 2.5           # 돌파 후 +2.5% 이내 초입만 허용
 
 MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
