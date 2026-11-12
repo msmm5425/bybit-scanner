@@ -1136,6 +1136,28 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "HANAUSDT": {
+      "created_at": 1794478203,
+      "track_type": "TRACK_B",
+      "swing_high_line": 0.01783,
+      "entry_low": 0.016805004,
+      "entry_high": 0.01698544,
+      "stop_price": 0.0160504609,
+      "sl_pct": 5,
+      "tps": [
+        0.018571462639999994,
+        0.019718284399999994,
+        0.02139073279999999
+      ],
+      "tp_pcts": [
+        9.9,
+        16.7,
+        26.6
+      ],
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   },
   "alert_history": {
@@ -1189,6 +1211,7 @@
     "XMRUSDT": 1794381604,
     "ZROUSDT": 1794381604,
     "ICPUSDT": 1794381903,
-    "DOSUSDT": 1794388804
+    "DOSUSDT": 1794388804,
+    "HANAUSDT": 1794478203
   }
 }
