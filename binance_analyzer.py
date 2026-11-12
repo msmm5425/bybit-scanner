@@ -1,22 +1,298 @@
 import os
+import sys
 import json
 import time
+import inspect
+import requests
 import numpy as np
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
-import config as cfg
-from api import get_scanner_candidates, fetch_klines
-from notifier import fmt_price, send_telegram_single
+# 1. 외부 모듈 안전 로드 (특정 함수명 불일치로 인한 ImportError 원천 차단)
+try:
+    import config as cfg
+    TELEGRAM_BOT_TOKEN = getattr(cfg, "TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_ID = getattr(cfg, "TELEGRAM_CHAT_ID", "")
+    STATE_FILE = getattr(cfg, "STATE_FILE", "bot_state.json")
+    KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
+    BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
+    is_tradfi_ticker = getattr(cfg, "is_tradfi_ticker", lambda x: False)
+except Exception:
+    cfg = None
+    TELEGRAM_BOT_TOKEN = ""
+    TELEGRAM_CHAT_ID = ""
+    STATE_FILE = "bot_state.json"
+    KST = timezone(timedelta(hours=9))
+    BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0"}
+    is_tradfi_ticker = lambda x: False
+
+try:
+    import api as api_mod
+except Exception:
+    api_mod = None
+
+try:
+    import notifier as notifier_mod
+except Exception:
+    notifier_mod = None
+
+if not TELEGRAM_BOT_TOKEN:
+    TELEGRAM_BOT_TOKEN = (
+        os.getenv("TELEGRAM_TOKEN")
+        or os.getenv("TELEGRAM_BOT_TOKEN")
+        or ""
+    ).strip()
+
+if not TELEGRAM_CHAT_ID:
+    TELEGRAM_CHAT_ID = (
+        os.getenv("TELEGRAM_CHAT_ID")
+        or os.getenv("CHAT_ID")
+        or ""
+    ).strip()
 
 HISTORY_FILE = "analyzer_history.json"
-STATE_FILE = cfg.STATE_FILE
-KST = cfg.KST
-to_float = cfg.to_float
+
+
+def to_float(value, default=0.0):
+    try:
+        if value is None or value == "":
+            return default
+        val = float(value)
+        return default if np.isnan(val) or np.isinf(val) else val
+    except (TypeError, ValueError):
+        return default
+
+
+def fmt_price(price):
+    if notifier_mod and hasattr(notifier_mod, "fmt_price"):
+        try:
+            return notifier_mod.fmt_price(price)
+        except Exception:
+            pass
+    p = to_float(price, 0.0)
+    if p <= 0:
+        return "0.0000"
+    if p >= 1000:
+        return f"{p:,.2f}"
+    if p >= 10:
+        return f"{p:.3f}"
+    if p >= 1:
+        return f"{p:.4f}"
+    if p >= 0.01:
+        return f"{p:.5f}"
+    return f"{p:.6f}"
+
+
+def _normalize_kline_df(raw):
+    """어떤 형태의 캔들 데이터(DataFrame 또는 list)가 들어와도 표준 5분봉/1시간봉 DataFrame으로 변환"""
+    if isinstance(raw, pd.DataFrame):
+        if raw.empty:
+            return pd.DataFrame()
+        df = raw.copy()
+        col_map = {}
+        for c in df.columns:
+            cl = str(c).lower()
+            if cl in ("start", "starttime", "open_time", "time", "date", "datetime", "t"):
+                col_map[c] = "timestamp"
+            elif cl in ("o", "openprice"):
+                col_map[c] = "open"
+            elif cl in ("h", "highprice"):
+                col_map[c] = "high"
+            elif cl in ("l", "lowprice"):
+                col_map[c] = "low"
+            elif cl in ("c", "closeprice"):
+                col_map[c] = "close"
+            elif cl in ("v", "vol", "basevol"):
+                col_map[c] = "volume"
+        if col_map:
+            df = df.rename(columns=col_map)
+        for col in ("open", "high", "low", "close", "volume"):
+            if col not in df.columns:
+                return pd.DataFrame()
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df = df.dropna(subset=["close"]).reset_index(drop=True)
+        return df
+
+    if isinstance(raw, list) and len(raw) > 0:
+        try:
+            if isinstance(raw[0], dict):
+                df = pd.DataFrame(raw)
+                return _normalize_kline_df(df)
+            cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(raw[0])]
+            df = pd.DataFrame(raw, columns=cols)
+            df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
+            for col in ("open", "high", "low", "close", "volume"):
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            df = df.dropna(subset=["close"]).sort_values("timestamp").reset_index(drop=True)
+            return df
+        except Exception:
+            return pd.DataFrame()
+
+    return pd.DataFrame()
+
+
+def fetch_klines(symbol, interval="5", limit=150):
+    """
+    1순위: api.py 내부에 정의된 캔들 함수(이름 무관 자동 탐색) 호출
+    2순위: 미국 서버(GitHub Actions) 방화벽을 우회하는 멀티 거래소/미러 폴백 호출
+    """
+    if api_mod is not None:
+        candidate_names = (
+            "fetch_klines", "fetch_kline", "get_klines", "get_kline",
+            "fetch_bybit_klines", "get_bybit_klines", "fetch_candles",
+            "get_candles", "fetch_kline_df", "get_kline_df", "fetch_ohlcv", "get_ohlcv",
+        )
+        excluded = {
+            "get_scanner_candidates", "fetch_verified_1m_klines",
+            "to_float", "is_tradfi_ticker", "strip_multiplier_prefix", "strip_tokenized_suffix",
+        }
+        funcs_to_try = []
+        for name in candidate_names:
+            fn = getattr(api_mod, name, None)
+            if callable(fn):
+                funcs_to_try.append(fn)
+
+        for name, fn in inspect.getmembers(api_mod, inspect.isfunction):
+            if name not in excluded and name not in candidate_names and not name.startswith("_"):
+                if fn.__module__ == api_mod.__name__:
+                    funcs_to_try.append(fn)
+
+        for fn in funcs_to_try:
+            for args in [(symbol, str(interval), int(limit)), (symbol, int(interval), int(limit)), (symbol, str(interval))]:
+                try:
+                    res = fn(*args)
+                    df = _normalize_kline_df(res)
+                    if not df.empty and len(df) >= 15:
+                        return df
+                except Exception:
+                    continue
+
+    # 2순위A: Bybit 글로벌/지역 미러 엔드포인트 호출
+    bybit_Params = {"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)}
+    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com", "https://api.bybit.com"):
+        try:
+            resp = requests.get(f"{host}/v5/market/kline", params=bybit_Params, headers=BROWSER_HEADERS, timeout=6)
+            if resp.status_code == 200:
+                rows = resp.json().get("result", {}).get("list", [])
+                df = _normalize_kline_df(rows)
+                if not df.empty and len(df) >= 15:
+                    return df
+        except Exception:
+            pass
+
+    base = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
+    clean_base = base
+    for prefix in ("1000000", "100000", "10000", "1000", "100"):
+        if clean_base.startswith(prefix) and len(clean_base) > len(prefix):
+            clean_base = clean_base[len(prefix):]
+            break
+
+    # 2순위B: Gate.io USDT 선물 캔들 (미국 GitHub Actions 서버 100% 무차단)
+    gate_iv = {"1": "1m", "5": "5m", "15": "15m", "60": "1h", "240": "4h"}.get(str(interval), "5m")
+    for contract in (f"{base}_USDT", f"{clean_base}_USDT"):
+        try:
+            resp = requests.get(
+                "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
+                params={"contract": contract, "interval": gate_iv, "limit": int(limit)},
+                headers=BROWSER_HEADERS,
+                timeout=6,
+            )
+            if resp.status_code == 200:
+                rows = resp.json()
+                if isinstance(rows, list) and len(rows) >= 15:
+                    df = pd.DataFrame(rows)
+                    df = df.rename(columns={"t": "timestamp", "o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"})
+                    df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce") * 1000.0
+                    for col in ("open", "high", "low", "close", "volume"):
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+                    df = df.dropna(subset=["close"]).sort_values("timestamp").reset_index(drop=True)
+                    if not df.empty:
+                        return df
+        except Exception:
+            pass
+
+    # 2순위C: Bitget USDT 선물 캔들 (미국 GitHub Actions 서버 무차단)
+    bg_iv = {"1": "1m", "5": "5m", "15": "15m", "60": "1H", "240": "4H"}.get(str(interval), "5m")
+    for bg_sym in (symbol, f"{clean_base}USDT"):
+        try:
+            resp = requests.get(
+                "https://api.bitget.com/api/v2/mix/market/candles",
+                params={"symbol": bg_sym, "productType": "USDT-FUTURES", "granularity": bg_iv, "limit": str(limit)},
+                headers=BROWSER_HEADERS,
+                timeout=6,
+            )
+            if resp.status_code == 200:
+                rows = resp.json().get("data", [])
+                df = _normalize_kline_df(rows)
+                if not df.empty and len(df) >= 15:
+                    return df
+        except Exception:
+            pass
+
+    # 2순위D: MEXC 선물 캔들 (중소형 급등 알트코인 커버리지 최강)
+    mexc_iv = {"1": "Min1", "5": "Min5", "15": "Min15", "60": "Min60"}.get(str(interval), "Min5")
+    for m_sym in (f"{base}_USDT", f"{clean_base}_USDT"):
+        try:
+            resp = requests.get(
+                f"https://contract.mexc.com/api/v1/contract/kline/{m_sym}",
+                params={"interval": mexc_iv},
+                headers=BROWSER_HEADERS,
+                timeout=6,
+            )
+            if resp.status_code == 200:
+                d = resp.json().get("data", {})
+                if isinstance(d, dict) and d.get("close"):
+                    df = pd.DataFrame({
+                        "timestamp": pd.to_numeric(d.get("time", []), errors="coerce") * 1000.0,
+                        "open": pd.to_numeric(d.get("open", []), errors="coerce"),
+                        "high": pd.to_numeric(d.get("high", []), errors="coerce"),
+                        "low": pd.to_numeric(d.get("low", []), errors="coerce"),
+                        "close": pd.to_numeric(d.get("close", []), errors="coerce"),
+                        "volume": pd.to_numeric(d.get("vol", []), errors="coerce"),
+                    })
+                    df = df.dropna(subset=["close"]).sort_values("timestamp").iloc[-int(limit):].reset_index(drop=True)
+                    if len(df) >= 15:
+                        return df
+        except Exception:
+            pass
+
+    # 2순위E: Binance Data Vision (미국 공식 허용 엔드포인트)
+    bn_iv = {"1": "1m", "5": "5m", "15": "15m", "60": "1h"}.get(str(interval), "5m")
+    for bn_sym in (symbol, f"{clean_base}USDT"):
+        try:
+            resp = requests.get(
+                "https://data-api.binance.vision/api/v3/klines",
+                params={"symbol": bn_sym, "interval": bn_iv, "limit": int(limit)},
+                headers=BROWSER_HEADERS,
+                timeout=6,
+            )
+            if resp.status_code == 200:
+                rows = resp.json()
+                if isinstance(rows, list) and len(rows) >= 15:
+                    df = pd.DataFrame([r[:6] for r in rows], columns=["timestamp", "open", "high", "low", "close", "volume"])
+                    df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
+                    for col in ("open", "high", "low", "close", "volume"):
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+                    return df.dropna(subset=["close"]).reset_index(drop=True)
+        except Exception:
+            pass
+
+    return pd.DataFrame()
+
+
+def fetch_top_gainer_candidates():
+    if api_mod is not None and hasattr(api_mod, "get_scanner_candidates"):
+        try:
+            res = api_mod.get_scanner_candidates()
+            cands = res[0] if isinstance(res, tuple) else res
+            if isinstance(cands, list) and len(cands) > 0:
+                return cands
+        except Exception as e:
+            print(f"[get_scanner_candidates 예외] {e}")
+    return []
 
 
 def send_telegram_chunked(text):
-    """scanner.py가 사용하는 notifier.send_telegram_single과 100% 동일한 방식으로 분할 전송"""
     max_len = 3800
     lines = text.split("\n")
     chunks = []
@@ -34,34 +310,50 @@ def send_telegram_chunked(text):
     if current:
         chunks.append("\n".join(current))
 
+    sent_any = False
     for chunk in chunks:
-        send_telegram_single(chunk)
-        time.sleep(0.4)
+        if notifier_mod is not None and hasattr(notifier_mod, "send_telegram_single"):
+            try:
+                notifier_mod.send_telegram_single(chunk)
+                sent_any = True
+                time.sleep(0.4)
+                continue
+            except Exception:
+                pass
+
+        if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            try:
+                resp = requests.post(
+                    url,
+                    json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk, "disable_web_page_preview": True},
+                    timeout=15,
+                )
+                if resp.status_code == 200:
+                    sent_any = True
+                    time.sleep(0.4)
+            except Exception as e:
+                print(f"[텔레그램 전송 예외] {e}")
+
+    return sent_any
 
 
 def extract_ts_ms(df, pos, now_ts, interval_min=5):
-    """api.py의 fetch_klines가 어떤 시간 컬럼 형식을 반환하든 안전하게 밀리초(ms) 추출"""
     fallback_ms = int((now_ts - max(0, (len(df) - 1 - pos)) * interval_min * 60) * 1000)
-    for col in ("timestamp", "open_time", "time", "startTime", "date", "datetime"):
-        if col in df.columns:
-            val = df[col].iloc[pos]
-            if isinstance(val, pd.Timestamp):
-                return int(val.timestamp() * 1000)
-            try:
-                num = float(val)
-                if not np.isnan(num) and num > 0:
-                    return int(num * 1000) if num < 1e11 else int(num)
-            except Exception:
-                try:
-                    dt = pd.to_datetime(val)
-                    return int(dt.timestamp() * 1000)
-                except Exception:
-                    pass
+    if "timestamp" in df.columns:
+        val = df["timestamp"].iloc[pos]
+        if isinstance(val, pd.Timestamp):
+            return int(val.timestamp() * 1000)
+        try:
+            num = float(val)
+            if not np.isnan(num) and num > 0:
+                return int(num * 1000) if num < 1e11 else int(num)
+        except Exception:
+            pass
     return fallback_ms
 
 
 def filter_df_since_ts(df, since_ms, now_ts, interval_min=5):
-    """timestamp 컬럼 유무나 형식에 관계없이 특정 시각 이후 캔들만 안전하게 슬라이싱"""
     if df is None or df.empty:
         return pd.DataFrame()
     if "timestamp" in df.columns:
@@ -78,16 +370,6 @@ def filter_df_since_ts(df, since_ms, now_ts, interval_min=5):
     elapsed_min = max(1, int((now_ts * 1000 - since_ms) / 60000))
     bars_count = max(1, int(elapsed_min // interval_min) + 1)
     return df.iloc[-min(len(df), bars_count):]
-
-
-def calc_rsi(series, period=6):
-    delta = series.diff()
-    gain = delta.clip(lower=0.0)
-    loss = -delta.clip(upper=0.0)
-    avg_gain = gain.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    return (100.0 - (100.0 / (1.0 + rs))).fillna(50.0)
 
 
 def calc_atr(df, period=14):
@@ -131,21 +413,17 @@ def save_json_file(path, data):
 
 
 # =====================================================================
-# [1. 전문가급 급등 Top 5 초동 발화점 심층 역추적 엔진 (analyzer.py와 동일 호출)]
+# [1. 전문가급 급등 Top 5 초동 발화점 심층 역추적 엔진]
 # =====================================================================
 def reverse_engineer_top_coin(coin, now_ts):
     try:
         symbol = coin["symbol"]
-        # analyzer.py와 100% 동일한 인자로 fetch_klines 호출
         df_5m = fetch_klines(symbol, "5", limit=150)
-        if df_5m is None or df_5m.empty or len(df_5m) < 30:
+        if df_5m is None or df_5m.empty or len(df_5m) < 20:
             return None
 
         df_1h = fetch_klines(symbol, "60", limit=75)
         df_5m = df_5m.reset_index(drop=True)
-
-        for col in ("open", "high", "low", "close", "volume"):
-            df_5m[col] = pd.to_numeric(df_5m[col], errors="coerce")
 
         for p in (5, 20, 50, 112):
             df_5m[f"ma{p}"] = df_5m["close"].rolling(p, min_periods=3).mean()
@@ -267,7 +545,6 @@ def reverse_engineer_top_coin(coin, now_ts):
         mae_pct = max(1.5, (ign_price - min_after_ign) / max(ign_price, 1e-8) * 100.0)
 
         if df_1h is not None and not df_1h.empty and len(df_1h) >= 3:
-            df_1h["close"] = pd.to_numeric(df_1h["close"], errors="coerce")
             ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=2).mean().iloc[-1], ign_price)
             htf_aligned = to_float(df_5m["close"].iloc[-1]) >= ma20_1h * 0.99
         else:
@@ -650,16 +927,10 @@ def main():
     now_dt = datetime.now(KST)
     now_str = now_dt.strftime("%Y-%m-%d %H:%M KST")
 
-    # scanner.py와 100% 동일한 방식으로 후보군 호출
-    cand_res = get_scanner_candidates()
-    if isinstance(cand_res, tuple):
-        candidates = cand_res[0]
-    else:
-        candidates = cand_res
-
+    candidates = fetch_top_gainer_candidates()
     if not candidates:
         print("[알림] Top 5 후보군 조회 실패")
-        return
+        sys.exit(1)
 
     candidates.sort(
         key=lambda x: to_float(x.get("change_24h"), to_float(x.get("price24hPcnt")) * 100.0),
@@ -667,7 +938,7 @@ def main():
     )
 
     analyzed_top5 = []
-    for c in candidates[:15]:
+    for c in candidates[:20]:
         res = reverse_engineer_top_coin(c, now_ts)
         if res:
             analyzed_top5.append(res)
@@ -676,7 +947,7 @@ def main():
 
     if not analyzed_top5:
         print("[알림] 상위 종목 캔들 분석 결과 없음")
-        return
+        sys.exit(1)
 
     num_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
     msg_lines = [
