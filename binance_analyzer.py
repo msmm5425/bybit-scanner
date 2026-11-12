@@ -62,6 +62,14 @@ def to_float(value, default=0.0):
         return default
 
 
+def normalize_funding_pct(raw_val):
+    """이미 % 단위인 펀딩비(0.005%)에 100이 중복 곱해져 +0.5000%가 되는 현상 자동 교정"""
+    v = to_float(raw_val, 0.0)
+    if abs(v) > 0.15:
+        return v / 100.0 if abs(v) <= 2.5 else v
+    return v
+
+
 def fmt_price(price):
     if notifier_mod and hasattr(notifier_mod, "fmt_price"):
         try:
@@ -83,7 +91,6 @@ def fmt_price(price):
 
 
 def _normalize_kline_df(raw, expected_interval_min=None):
-    """실제 캔들의 시간 간격(5분봉=300초, 1시간봉=3600초)을 검증하여 타임프레임 혼선 원천 차단"""
     df = pd.DataFrame()
     if isinstance(raw, pd.DataFrame) and not raw.empty:
         df = raw.copy()
@@ -137,7 +144,7 @@ def _normalize_kline_df(raw, expected_interval_min=None):
     return df.dropna(subset=["close"]).reset_index(drop=True)
 
 
-def fetch_klines(symbol, interval="5", limit=150):
+def fetch_klines(symbol, interval="5", limit=180):
     iv_min = int(interval)
     if api_mod is not None:
         excluded = {
@@ -162,7 +169,6 @@ def fetch_klines(symbol, interval="5", limit=150):
             clean_base = clean_base[len(prefix):]
             break
 
-    # Bybit 글로벌/미러 엔드포인트
     bybit_params = {"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)}
     for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com", "https://api.bybit.com"):
         try:
@@ -174,7 +180,6 @@ def fetch_klines(symbol, interval="5", limit=150):
         except Exception:
             pass
 
-    # Gate.io 선물 캔들 (정확한 5분봉/1시간봉 보장)
     gate_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h", 240: "4h"}.get(iv_min, "5m")
     for contract in (f"{base}_USDT", f"{clean_base}_USDT"):
         try:
@@ -191,7 +196,6 @@ def fetch_klines(symbol, interval="5", limit=150):
         except Exception:
             pass
 
-    # Bitget 선물 캔들
     bg_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1H", 240: "4H"}.get(iv_min, "5m")
     for bg_sym in (symbol, f"{clean_base}USDT"):
         try:
@@ -208,38 +212,10 @@ def fetch_klines(symbol, interval="5", limit=150):
         except Exception:
             pass
 
-    # MEXC 선물 캔들
-    mexc_iv = {1: "Min1", 5: "Min5", 15: "Min15", 60: "Min60"}.get(iv_min, "Min5")
-    for m_sym in (f"{base}_USDT", f"{clean_base}_USDT"):
-        try:
-            resp = requests.get(
-                f"https://contract.mexc.com/api/v1/contract/kline/{m_sym}",
-                params={"interval": mexc_iv},
-                headers=BROWSER_HEADERS,
-                timeout=5,
-            )
-            if resp.status_code == 200:
-                d = resp.json().get("data", {})
-                if isinstance(d, dict) and d.get("close"):
-                    df = pd.DataFrame({
-                        "timestamp": pd.to_numeric(d.get("time", []), errors="coerce") * 1000.0,
-                        "open": pd.to_numeric(d.get("open", []), errors="coerce"),
-                        "high": pd.to_numeric(d.get("high", []), errors="coerce"),
-                        "low": pd.to_numeric(d.get("low", []), errors="coerce"),
-                        "close": pd.to_numeric(d.get("close", []), errors="coerce"),
-                        "volume": pd.to_numeric(d.get("vol", []), errors="coerce"),
-                    })
-                    df = _normalize_kline_df(df.iloc[-int(limit):], expected_interval_min=iv_min)
-                    if not df.empty and len(df) >= 20:
-                        return df
-        except Exception:
-            pass
-
     return pd.DataFrame()
 
 
 def enrich_ticker_metrics(candidates):
-    """거래대금(turnover_m), OI(oi_m), 펀딩비(funding_pct)가 0.0M으로 나오는 현상 완전 방지"""
     ticker_map = {}
     for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com", "https://api.bybit.com"):
         try:
@@ -258,7 +234,6 @@ def enrich_ticker_metrics(candidates):
         except Exception:
             pass
 
-    # Gate.io 선물 티커 백업 매핑 (Bybit 미러가 막혔을 때 OI/거래대금/펀딩비 보충)
     gate_map = {}
     if not ticker_map:
         try:
@@ -289,19 +264,24 @@ def enrich_ticker_metrics(candidates):
         if o_m <= 0 and to_float(c.get("openInterestValue")) > 0:
             o_m = to_float(c.get("openInterestValue")) / 1e6
 
-        f_p = to_float(c.get("funding_pct"))
-        if f_p == 0.0 and c.get("fundingRate") is not None:
-            f_p = to_float(c.get("fundingRate")) * 100.0
-        elif f_p == 0.0 and c.get("funding_rate") is not None:
-            f_p = to_float(c.get("funding_rate")) * 100.0
-
         ext = ticker_map.get(sym) or gate_map.get(sym) or {}
         if t_m <= 0:
             t_m = to_float(ext.get("turnover_m"), 0.0)
         if o_m <= 0:
             o_m = to_float(ext.get("oi_m"), 0.0)
-        if f_p == 0.0:
-            f_p = to_float(ext.get("funding_pct"), 0.0)
+
+        # 펀딩비 추출 및 100배 중복 곱셈 방지 정규화
+        if "funding_pct" in c and c.get("funding_pct") is not None:
+            f_p = normalize_funding_pct(c.get("funding_pct"))
+        elif c.get("fundingRate") is not None:
+            f_p = normalize_funding_pct(to_float(c.get("fundingRate")) * 100.0)
+        elif c.get("funding_rate") is not None:
+            f_p = normalize_funding_pct(c.get("funding_rate"))
+        else:
+            f_p = normalize_funding_pct(ext.get("funding_pct", 0.0))
+
+        if f_p == 0.0 and ext.get("funding_pct") is not None:
+            f_p = normalize_funding_pct(ext.get("funding_pct"))
 
         c["turnover_m"] = t_m
         c["oi_m"] = o_m
@@ -384,7 +364,6 @@ def extract_ts_ms(df, pos, now_ts, interval_min=5):
 
 
 def slice_df_window_ms(df, start_ms, end_ms, now_ts, interval_min=5):
-    """특정 시작~종료 시각(ms) 구간의 캔들만 정확하게 슬라이싱"""
     if df is None or df.empty:
         return pd.DataFrame()
     if "timestamp" in df.columns:
@@ -447,7 +426,7 @@ def save_json_file(path, data):
 
 
 # =====================================================================
-# [1. 전문가급 급등 Top 5 초동 발화점 심층 역추적 엔진 (5분봉 간격 검증 완료)]
+# [1. 전문가급 급등 Top 5 초동 발화점 심층 역추적 엔진]
 # =====================================================================
 def reverse_engineer_top_coin(coin, now_ts):
     try:
@@ -540,7 +519,6 @@ def reverse_engineer_top_coin(coin, now_ts):
         full_aligned = ma5_i > ma20_i > ma50_i > ma112_i
         short_aligned = ma5_i > ma20_i > ma50_i
 
-        # 도지(Doji) 캔들 아랫꼬리 배수 폭주 방지 (최소 몸통 0.15% 보정 및 최대 15배 캡핑)
         min_body_floor = pre5_df["close"] * 0.0015
         body_s = np.maximum((pre5_df["close"] - pre5_df["open"]).abs(), min_body_floor)
         l_wick = (pre5_df[["open", "close"]].min(axis=1) - pre5_df["low"]).clip(lower=0.0)
@@ -588,7 +566,7 @@ def reverse_engineer_top_coin(coin, now_ts):
 
         turnover_m = to_float(coin.get("turnover_m"))
         oi_m = to_float(coin.get("oi_m"))
-        funding_pct = to_float(coin.get("funding_pct"))
+        funding_pct = normalize_funding_pct(coin.get("funding_pct", 0.0))
         change_24h = to_float(coin.get("change_24h"), to_float(coin.get("price24hPcnt")) * 100.0)
         oi_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0 if turnover_m > 0 else 0.0
 
@@ -607,7 +585,7 @@ def reverse_engineer_top_coin(coin, now_ts):
             alphas.append("TTM 켈트너 스퀴즈 폭발(BB⊂KC 변동성 압축 후 상단 분출)")
         if pre5_min_ribbon <= 2.2:
             alphas.append(f"이평선 리본 초밀집 확산(5·20·50 이격 {pre5_min_ribbon:.1f}% 수렴 후 분출)")
-        if ign_minute in (0, 5, 10):
+        if ign_minute in (0, 5, 10, 15):
             alphas.append(f"정각 오프닝 드라이브({ign_dt.strftime('%H:%M')} 새 1시간봉 시동 수급)")
         elif ign_minute in (45, 50, 55):
             alphas.append(f"정각 마감 전 종가관리 피벗({ign_dt.strftime('%H:%M')} 선취매 수급)")
@@ -680,7 +658,7 @@ def reverse_engineer_top_coin(coin, now_ts):
 
 
 # =====================================================================
-# [2. 내 스캐너 알림 종목 오답 노트 (실제 이탈 시각·최고 수익률·1시간 BTC 낙폭 정밀 역산)]
+# [2. 내 스캐너 알림 종목 오답 노트 (15분봉 50시간 범위로 실제 익절·최고수익 완벽 복원)]
 # =====================================================================
 def analyze_scanner_sl_postmortem(now_ts):
     state = load_json_file(STATE_FILE, {"tracked": {}, "sl_history": {}})
@@ -695,20 +673,50 @@ def analyze_scanner_sl_postmortem(now_ts):
     if not isinstance(sl_history, dict):
         sl_history = {}
 
+    # 1) 최근 48시간 내 포착된 모든 종목에 대해 15분봉(50h 범위)으로 실제 익절(TP1~3) 도달 여부 전수 업데이트
+    tp_win_count = 0
+    active_count = 0
+    sl_count_48h = 0
+
     for sym, t_item in tracked.items():
         if not isinstance(t_item, dict):
             continue
+        c_at = int(t_item.get("created_at", 0))
+        if (now_ts - c_at) > 172800:
+            continue
+
+        stop_p_val = to_float(t_item.get("stop_price"))
+        entry_low = to_float(t_item.get("entry_low"))
+        entry_high = to_float(t_item.get("entry_high"))
+        entry_p = to_float(t_item.get("entry_price"))
+        if entry_p <= 0:
+            entry_p = (entry_low + entry_high) / 2.0 if entry_low > 0 else stop_p_val
+
+        tps_list = t_item.get("tps") or []
+        tp1_val = to_float(tps_list[0]) if len(tps_list) >= 1 else entry_p * 1.08
+
+        # 아직 TP1 도달 기록이 없고 진입가가 유효하면 15분봉으로 진입 이후 최고가 확인
+        if not t_item.get("tp1_hit") and entry_p > 0:
+            df_15m_chk = fetch_klines(sym, "15", limit=200)
+            if not df_15m_chk.empty:
+                win_15m = slice_df_window_ms(df_15m_chk, c_at * 1000, now_ts * 1000, now_ts, interval_min=15)
+                if not win_15m.empty:
+                    max_h_15m = to_float(win_15m["high"].max(), entry_p)
+                    fav_pct = round((max_h_15m - entry_p) / entry_p * 100.0, 2)
+                    t_item["max_favorable_pct"] = max(to_float(t_item.get("max_favorable_pct")), max(0.0, fav_pct))
+                    if max_h_15m >= tp1_val:
+                        t_item["tp1_hit"] = True
+
+        if t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("tp3_completed"):
+            tp_win_count += 1
+        elif t_item.get("sl_alerted"):
+            sl_count_48h += 1
+        else:
+            active_count += 1
+
         if t_item.get("sl_alerted"):
-            c_at = int(t_item.get("created_at", 0))
             sl_key = f"{sym}_{c_at}"
             if sl_key not in sl_history:
-                stop_p_val = to_float(t_item.get("stop_price"))
-                entry_low = to_float(t_item.get("entry_low"))
-                entry_high = to_float(t_item.get("entry_high"))
-                entry_p = to_float(t_item.get("entry_price"))
-                if entry_p <= 0:
-                    entry_p = (entry_low + entry_high) / 2.0 if entry_low > 0 else stop_p_val
-                sl_at_val = int(t_item.get("sl_at", 0))
                 sl_history[sl_key] = {
                     "symbol": sym,
                     "track_type": t_item.get("track_type", "TRACK_A"),
@@ -718,7 +726,7 @@ def analyze_scanner_sl_postmortem(now_ts):
                     "sl_trigger_price": to_float(t_item.get("sl_trigger_price"), stop_p_val),
                     "sl_pct": to_float(t_item.get("sl_pct", 3)),
                     "created_at": c_at,
-                    "sl_at": sl_at_val,
+                    "sl_at": int(t_item.get("sl_at", 0)),
                     "hold_minutes": int(t_item.get("hold_minutes", 0)),
                     "max_favorable_pct": to_float(t_item.get("max_favorable_pct", 0.0)),
                     "vol_mult": to_float(t_item.get("vol_mult", 1.0)),
@@ -729,45 +737,34 @@ def analyze_scanner_sl_postmortem(now_ts):
                     "reasons": t_item.get("reasons", []),
                 }
 
-    recent_tracked = [
-        v for v in tracked.values()
-        if isinstance(v, dict) and (now_ts - int(v.get("created_at", 0))) <= 172800
-    ]
     recent_sl_list = [
         v for v in sl_history.values()
-        if isinstance(v, dict) and (now_ts - int(v.get("created_at", now_ts))) <= 259200
+        if isinstance(v, dict) and (now_ts - int(v.get("created_at", now_ts))) <= 172800
     ]
     recent_sl_list.sort(key=lambda x: int(x.get("sl_at") or x.get("created_at") or 0), reverse=True)
 
-    tp_win_count = sum(
-        1 for v in recent_tracked if v.get("tp1_hit") or v.get("tp2_hit") or v.get("tp3_completed")
-    )
-    active_count = sum(
-        1 for v in recent_tracked if not v.get("sl_alerted") and not v.get("tp3_completed")
-    )
-    sl_count = sum(1 for v in recent_tracked if v.get("sl_alerted")) or len(recent_sl_list)
-    total_eval = max(len(recent_tracked), tp_win_count + sl_count + active_count)
+    total_eval = tp_win_count + sl_count_48h + active_count
 
     lines = [
         "━━━━━━━━━━━━━━━━━━",
         "🚨 [내 스캐너 알림 종목 오답 노트 (최근 48h 손절 심층 역추적 & 처방)]",
     ]
 
-    if total_eval == 0 and sl_count == 0:
+    if total_eval == 0 and not recent_sl_list:
         lines.append("• 최근 48시간 내 손절 이탈 종목이 없습니다. (방어 필터 클린 유지 중)")
         return "\n".join(lines), []
 
-    decided = tp_win_count + sl_count
+    decided = tp_win_count + sl_count_48h
     win_rate_str = f"{(tp_win_count / decided * 100.0):.1f}%" if decided > 0 else "집계중"
     lines.append(
-        f"• 최근 48h 스캐너 성적표: 총 {total_eval}건 포착 | 익절권 도달 {tp_win_count}건 | 손절 {sl_count}건 | 순항중 {active_count}건 (확정승률 {win_rate_str})"
+        f"• 최근 48h 스캐너 성적표: 총 {total_eval}건 포착 | 익절권 도달 {tp_win_count}건 | 손절 {sl_count_48h}건 | 순항중 {active_count}건 (확정승률 {win_rate_str})"
     )
 
     if not recent_sl_list:
-        lines.append("• ✅ 손절(SL) 발생 0건: 현재 유동 손절선(-2%~-5%) 및 컷오프 필터가 완벽히 작동하고 있습니다.")
+        lines.append("• ✅ 손절(SL) 발생 0건: 현재 유동 손절선(-3%~-5%) 및 컷오프 필터가 완벽히 작동하고 있습니다.")
         return "\n".join(lines), []
 
-    df_btc = fetch_klines("BTCUSDT", "5", limit=200)
+    df_btc_15m = fetch_klines("BTCUSDT", "15", limit=200)
     cause_counter = {
         "BTC_DUMP": 0,
         "STOP_HUNT_REBOUND": 0,
@@ -785,36 +782,35 @@ def analyze_scanner_sl_postmortem(now_ts):
         stop_p = to_float(sl_item.get("stop_price"))
         created_at = int(sl_item.get("created_at", now_ts - 3600))
         sl_at = int(sl_item.get("sl_at", 0))
-        hold_min = int(sl_item.get("hold_minutes", 0))
         max_fav = to_float(sl_item.get("max_favorable_pct", 0.0))
-        oi_m = to_float(sl_item.get("oi_m", 0.0))
-        turnover_m = to_float(sl_item.get("turnover_m", 1.0))
-        oi_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0 if turnover_m > 0 else 10.0
         rsi_entry = to_float(sl_item.get("rsi6_15m", 50.0))
 
-        df_coin = fetch_klines(sym, "5", limit=200)
-        rebound_after_sl_pct = 0.0
+        # 5분봉(최근 15시간) + 15분봉(최근 50시간) 병행 조회로 15시간 이전 포착 종목도 최고 수익률 정확히 복원
+        age_hours = (now_ts - created_at) / 3600.0
+        iv_str = "5" if age_hours <= 14.0 else "15"
+        iv_min = 5 if iv_str == "5" else 15
+        df_coin = fetch_klines(sym, iv_str, limit=200)
 
-        # 구버전 bot_state.json 항목(sl_at 미기록 또는 max_fav=0.0)을 실제 5분봉에서 정밀 복원
+        rebound_after_sl_pct = 0.0
         if df_coin is not None and not df_coin.empty and entry_p > 0:
-            after_entry_df = slice_df_window_ms(df_coin, created_at * 1000, now_ts * 1000, now_ts, interval_min=5)
+            after_entry_df = slice_df_window_ms(df_coin, created_at * 1000, now_ts * 1000, now_ts, interval_min=iv_min)
             if not after_entry_df.empty:
                 if (sl_at <= 0 or sl_at >= now_ts - 120) and stop_p > 0:
                     breach_rows = after_entry_df[after_entry_df["low"] <= stop_p]
                     if not breach_rows.empty:
                         first_b_pos = df_coin.index.get_loc(breach_rows.index[0])
-                        sl_at = int(extract_ts_ms(df_coin, first_b_pos, now_ts, interval_min=5) // 1000)
+                        sl_at = int(extract_ts_ms(df_coin, first_b_pos, now_ts, interval_min=iv_min) // 1000)
 
                 if sl_at <= created_at:
                     sl_at = min(now_ts, created_at + 1800)
 
-                hold_win = slice_df_window_ms(df_coin, created_at * 1000, sl_at * 1000, now_ts, interval_min=5)
+                hold_win = slice_df_window_ms(df_coin, created_at * 1000, (sl_at + iv_min * 60) * 1000, now_ts, interval_min=iv_min)
                 if not hold_win.empty:
                     actual_high = to_float(hold_win["high"].max(), entry_p)
                     calc_fav = round((actual_high - entry_p) / entry_p * 100.0, 2)
                     max_fav = max(max_fav, max(0.0, calc_fav))
 
-                after_sl_win = slice_df_window_ms(df_coin, sl_at * 1000, (sl_at + 7200) * 1000, now_ts, interval_min=5)
+                after_sl_win = slice_df_window_ms(df_coin, sl_at * 1000, (sl_at + 7200) * 1000, now_ts, interval_min=iv_min)
                 if not after_sl_win.empty and stop_p > 0:
                     post_sl_high = to_float(after_sl_win["high"].max(), stop_p)
                     rebound_after_sl_pct = (post_sl_high - stop_p) / max(stop_p, 1e-8) * 100.0
@@ -823,10 +819,9 @@ def analyze_scanner_sl_postmortem(now_ts):
             sl_at = now_ts
         hold_min = max(5, int((sl_at - created_at) // 60))
 
-        # 손절 직전 60분~손절 직후 5분 사이의 실제 BTC 순간 투매 폭만 정밀 측정
         btc_drop_pct = 0.0
-        if df_btc is not None and not df_btc.empty:
-            btc_win = slice_df_window_ms(df_btc, (sl_at - 3600) * 1000, (sl_at + 300) * 1000, now_ts, interval_min=5)
+        if df_btc_15m is not None and not df_btc_15m.empty:
+            btc_win = slice_df_window_ms(df_btc_15m, (sl_at - 3600) * 1000, (sl_at + 900) * 1000, now_ts, interval_min=15)
             if not btc_win.empty:
                 b_high = to_float(btc_win["high"].max(), 1.0)
                 b_low = to_float(btc_win["low"].min(), 1.0)
@@ -865,7 +860,7 @@ def analyze_scanner_sl_postmortem(now_ts):
         )
     if cause_counter["STOP_HUNT_REBOUND"] > 0:
         prescription_notes.append(
-            "• [스탑헌팅 방어]: 손절 후 V자 반등 종목 포착 — analyzer.py의 ATR 손절 버퍼 확대 및 최소 손절폭 -3% 이상 유지 권장"
+            "• [스탑헌팅 방어]: 손절 후 V자 반등 종목 포착 — analyzer.py의 ATR 손절 버퍼 1.45배 확대 및 최소 손절폭 -3% 이상 유지 권장"
         )
     if cause_counter["PROFIT_GIVEBACK"] > 0:
         prescription_notes.append(
@@ -873,11 +868,11 @@ def analyze_scanner_sl_postmortem(now_ts):
         )
     if cause_counter["FAKEOUT_WHIPSAW"] > 0:
         prescription_notes.append(
-            "• [윗꼬리 휩소 방어]: 돌파 직후 꺾인 Fakeout 방지 — PULLBACK_DRYUP_MAX를 0.28 이하로 유지 권장"
+            "• [윗꼬리 휩소 방어]: 돌파 직후 꺾인 Fakeout 방지 — PULLBACK_DRYUP_MAX를 0.22 이하로 유지 권장"
         )
     if cause_counter["LOW_OI_DRAIN"] > 0:
         prescription_notes.append(
-            "• [수급 둔화 방어]: 1시간봉 중심선(MA20) 구조적 지지가 확인된 종목 위주로 선별 진입 권장"
+            "• [수급 둔화 방어]: 1시간봉 중심선(MA20) 구조적 지지 필수화 및 최소 초동 거래량 배수(3.3배↑) 상향 권장"
         )
 
     if prescription_notes:
@@ -888,54 +883,76 @@ def analyze_scanner_sl_postmortem(now_ts):
 
 
 # =====================================================================
-# [3. 48시간 사후검증 (기존 cohorts / snapshots / list 구조 완벽 호환)]
+# [3. 48시간 사후검증 (중첩된 cohorts 포착분 자동 언패킹 완벽 지원)]
 # =====================================================================
-def normalize_history_data(raw_data):
-    raw_list = []
-    if isinstance(raw_data, list):
-        raw_list = raw_data
-    elif isinstance(raw_data, dict):
-        for key in ("cohorts", "snapshots", "history", "data"):
-            if isinstance(raw_data.get(key), list):
-                raw_list = raw_data[key]
-                break
+def _extract_flat_cohorts(obj):
+    results = []
+    if isinstance(obj, list):
+        for el in obj:
+            results.extend(_extract_flat_cohorts(el))
+    elif isinstance(obj, dict):
+        # date_str이 'cohorts'로 잘못 묶여 있고 내부 coins가 다시 코호트 리스트인 경우 재귀 해제
+        c_list = obj.get("coins") or obj.get("items") or obj.get("records") or obj.get("top5")
+        if (
+            str(obj.get("date_str", "")) in ("cohorts", "snapshots", "history")
+            and isinstance(c_list, list)
+            and c_list
+            and isinstance(c_list[0], dict)
+            and ("symbol" not in c_list[0])
+        ):
+            results.extend(_extract_flat_cohorts(c_list))
+            return results
 
-    normalized = []
-    for item in raw_list:
-        if not isinstance(item, dict):
-            continue
-        ts = int(to_float(item.get("timestamp") or item.get("captured_ts") or item.get("created_at") or item.get("ts"), 0))
-        date_s = str(item.get("date_str") or item.get("captured_at") or item.get("date") or item.get("cohort_id") or "")
-        if not date_s and ts > 0:
-            date_s = datetime.fromtimestamp(ts, tz=KST).strftime("%Y-%m-%d %H:%M")
-        coins_arr = item.get("coins") or item.get("items") or item.get("records") or item.get("top5") or []
-        if isinstance(coins_arr, list) and coins_arr:
-            normalized.append({
+        for key in ("cohorts", "snapshots", "history", "data"):
+            if isinstance(obj.get(key), list):
+                results.extend(_extract_flat_cohorts(obj[key]))
+
+        if isinstance(c_list, list) and c_list and isinstance(c_list[0], dict) and ("symbol" in c_list[0]):
+            ts = int(to_float(obj.get("timestamp") or obj.get("captured_ts") or obj.get("created_at") or obj.get("ts"), 0))
+            date_s = str(obj.get("date_str") or obj.get("captured_at") or obj.get("date") or obj.get("cohort_id") or "")
+            if (not date_s or date_s in ("cohorts", "snapshots")) and ts > 0:
+                date_s = datetime.fromtimestamp(ts, tz=KST).strftime("%Y-%m-%d %H:%M")
+            results.append({
                 "date_str": date_s or "이전 포착분",
                 "timestamp": ts if ts > 0 else int(time.time()) - 172800,
-                "coins": coins_arr,
+                "coins": c_list,
             })
-    return normalized
+    return results
+
+
+def normalize_history_data(raw_data):
+    flat = _extract_flat_cohorts(raw_data)
+    dedup = {}
+    for item in flat:
+        k = item.get("date_str", "")
+        dedup[k] = item
+    res = list(dedup.values())
+    res.sort(key=lambda x: int(x.get("timestamp", 0)))
+    return res
 
 
 def evaluate_48h_history(history_list, now_ts):
+    today_prefix = datetime.now(KST).strftime("%Y-%m-%d")
     target_snap = None
     for snap in history_list:
         if not isinstance(snap, dict):
             continue
         age_h = (now_ts - int(snap.get("timestamp", 0))) / 3600.0
-        if 36.0 <= age_h <= 84.0 and snap.get("coins"):
+        if 20.0 <= age_h <= 96.0 and snap.get("coins"):
             target_snap = snap
             break
-    if not target_snap and len(history_list) >= 2:
-        target_snap = history_list[0]
+    if not target_snap:
+        for snap in history_list:
+            if not str(snap.get("date_str", "")).startswith(today_prefix) and snap.get("coins"):
+                target_snap = snap
+                break
 
     lines = [
         "━━━━━━━━━━━━━━━━━━",
         "⏱️ [48시간 경과 동일 상위종목 실전 익절(TP1~TP3) 사후 검증]",
     ]
     if not target_snap or not target_snap.get("coins"):
-        lines.append("• 아직 48시간이 경과된 이전 스냅샷 데이터가 없습니다. (자동 누적 중)")
+        lines.append("• 오늘 첫 정상 스냅샷이 저장되었습니다. (다음 리포트부터 실전 익절 도달률이 자동 검증됩니다)")
         return "\n".join(lines)
 
     snap_date = target_snap.get("date_str", "이전 포착분")
@@ -981,7 +998,7 @@ def evaluate_48h_history(history_list, now_ts):
         added_rows += 1
 
     if added_rows == 0:
-        lines.append("• 이전 스냅샷 종목의 48시간 경과 데이터를 수집 중입니다.")
+        lines.append("• 오늘 첫 정상 스냅샷이 저장되었습니다. (다음 리포트부터 실전 익절 도달률이 자동 검증됩니다)")
 
     return "\n".join(lines)
 
@@ -1043,24 +1060,24 @@ def main():
     msg_lines.append(sec_48h)
 
     today_key = now_dt.strftime("%Y-%m-%d")
-    if not any(isinstance(h, dict) and str(h.get("date_str", "")).startswith(today_key) for h in history_list):
-        history_list.append(
-            {
-                "date_str": today_key,
-                "timestamp": now_ts,
-                "coins": [
-                    {
-                        "symbol": x["symbol"],
-                        "ign_price": x["ign_price"],
-                        "support_line": x["support_line"],
-                        "swing_high_line": x["swing_high_line"],
-                    }
-                    for x in analyzed_top5
-                ],
-            }
-        )
-        history_list = history_list[-10:]
-        save_json_file(HISTORY_FILE, {"cohorts": history_list})
+    history_list = [h for h in history_list if not str(h.get("date_str", "")).startswith(today_key)]
+    history_list.append(
+        {
+            "date_str": today_key,
+            "timestamp": now_ts,
+            "coins": [
+                {
+                    "symbol": x["symbol"],
+                    "ign_price": x["ign_price"],
+                    "support_line": x["support_line"],
+                    "swing_high_line": x["swing_high_line"],
+                }
+                for x in analyzed_top5
+            ],
+        }
+    )
+    history_list = history_list[-10:]
+    save_json_file(HISTORY_FILE, {"cohorts": history_list})
 
     sec_postmortem, prescriptions = analyze_scanner_sl_postmortem(now_ts)
     msg_lines.append(sec_postmortem)
@@ -1082,7 +1099,7 @@ def main():
 
     rec_vol_min = round(max(2.6, min(4.0, float(np.percentile([x["ign_vol_mult"] for x in analyzed_top5], 15)) * 0.85)), 1)
     rec_box_max = round(max(5.5, min(9.5, float(np.median([x["pre_box_pct"] for x in analyzed_top5])) * 1.6)), 1)
-    rec_dryup = round(max(0.20, min(0.35, float(np.median([x["dryup_ratio"] for x in analyzed_top5])) + 0.05)), 2)
+    rec_dryup = round(max(0.18, min(0.35, float(np.median([x["dryup_ratio"] for x in analyzed_top5])) + 0.05)), 2)
     rec_sl_pct = int(np.clip(round(float(np.median([x["mae_pct"] for x in analyzed_top5])) + 1.0), 3, 5))
     avg_hours = round(float(np.mean([x["hours_to_peak"] for x in analyzed_top5])), 1)
     med_pump = float(np.median([x["pump_from_ign_pct"] for x in analyzed_top5]))
