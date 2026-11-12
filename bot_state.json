@@ -106,7 +106,8 @@
         22.8
       ],
       "breakout_alerted": false,
-      "sl_alerted": false
+      "sl_alerted": true,
+      "sl_at": 1794472504
     },
     "HYPEUSDT": {
       "created_at": 1794223804,
@@ -1254,6 +1255,7 @@
     "OPGUSDT": 1794465904,
     "SOPHUSDT": 1794466763,
     "ERAUSDT": 1794471604,
+    "PARTIUSDT": 1794472204,
     "1000PEPEUSDT": 1794206453,
     "SUIUSDT": 1794183313,
     "MERLUSDT": 1794206453,
@@ -1281,7 +1283,6 @@
     "COREUSDT": 1794374711,
     "XMRUSDT": 1794381604,
     "ZROUSDT": 1794381604,
-    "ICPUSDT": 1794381903,
-    "PARTIUSDT": 1794472204
+    "ICPUSDT": 1794381903
   }
 }
