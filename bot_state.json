@@ -977,8 +977,9 @@
         23.8
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794460804
     },
     "ASTERUSDT": {
       "created_at": 1794425403,
