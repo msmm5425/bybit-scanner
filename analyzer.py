@@ -1,8 +1,77 @@
+import inspect
+import requests
 import numpy as np
 import pandas as pd
 
 import config as cfg
-from api import fetch_klines
+import api as api_mod
+
+
+def _normalize_df(raw):
+    if isinstance(raw, pd.DataFrame):
+        if raw.empty:
+            return pd.DataFrame()
+        df = raw.copy()
+        for col in ("open", "high", "low", "close", "volume"):
+            if col not in df.columns:
+                return pd.DataFrame()
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df.dropna(subset=["close"]).reset_index(drop=True)
+    if isinstance(raw, list) and len(raw) > 0:
+        try:
+            cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(raw[0])]
+            df = pd.DataFrame(raw, columns=cols)
+            df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
+            for col in ("open", "high", "low", "close", "volume"):
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            return df.dropna(subset=["close"]).sort_values("timestamp").reset_index(drop=True)
+        except Exception:
+            return pd.DataFrame()
+    return pd.DataFrame()
+
+
+def fetch_klines(symbol, interval="5", limit=150):
+    candidate_names = (
+        "fetch_klines", "fetch_kline", "get_klines", "get_kline",
+        "fetch_bybit_klines", "get_bybit_klines", "fetch_candles",
+        "get_candles", "fetch_kline_df", "get_kline_df", "fetch_ohlcv", "get_ohlcv",
+    )
+    excluded = {
+        "get_scanner_candidates", "fetch_verified_1m_klines",
+        "to_float", "is_tradfi_ticker", "strip_multiplier_prefix", "strip_tokenized_suffix",
+    }
+    funcs = [getattr(api_mod, n) for n in candidate_names if callable(getattr(api_mod, n, None))]
+    for name, fn in inspect.getmembers(api_mod, inspect.isfunction):
+        if name not in excluded and name not in candidate_names and not name.startswith("_"):
+            if fn.__module__ == api_mod.__name__:
+                funcs.append(fn)
+
+    for fn in funcs:
+        for args in [(symbol, str(interval), int(limit)), (symbol, int(interval), int(limit)), (symbol, str(interval))]:
+            try:
+                df = _normalize_df(fn(*args))
+                if not df.empty:
+                    return df
+            except Exception:
+                continue
+
+    # 멀티 거래소/미러 폴백
+    headers = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
+    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com", "https://api.bybit.com"):
+        try:
+            r = requests.get(
+                f"{host}/v5/market/kline",
+                params={"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)},
+                headers=headers,
+                timeout=6,
+            )
+            if r.status_code == 200:
+                df = _normalize_df(r.json().get("result", {}).get("list", []))
+                if not df.empty:
+                    return df
+        except Exception:
+            pass
+    return pd.DataFrame()
 
 
 def calc_rsi(series, period=6):
@@ -111,20 +180,17 @@ def analyze_symbol(coin):
     df_5m["ribbon_spread_pct"] = (ribbon_max - ribbon_min) / df_5m["close"].replace(0, np.nan) * 100.0
     pre5_min_ribbon_spread = to_float(df_5m["ribbon_spread_pct"].iloc[-8:-1].min(), 9.9)
 
-    # 직전 2시간 박스권 (최근 3캔들 제외한 직전 24캔들)
     pre_box_df = df_5m.iloc[-28:-3]
     prev_box_high = to_float(pre_box_df["high"].max(), close)
     prev_box_low = to_float(pre_box_df["low"].min(), close)
     pre_box_range_pct = (prev_box_high - prev_box_low) / max(prev_box_low, 1e-8) * 100.0
 
-    # 15m BB 중심선 이격 체크 (초응축 5.2% 이하일 때는 4.8%까지 허용, 일반은 3.8%)
     bb_mid_15m = to_float(df_15m["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
     bb_mid_ext_pct = (close - bb_mid_15m) / max(bb_mid_15m, 1e-8) * 100.0
     allowed_bb_ext = cfg.CUTOFF_BB_MID_EXT_MAX_PCT if pre_box_range_pct <= cfg.PRE_BOX_TIGHT_PCT else 3.8
     if bb_mid_ext_pct > allowed_bb_ext:
         return None
 
-    # 1H 상위프레임 구조적 지지 확인
     ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
     ema20_1h = to_float(df_1h["close"].ewm(span=20, adjust=False).mean().iloc[-1], close)
     htf_support_ok = (close >= ma20_1h * 0.992) or (close >= ema20_1h * 0.992)
@@ -136,7 +202,6 @@ def analyze_symbol(coin):
     else:
         htf_status = f"1H 단기반등시도(RSI6 {int(round(rsi6_1h))})"
 
-    # 거래량 및 발화 캔들 탐색 (최근 6캔들 내 최대 양봉 발화 탐색)
     vol_ma20_series = df_5m["volume"].rolling(20, min_periods=5).mean().shift(1)
     recent_window = df_5m.iloc[-6:]
     vol_ratios = recent_window["volume"] / vol_ma20_series.iloc[-6:].replace(0, np.nan)
@@ -150,23 +215,19 @@ def analyze_symbol(coin):
     curr_vol = to_float(df_5m["volume"].iloc[-1], ignition_vol)
     curr_vol_mult = curr_vol / max(vol_ma20_curr, 1e-8)
 
-    # 직전 5캔들 최저 거래량 포켓 비율 (현재봉이 발화봉일 때를 대비해 직전 구간[-7:-1] 탐색)
     pre5_min_vol = to_float(df_5m["volume"].iloc[-7:-1].min(), vol_ma20_curr)
     pre_vol_pocket_ratio = pre5_min_vol / max(vol_ma20_curr, 1e-8)
 
-    # 눌림 구간 거래량 비율 (발화봉 대비 비율 & 평소 거래량 대비 비율 중 유리한 값 반영)
     pullback_vol_ratio = curr_vol / max(ignition_vol, 1e-8)
     effective_dryup_ratio = min(pullback_vol_ratio, curr_vol_mult * 0.65)
     pullback_low = to_float(df_5m["low"].iloc[-2:].min(), close)
 
-    # OBV & CVD 다이버전스 / 매집 확인
     obv, cvd, net_delta = calc_obv_and_cvd(df_5m)
     obv_slope_up = to_float(obv.iloc[-1]) > to_float(obv.iloc[-15:-5].mean())
     cvd_slope_up = to_float(cvd.iloc[-1]) > to_float(cvd.iloc[-15:-5].mean())
     price_low_sweep = to_float(df_5m["low"].iloc[-8:].min()) <= prev_box_low * 1.005
     cond_cvd_div = (price_low_sweep and cvd_slope_up) or (cvd_slope_up and to_float(net_delta.iloc[-3:].sum()) > 0)
 
-    # 유동성 스윕(Spring) & 이평선 정배열 확인
     ma_full_aligned = (ma5 > ma20 > ma50 > ma112) and (close >= ma20)
     ma_short_aligned = (ma5 > ma20 > ma50) and (close >= ma20)
 
@@ -175,7 +236,6 @@ def analyze_symbol(coin):
     lower_wick_ratio_max6 = to_float((lower_wick / body_len).iloc[-6:].max(), 0.0)
     cond_spring = (not ma_short_aligned) and (lower_wick_ratio_max6 >= 1.4) and (close > ma20)
 
-    # BB 스퀴즈 & TTM 켈트너 스퀴즈 확인
     bb_std = df_5m["close"].rolling(20, min_periods=10).std()
     bb_upper = df_5m["ma20"] + 2.0 * bb_std
     bb_lower = df_5m["ma20"] - 2.0 * bb_std
@@ -187,7 +247,6 @@ def analyze_symbol(coin):
     cond_ema_ribbon = (pre5_min_ribbon_spread <= cfg.EMA_RIBBON_MAX_SPREAD_PCT) and (close > ma50)
     cond_vol_pocket = (pre_vol_pocket_ratio <= 0.40) and (vol_mult >= cfg.EARLY_VOL_MULT_MIN)
 
-    # 선물 수급 데이터 추출 (거래대금, OI, 펀딩비)
     turnover_m = to_float(coin.get("turnover_m"))
     if turnover_m <= 0:
         turnover_m = to_float(coin.get("turnover24h")) / 1e6
@@ -208,19 +267,14 @@ def analyze_symbol(coin):
 
     oi_turnover_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0
 
-    # =====================================================================
-    # [Track A (선취매/눌림) vs Track B (돌파/Bull Flag/Pocket Pivot) 판별]
-    # =====================================================================
     breakout_diff_pct = (close - prev_box_high) / max(prev_box_high, 1e-8) * 100.0
     sr_error_pct = abs(pullback_low - prev_box_high) / max(prev_box_high, 1e-8) * 100.0
     is_current_ignition = (ignition_idx == df_5m.index[-1])
 
-    # 현재 캔들의 양봉 몸통 및 윗꼬리 비율 (포켓 피벗 첫 양봉 검증용)
     curr_range = max(high_p - low_p, 1e-8)
     upper_wick_ratio = (high_p - max(open_p, close)) / curr_range
     curr_candle_gain_pct = (close - open_p) / max(open_p, 1e-8) * 100.0
 
-    # 1) 전고점 S/R Flip 칼지지 조건 (발화 이후 눌림 캔들)
     cond_sr_flip_retest = (
         (not is_current_ignition)
         and (close >= prev_box_high * 0.996)
@@ -230,7 +284,6 @@ def analyze_symbol(coin):
         and (vol_mult >= cfg.EARLY_VOL_MULT_MIN)
     )
 
-    # 2) CROSSUSDT 18:10 패턴: 돌파 후 공중 눌림(High-Tight Bull Flag)
     impulse_range = max(ignition_high - prev_box_high, close * 0.004)
     flag_support_line = ignition_high - (impulse_range * cfg.BULL_FLAG_MAX_RETRACE)
     cond_bull_flag = (
@@ -243,7 +296,6 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 3) [신규] SOONUSDT 19:50 패턴: 직전 거래량 건조/응축 후 첫 초동 양봉(Pocket Pivot) 즉시 포착
     cond_pocket_pivot = (
         is_current_ignition
         and (close > open_p)
@@ -255,7 +307,6 @@ def analyze_symbol(coin):
         and (ma_short_aligned or cond_spring or htf_support_ok)
     )
 
-    # 4) Track A (박스권 상단 턱밑 선취매 & 거래량 건조 눌림)
     cond_track_a_pullback = (
         (close <= prev_box_high * 1.008)
         and (close >= ma20 * 0.995)
@@ -269,13 +320,9 @@ def analyze_symbol(coin):
 
     track_type = "TRACK_B" if is_track_b else "TRACK_A"
 
-    # =====================================================================
-    # [100점 만점 정밀 채점 시스템]
-    # =====================================================================
     score = 0
     reasons = []
 
-    # [카테고리 1] 타점 컨펌 (20점)
     if track_type == "TRACK_B":
         if cond_sr_flip_retest:
             score += 20
@@ -294,7 +341,6 @@ def analyze_symbol(coin):
             score += 17
             reasons.append(f"거래량 건조 선취매 포켓({int(round(effective_dryup_ratio * 100))}%)")
 
-    # [카테고리 2] 추세/반전 및 상위프레임 동조 (25점)
     if ma_full_aligned:
         score += 15
         reasons.append("완전 정배열(5>20>50>112) 지지")
@@ -309,7 +355,6 @@ def analyze_symbol(coin):
         score += 10
         reasons.append("상위프레임(1H 중심선) 구조적 지지")
 
-    # [카테고리 3] 매집/박스권 응축 및 CVD/OBV (20점)
     allowed_box_max = cfg.PRE_BOX_LOOSE_MAX_PCT if cond_spring else cfg.PRE_BOX_RANGE_MAX_PCT
     if pre_box_range_pct <= cfg.PRE_BOX_TIGHT_PCT:
         score += 12
@@ -328,7 +373,6 @@ def analyze_symbol(coin):
             score += 8
             reasons.append(f"박스응축({pre_box_range_pct:.1f}%)+OBV/CVD 선행매집")
 
-    # [카테고리 4] 변동성 돌파 & 이평선 리본 초밀집 (15점)
     if cond_ema_ribbon:
         score += 9
         reasons.append(f"이평리본 초밀집 확산({pre5_min_ribbon_spread:.1f}%)")
@@ -343,7 +387,6 @@ def analyze_symbol(coin):
         score += 6
         reasons.append(f"발화전 거래량 극건조 포켓({int(round(pre_vol_pocket_ratio * 100))}%)")
 
-    # [카테고리 5] 선물 실수급 OI & 펀딩비 숏스퀴즈 (20점)
     if oi_m >= 1.0 and oi_turnover_ratio >= 8.0:
         score += 10
         reasons.append(f"OI 실수급 유입(OI {oi_m:.1f}M·비중 {int(round(oi_turnover_ratio))}%)")
@@ -364,9 +407,6 @@ def analyze_symbol(coin):
     if score < cfg.SCORE_THRESHOLD:
         return None
 
-    # =====================================================================
-    # [핵심 기준선, 유동적 손절가(SL -2%~-5%), 3단계 피보나치 익절가(TP) 산출]
-    # =====================================================================
     atr_val = to_float(atr_5m.iloc[-1], close * 0.008)
     support_line = max(prev_box_low, min(ma50, ignition_low))
     swing_high_line = max(prev_box_high, ignition_high)
@@ -385,7 +425,6 @@ def analyze_symbol(coin):
     sl_pct_int = int(np.clip(round(raw_sl_pct), 2, 5))
     stop_price = close * (1.0 - sl_pct_int / 100.0)
 
-    # 파동 진폭 기반 3단계 피보나치 목표가 (최소 +8% / +15% / +22% 보장)
     wave_height = max(swing_high_line - support_line, close * 0.032)
     tp1 = max(close * 1.078, support_line + wave_height * 2.13)
     tp2 = max(close * 1.150, support_line + wave_height * 3.06)
