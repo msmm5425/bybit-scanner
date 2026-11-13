@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import requests
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -10,7 +11,7 @@ from api import get_scanner_candidates, fetch_verified_1m_klines, fetch_klines
 from analyzer import analyze_symbol
 from notifier import build_briefing_message, build_x_post_message, send_telegram_single, fmt_price
 
-# 일반 종목 재알림 쿨타임 (12시간 = 43,200초)
+# 동일 종목 재알림 최소 쿨타임 (12시간 = 43,200초)
 RE_ALERT_COOLDOWN_SEC = 43200
 # 스탑헌팅 손절 후 V자 탈환(88점 이상) 재진입 허용 쿨타임 (4시간 = 14,400초)
 SL_RECOVERY_COOLDOWN_SEC = getattr(cfg, "SL_RECOVERY_COOLDOWN_SEC", 14400)
@@ -18,6 +19,49 @@ SL_RECOVERY_COOLDOWN_SEC = getattr(cfg, "SL_RECOVERY_COOLDOWN_SEC", 14400)
 HISTORY_RETENTION_SEC = 259200
 # 위클리 리포트용 개별 신호 원장(signal_episodes) 보관 주기 (10일 = 864,000초)
 EPISODE_RETENTION_SEC = 864000
+# 1회 스캔 주기(5분)당 최대 신규 포착 알림 종목 수 (알림 폭탄 및 429 누락 방지)
+MAX_NEW_ALERTS_PER_SCAN = getattr(cfg, "MAX_NEW_ALERTS_PER_SCAN", 3)
+
+
+def send_telegram_reliable(text):
+    """텔레그램 429 Rate Limit 및 일시 네트워크 순단 시 최대 3회 자동 대기·재전송하여 X 양식 누락 원천 차단"""
+    if not text:
+        return False
+    token = getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or os.getenv("TELEGRAM_TOKEN", "")
+    chat_id = getattr(cfg, "TELEGRAM_CHAT_ID", "") or os.getenv("TELEGRAM_CHAT_ID", "")
+
+    if not token or not chat_id:
+        try:
+            send_telegram_single(text)
+            time.sleep(0.7)
+            return True
+        except Exception:
+            return False
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                url,
+                json={"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
+                timeout=12,
+            )
+            if resp.status_code == 200:
+                time.sleep(0.7)
+                return True
+            if resp.status_code == 429:
+                retry_after = 3
+                try:
+                    retry_after = int(resp.json().get("parameters", {}).get("retry_after", 3))
+                except Exception:
+                    pass
+                print(f"[텔레그램 429 대기] {retry_after}초 후 재전송 시도 ({attempt + 1}/3)")
+                time.sleep(retry_after + 0.5)
+                continue
+        except Exception as e:
+            print(f"[텔레그램 전송 재시도 {attempt + 1}/3] {e}")
+        time.sleep(1.2)
+    return False
 
 
 def load_state():
@@ -49,24 +93,30 @@ def save_state(state):
 
 
 def sync_episode_ledger(signal_episodes, symbol, t_item):
-    """tracked와 signal_episodes 양방향으로 달성 플래그를 OR 병합하여 절대 이전 단계로 되돌아가지 않도록 잠금"""
+    """tracked와 signal_episodes 양방향으로 달성 플래그를 영구 잠금하여 중복 알림 원천 차단"""
     c_at = int(t_item.get("created_at", 0))
     if c_at <= 0:
         return
     ep_key = f"{symbol}_{c_at}"
     prev_ep = signal_episodes.get(ep_key, {})
 
-    # 이전에 한 번이라도 달성된 플래그는 영구 유지 (Monotonic Lock)
-    for flag in ("be_armed", "tp1_hit", "tp2_hit", "tp1_alerted", "tp2_alerted", "tp3_alerted", "tp3_completed", "sl_alerted"):
+    lock_flags = (
+        "be_armed", "tp1_hit", "tp2_hit",
+        "tp1_alerted", "tp2_alerted", "tp3_alerted",
+        "tp3_completed", "sl_alerted", "closed_alerted",
+    )
+    for flag in lock_flags:
         if prev_ep.get(flag) or t_item.get(flag):
             t_item[flag] = True
 
-    if t_item.get("tp3_completed"):
+    if t_item.get("tp3_completed") or t_item.get("closed_alerted"):
         t_item["tp1_hit"] = True
         t_item["tp2_hit"] = True
         t_item["tp1_alerted"] = True
         t_item["tp2_alerted"] = True
         t_item["tp3_alerted"] = True
+        t_item["tp3_completed"] = True
+        t_item["closed_alerted"] = True
     elif t_item.get("tp2_hit") or t_item.get("tp2_alerted"):
         t_item["tp1_hit"] = True
         t_item["tp2_hit"] = True
@@ -76,8 +126,15 @@ def sync_episode_ledger(signal_episodes, symbol, t_item):
         t_item["tp1_hit"] = True
         t_item["tp1_alerted"] = True
 
-    max_h = max(to_float(prev_ep.get("max_high_price")), to_float(t_item.get("max_high_price")), to_float(t_item.get("entry_price")))
-    max_fav = max(to_float(prev_ep.get("max_favorable_pct")), to_float(t_item.get("max_favorable_pct")))
+    max_h = max(
+        to_float(prev_ep.get("max_high_price")),
+        to_float(t_item.get("max_high_price")),
+        to_float(t_item.get("entry_price")),
+    )
+    max_fav = max(
+        to_float(prev_ep.get("max_favorable_pct")),
+        to_float(t_item.get("max_favorable_pct")),
+    )
     t_item["max_high_price"] = max_h
     t_item["max_favorable_pct"] = max_fav
 
@@ -101,12 +158,13 @@ def sync_episode_ledger(signal_episodes, symbol, t_item):
         "tp3_alerted": bool(t_item.get("tp3_alerted", False)),
         "tp3_completed": bool(t_item.get("tp3_completed", False)),
         "sl_alerted": bool(t_item.get("sl_alerted", False)),
+        "closed_alerted": bool(t_item.get("closed_alerted", False)),
         "sl_at": int(t_item.get("sl_at", 0)),
     }
 
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts):
-    if t_item.get("tp3_completed") or t_item.get("sl_alerted"):
+    if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("closed_alerted"):
         return None
 
     stop_p = to_float(t_item.get("stop_price"))
@@ -171,9 +229,9 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
     tps_list = t_item.get("tps") or []
     just_armed_protection = False
 
-    # 1. 3차 목표가(TP3) 전량 익절 졸업 확인 (달성 시 모든 하위 알림 플래그도 동시 잠금)
+    # 1. 3차 목표가(TP3) 전량 익절 졸업 확인
     if len(tps_list) >= 3 and to_float(tps_list[2]) > 0 and max_high >= to_float(tps_list[2]):
-        was_tp3_alerted = bool(t_item.get("tp3_alerted") or t_item.get("tp3_completed"))
+        was_tp3_alerted = bool(t_item.get("tp3_alerted") or t_item.get("tp3_completed") or t_item.get("closed_alerted"))
         t_item["be_armed"] = True
         t_item["tp1_hit"] = True
         t_item["tp2_hit"] = True
@@ -181,6 +239,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
         t_item["tp2_alerted"] = True
         t_item["tp3_alerted"] = True
         t_item["tp3_completed"] = True
+        t_item["closed_alerted"] = True
         t_item["tp3_at"] = now_ts
         if not was_tp3_alerted:
             messages.append(
@@ -226,7 +285,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
                 f"• 1차 분할 익절 권장 및 손절선을 수익 보존선({fmt_price(stop_p)}, +4.0%)으로 상향합니다."
             )
 
-    # 4. +4.5% 도달 시 본전 방어(Breakeven) 스탑 자동 활성화 (단 1회만 발송 보장)
+    # 4. +4.5% 도달 시 본전 방어(Breakeven) 스탑 자동 활성화
     be_trigger = getattr(cfg, "BREAKEVEN_TRIGGER_PCT", 4.5)
     if max_fav_pct >= be_trigger and not t_item.get("be_armed") and not t_item.get("tp1_hit"):
         t_item["be_armed"] = True
@@ -240,12 +299,13 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
             f"• 차익 매물 반락에 대비해 손절선을 진입가 위({fmt_price(stop_p)} USDT)로 상향 고정합니다."
         )
 
-    # 5. 보호선(본전/익절 보존선) 이탈 확인 (최고점 이후 시점에만 판정)
+    # 5. 보호선(본전/익절 보존선) 이탈 확인 (최고점 이후 시점에만 단 1회 판정)
     is_protected_mode = bool(t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("be_armed"))
 
     if is_protected_mode:
-        if last_1m_ts_ms > peak_ts_ms and last_1m_close <= stop_p:
+        if last_1m_ts_ms > peak_ts_ms and last_1m_close <= stop_p and not t_item.get("closed_alerted"):
             t_item["tp3_completed"] = True
+            t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
             if just_armed_protection and messages:
                 messages[-1] += f"\n• 🔒 현재가({fmt_price(last_1m_close)})가 보호선 아래로 내려와 안전 마감 처리합니다."
@@ -256,7 +316,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
                 )
         return {"messages": messages, "sl_record": None}
 
-    # 6. 원칙 준수: 전략적 초기 손절선(init_stop_p) 이탈 시에만 손절 판정
+    # 6. 전략적 초기 손절선(init_stop_p) 이탈 확인
     min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
     min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
 
@@ -264,6 +324,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
         trigger_price = min(min_1m_close, last_1m_close)
 
         t_item["sl_alerted"] = True
+        t_item["closed_alerted"] = True
         t_item["sl_at"] = now_ts
         t_item["sl_trigger_price"] = trigger_price
         t_item["hold_minutes"] = hold_min
@@ -306,28 +367,32 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
 
 
 def _send_signal_notifications_safe(res, now_str):
-    """신규 종목 브리핑 생성 중 어떤 KeyError나 포맷 예외가 발생해도 스크립트가 죽지 않도록 안전 격리"""
+    """브리핑과 X 양식 모두 429 자동 재전송(send_telegram_reliable)을 통해 누락 없이 한 쌍으로 전송 보장"""
     try:
         briefing_msg = build_briefing_message(res, now_str)
-        send_telegram_single(briefing_msg)
-        time.sleep(0.5)
-    except Exception as e:
-        print(f"[브리핑 포맷 폴백 발송] {res.get('symbol')}: {e}")
-        fallback_msg = (
+    except Exception:
+        briefing_msg = (
             f"{res.get('track_title', '🚀 [타점 포착]')} ${res.get('base_coin', '')} ({res.get('symbol', '')})\n"
             f"• 총점: {res.get('score', 85)}점 | 현재가: {fmt_price(res.get('price', 0))} USDT\n"
             f"• 손절선: {fmt_price(res.get('stop_price', 0))} (-{res.get('sl_pct', 3)}%)\n"
             f"• 근거: {res.get('reason_str', '')}"
         )
-        send_telegram_single(fallback_msg)
-        time.sleep(0.5)
+    send_telegram_reliable(briefing_msg)
 
     try:
         x_msg = build_x_post_message(res)
-        send_telegram_single(x_msg)
-        time.sleep(0.5)
-    except Exception as e:
-        print(f"[X 메시지 생략] {res.get('symbol')}: {e}")
+    except Exception:
+        tps = res.get("tps", [0, 0, 0])
+        tp_pcts = res.get("tp_pcts", [8.0, 14.5, 21.0])
+        x_msg = (
+            f"${res.get('base_coin', '')} ({res.get('symbol', '')})\n\n"
+            f"- 진입 구간: {fmt_price(res.get('entry_low', 0))} ~ {fmt_price(res.get('entry_high', 0))} USDT\n\n"
+            f"- SL: {fmt_price(res.get('stop_price', 0))} USDT (-{res.get('sl_pct', 3)}%)\n\n"
+            f"- 1차 {fmt_price(tps[0])}(+{tp_pcts[0]}%)\n"
+            f"- 2차 {fmt_price(tps[1])}(+{tp_pcts[1]}%)\n"
+            f"- 3차 {fmt_price(tps[2])}(+{tp_pcts[2]}%)"
+        )
+    send_telegram_reliable(x_msg)
 
 
 def main():
@@ -342,6 +407,20 @@ def main():
 
     candidates, pure_crypto_bases, rwa_blocked_bases = get_scanner_candidates()
     sent_count = 0
+
+    # 1. signal_episodes 및 tracked의 모든 포착 시각을 alert_history에 강제 복원 (쿨타임 누락 방지)
+    for ep_item in signal_episodes.values():
+        if isinstance(ep_item, dict):
+            s = ep_item.get("symbol", "")
+            c_at = int(ep_item.get("created_at", 0))
+            if s and c_at > int(alert_history.get(s, 0)):
+                alert_history[s] = c_at
+
+    for s, t_item in tracked.items():
+        if isinstance(t_item, dict):
+            c_at = int(t_item.get("created_at", 0))
+            if c_at > int(alert_history.get(s, 0)):
+                alert_history[s] = c_at
 
     for h_sym in list(alert_history.keys()):
         if now_ts - int(alert_history.get(h_sym, 0)) > 86400:
@@ -364,14 +443,10 @@ def main():
         created_at = int(t_item.get("created_at", 0))
         age_sec = now_ts - created_at
 
-        if sym not in alert_history and created_at > 0:
-            alert_history[sym] = created_at
-
         if is_tradfi_ticker(base_c) or base_c in rwa_blocked_bases:
             del tracked[sym]
             continue
 
-        # 원장(signal_episodes)과 먼저 동기화하여 이미 달성된 알림 플래그 복원
         sync_episode_ledger(signal_episodes, sym, t_item)
 
         is_sl_done = bool(t_item.get("sl_alerted", False))
@@ -390,7 +465,7 @@ def main():
         if not is_sl_done and not is_tp3_done:
             active_check_syms.append(sym)
 
-    # 1. 기존 추적 종목 1분봉 병렬 감시 -> 상태 선(先)저장 후 알림 발송
+    # 2. 기존 추적 종목 1분봉 병렬 감시 -> 디스크 선(先)저장 후 알림 발송
     pending_1m_messages = []
     if active_check_syms:
         with ThreadPoolExecutor(max_workers=8) as ex:
@@ -413,7 +488,6 @@ def main():
                 except Exception as e:
                     print(f"[1분봉 감시 예외] {sym}: {e}")
 
-        # 핵심: 텔레그램 발송 및 2단계 스캔 전에 변경된 TP/SL/본전방어 상태를 디스크에 즉시 저장!
         state["tracked"] = tracked
         state["alert_history"] = alert_history
         state["sl_history"] = sl_history
@@ -421,8 +495,7 @@ def main():
         save_state(state)
 
         for msg in pending_1m_messages:
-            send_telegram_single(msg)
-            time.sleep(0.5)
+            send_telegram_reliable(msg)
             sent_count += 1
 
     if not candidates:
@@ -434,23 +507,21 @@ def main():
         save_state(state)
         return
 
+    # 3. 신규 후보군 필터링 (1종목 1진입 엄격 적용: 이미 추적 중인 종목의 Track A->B 중복 승격 알림 완전 제거)
     to_analyze = []
     for coin in candidates:
         sym = coin["symbol"]
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
+        if is_tradfi_ticker(base_c):
+            continue
         if hasattr(cfg, "is_heavy_major_coin") and cfg.is_heavy_major_coin(base_c):
             continue
 
         last_alert_ts = int(alert_history.get(sym, 0))
         prev_t = tracked.get(sym)
 
+        # 현재 순항 중(익절/손절 미종결)인 종목은 이유 불문 재스캔 및 중복 알림 절대 금지
         if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed"):
-            if (
-                prev_t.get("track_type") == "TRACK_A"
-                and not prev_t.get("breakout_alerted")
-                and (now_ts - int(prev_t.get("created_at", 0))) >= 1800
-            ):
-                to_analyze.append(coin)
             continue
 
         was_stopped = bool(prev_t and prev_t.get("sl_alerted"))
@@ -474,36 +545,20 @@ def main():
 
     results.sort(key=lambda x: x["score"], reverse=True)
 
+    # 4. 1회 스캔당 최고점 상위 MAX_NEW_ALERTS_PER_SCAN(3개)까지만 발송
+    new_entry_sent = 0
     for res in results:
+        if new_entry_sent >= MAX_NEW_ALERTS_PER_SCAN:
+            break
+
         symbol = res["symbol"]
         last_alert_ts = int(alert_history.get(symbol, 0))
         prev_t = tracked.get(symbol)
-        is_active_track_a = bool(
-            prev_t
-            and not prev_t.get("sl_alerted")
-            and not prev_t.get("tp3_completed")
-            and prev_t.get("track_type") == "TRACK_A"
-            and not prev_t.get("breakout_alerted")
-        )
-        was_stopped = bool(prev_t and prev_t.get("sl_alerted"))
 
-        if is_active_track_a:
-            if res["track_type"] != "TRACK_B" or res["score"] < 88:
-                continue
-            res["track_title"] = "🔥 [1차 선취매 → 2차 본돌파 컨펌(불타기/홀딩) 타점]"
-            res["reasons"].insert(0, "선취매 포착 후 박스 상단 돌파·지지 컨펌")
-            res["reason_str"] = " / ".join(res["reasons"])
-            prev_t["breakout_alerted"] = True
-            prev_t["track_type"] = "TRACK_B"
-            prev_t["stop_price"] = max(to_float(prev_t.get("stop_price")), to_float(prev_t.get("entry_price")) * 1.002)
-            alert_history[symbol] = now_ts
-            sync_episode_ledger(signal_episodes, symbol, prev_t)
-            save_state(state)
-
-            _send_signal_notifications_safe(res, now_str)
-            sent_count += 1
+        if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed"):
             continue
 
+        was_stopped = bool(prev_t and prev_t.get("sl_alerted"))
         if was_stopped and (now_ts - last_alert_ts) < RE_ALERT_COOLDOWN_SEC:
             prev_entry_p = to_float(prev_t.get("entry_price"), 0.0)
             if res["score"] < 88 or (prev_entry_p > 0 and res["price"] < prev_entry_p * 0.998):
@@ -544,15 +599,23 @@ def main():
             "tp1_alerted": False,
             "tp2_alerted": False,
             "tp3_alerted": False,
-            "breakout_alerted": (res["track_type"] == "TRACK_B"),
+            "breakout_alerted": True,
             "sl_alerted": False,
             "tp3_completed": False,
+            "closed_alerted": False,
         }
         alert_history[symbol] = now_ts
         sync_episode_ledger(signal_episodes, symbol, tracked[symbol])
+
+        # 발송 직전 상태 파일 즉시 저장
+        state["tracked"] = tracked
+        state["alert_history"] = alert_history
+        state["sl_history"] = sl_history
+        state["signal_episodes"] = signal_episodes
         save_state(state)
 
         _send_signal_notifications_safe(res, now_str)
+        new_entry_sent += 1
         sent_count += 1
 
     state["tracked"] = tracked
@@ -563,9 +626,9 @@ def main():
 
     elapsed = time.time() - start_t
     if sent_count == 0:
-        print(f"[{now_str}] 멀티프레임 스캔 완료 ({elapsed:.1f}초 소요) - 85점 이상 신규 초입 종목 없음.")
+        print(f"[{now_str}] 멀티프레임 스캔 완료 ({elapsed:.1f}초 소요) - 신규 초입 종목 없음.")
     else:
-        print(f"[{now_str}] 멀티프레임 스캔 완료 ({elapsed:.1f}초 소요) - 총 {sent_count}건 알림 전송.")
+        print(f"[{now_str}] 멀티프레임 스캔 완료 ({elapsed:.1f}초 소요) - 총 {sent_count}건 이벤트 전송 (신규 타점 {new_entry_sent}종목).")
 
 
 if __name__ == "__main__":
