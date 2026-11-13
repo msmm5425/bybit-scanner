@@ -75,6 +75,7 @@ def sync_episode_ledger(signal_episodes, symbol, t_item):
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts):
     stop_p = to_float(t_item.get("stop_price"))
+    init_stop_p = to_float(t_item.get("initial_stop_price"), default=stop_p)
     entry_low = to_float(t_item.get("entry_low"))
     entry_high = to_float(t_item.get("entry_high"))
     entry_ref = to_float(t_item.get("entry_price"))
@@ -86,17 +87,20 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
     if stop_p <= 0 or entry_ref <= 0:
         return None
 
-    # [$ERA +10.8% / $XMR +4.7% 억울한 손절 방지]:
-    # 25분 이상 경과한 기존 추적 종목의 과거 최고가가 미기록 상태이면 15분봉으로 진입 이후 전체 최고가를 먼저 복원
     prev_max_high = to_float(t_item.get("max_high_price"), default=entry_ref)
+    prev_peak_ts_ms = int(to_float(t_item.get("peak_ts_ms"), default=created_ms))
+
+    # 20분 이상 경과한 기존 종목 중 과거 최고가 미복원 종목은 15분봉으로 최고가 및 고점 시각 복원
     if not t_item.get("history_backfilled") and (now_ts - created_at) > 1200:
         df_15m = fetch_klines(symbol, "15", limit=180)
         if not df_15m.empty and "timestamp" in df_15m.columns:
             post_15m = df_15m[df_15m["timestamp"] >= created_ms]
             if not post_15m.empty:
-                hist_high = to_float(post_15m["high"].max(), default=entry_ref)
-                if 0.65 <= (hist_high / entry_ref) <= 2.50:
-                    prev_max_high = max(prev_max_high, hist_high)
+                peak_idx = post_15m["high"].idxmax()
+                hist_high = to_float(post_15m.loc[peak_idx, "high"], default=entry_ref)
+                if 0.65 <= (hist_high / entry_ref) <= 2.50 and hist_high > prev_max_high:
+                    prev_max_high = hist_high
+                    prev_peak_ts_ms = int(to_float(post_15m.loc[peak_idx, "timestamp"], default=created_ms))
         t_item["history_backfilled"] = True
 
     df_1m = fetch_verified_1m_klines(symbol, entry_ref=entry_ref, limit=25)
@@ -108,15 +112,29 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
         return None
 
     base_coin = symbol.replace("USDT", "")
-    window_high = to_float(post_1m["high"].max(), default=entry_ref)
-    max_high = max(prev_max_high, window_high, entry_ref)
+    win_peak_idx = post_1m["high"].idxmax()
+    window_high = to_float(post_1m.loc[win_peak_idx, "high"], default=entry_ref)
+    window_peak_ts_ms = int(to_float(post_1m.loc[win_peak_idx, "timestamp"], default=created_ms))
+
+    if window_high >= prev_max_high:
+        max_high = max(window_high, entry_ref)
+        peak_ts_ms = window_peak_ts_ms
+    else:
+        max_high = max(prev_max_high, entry_ref)
+        peak_ts_ms = prev_peak_ts_ms
+
     max_fav_pct = round((max_high - entry_ref) / max(entry_ref, 1e-8) * 100.0, 2)
     t_item["max_high_price"] = max_high
+    t_item["peak_ts_ms"] = peak_ts_ms
     t_item["max_favorable_pct"] = max_fav_pct
+
+    last_1m_close = to_float(post_1m["close"].iloc[-1], default=entry_ref)
+    last_1m_ts_ms = int(to_float(post_1m["timestamp"].iloc[-1], default=now_ts * 1000))
 
     messages = []
     sl_record = None
     tps_list = t_item.get("tps") or []
+    just_armed_protection = False
 
     # 1. 3차 목표가(TP3) 전량 익절 졸업 확인
     if len(tps_list) >= 3 and to_float(tps_list[2]) > 0 and max_high >= to_float(tps_list[2]):
@@ -142,6 +160,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
         stop_p = new_stop
         if not t_item.get("tp2_alerted"):
             t_item["tp2_alerted"] = True
+            just_armed_protection = True
             messages.append(
                 f"✅ [2차 목표가(TP2) 돌파] ${base_coin} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav_pct:.1f}%)\n"
@@ -156,6 +175,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
         stop_p = new_stop
         if not t_item.get("tp1_alerted"):
             t_item["tp1_alerted"] = True
+            just_armed_protection = True
             messages.append(
                 f"✅ [1차 목표가(TP1) 달성] ${base_coin} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav_pct:.1f}%)\n"
@@ -169,31 +189,38 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
         be_stop = max(stop_p, entry_ref * 1.003)
         t_item["stop_price"] = be_stop
         stop_p = be_stop
+        just_armed_protection = True
         messages.append(
             f"🛡️ [본전 방어(Breakeven) 자동 발동] ${base_coin} ({symbol})\n"
             f"• 진입 후 최고 +{max_fav_pct:.1f}% 수익권 도달 확인 ({fmt_price(max_high)} USDT)\n"
             f"• 차익 매물 반락에 대비해 손절선을 진입가 위({fmt_price(stop_p)} USDT)로 상향 고정합니다."
         )
 
-    # 5. 1분봉 기준 손절선(또는 본전/익절 보호선) 이탈 확인
-    min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
-    min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
-    last_1m_close = to_float(post_1m["close"].iloc[-1], default=entry_ref)
+    # 5. 보호선(본전/익절 보존선) vs 초기 손절선(SL) 분리 검증 (고점 이전 캔들에 의한 오작동 원천 차단)
+    is_protected_mode = bool(t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("be_armed"))
 
-    if min_1m_low <= stop_p and (min_1m_close <= stop_p or last_1m_close <= stop_p):
-        trigger_price = min(min_1m_close, last_1m_close)
-        hold_min = max(1, int((now_ts - created_at) // 60))
-
-        # 이미 TP1(+8%) 또는 본전 방어(+4.5%)에 도달했던 종목은 손절(sl_history)이 아닌 수익/본전 보호 마감으로 종료!
-        if t_item.get("tp1_hit") or t_item.get("be_armed") or max_fav_pct >= be_trigger:
-            t_item["be_armed"] = True
+    if is_protected_mode:
+        # 보호선 마감 조건: 최고점을 찍은 이후(last_1m_ts_ms > peak_ts_ms) 현재 최신 1분봉 종가가 보호선 이하로 내려왔을 때만 마감
+        if last_1m_ts_ms > peak_ts_ms and last_1m_close <= stop_p:
             t_item["tp3_completed"] = True
             t_item["tp3_at"] = now_ts
-            messages.append(
-                f"🔒 [수익/본전 보호선 마감 완료] ${base_coin} ({symbol})\n"
-                f"• 진입 후 최고 +{max_fav_pct:.1f}% 도달 후 보호선({fmt_price(stop_p)}) 터치로 안전 마감합니다."
-            )
-            return {"messages": messages, "sl_record": None}
+            if just_armed_protection and messages:
+                # 과거 소급 종목이 이미 보호선 아래에 있는 경우 메시지 2개를 중복 전송하지 않고 1개로 통합
+                messages[-1] += f"\n• 🔒 현재가({fmt_price(last_1m_close)})가 보호선 아래로 내려와 안전 마감 처리합니다."
+            else:
+                messages.append(
+                    f"🔒 [수익/본전 보호선 마감 완료] ${base_coin} ({symbol})\n"
+                    f"• 진입 후 최고 +{max_fav_pct:.1f}% 도달 후 보호선({fmt_price(stop_p)}) 이탈(현재 {fmt_price(last_1m_close)})로 안전 마감합니다."
+                )
+        return {"messages": messages, "sl_record": None}
+
+    # 초기 손절선(진입가 아래 -3%~-5%) 이탈 확인
+    min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
+    min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
+
+    if min_1m_low <= init_stop_p and (min_1m_close <= init_stop_p or last_1m_close <= init_stop_p):
+        trigger_price = min(min_1m_close, last_1m_close)
+        hold_min = max(1, int((now_ts - created_at) // 60))
 
         t_item["sl_alerted"] = True
         t_item["sl_at"] = now_ts
@@ -208,7 +235,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
                 "track_type": t_item.get("track_type", "TRACK_A"),
                 "score": int(t_item.get("score", 85)),
                 "entry_price": entry_ref,
-                "stop_price": stop_p,
+                "stop_price": init_stop_p,
                 "sl_trigger_price": trigger_price,
                 "sl_pct": to_float(t_item.get("sl_pct", 3)),
                 "created_at": created_at,
@@ -229,7 +256,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
 
         messages.append(
             f"⚠️ [손절 기준가 이탈] ${base_coin} ({symbol})\n"
-            f"• 이탈 확인가: {fmt_price(trigger_price)} USDT (전략적 손절선 {fmt_price(stop_p)} 1분봉 이탈 확인)\n"
+            f"• 이탈 확인가: {fmt_price(trigger_price)} USDT (전략적 손절선 {fmt_price(init_stop_p)} 1분봉 이탈 확인)\n"
             f"• 진입 후 최고 상승폭: +{max_fav_pct:.1f}% (보유 {hold_min}분)\n"
             f"• 리스크 관리 원칙 준수를 권장합니다. (일일 리포트 오답 노트에 자동 기록됨)"
         )
@@ -428,6 +455,7 @@ def main():
             "funding_pct": res.get("funding_pct", 0.0),
             "reasons": res.get("reasons", []),
             "max_high_price": res["price"],
+            "peak_ts_ms": now_ts * 1000,
             "max_favorable_pct": 0.0,
             "history_backfilled": True,
             "be_armed": False,
