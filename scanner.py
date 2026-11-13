@@ -90,7 +90,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
     prev_max_high = to_float(t_item.get("max_high_price"), default=entry_ref)
     prev_peak_ts_ms = int(to_float(t_item.get("peak_ts_ms"), default=created_ms))
 
-    # 20분 이상 경과한 기존 종목 중 과거 최고가 미복원 종목은 15분봉으로 최고가 및 고점 시각 복원
     if not t_item.get("history_backfilled") and (now_ts - created_at) > 1200:
         df_15m = fetch_klines(symbol, "15", limit=180)
         if not df_15m.empty and "timestamp" in df_15m.columns:
@@ -130,6 +129,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
 
     last_1m_close = to_float(post_1m["close"].iloc[-1], default=entry_ref)
     last_1m_ts_ms = int(to_float(post_1m["timestamp"].iloc[-1], default=now_ts * 1000))
+    hold_min = max(1, int((now_ts - created_at) // 60))
 
     messages = []
     sl_record = None
@@ -196,16 +196,14 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
             f"• 차익 매물 반락에 대비해 손절선을 진입가 위({fmt_price(stop_p)} USDT)로 상향 고정합니다."
         )
 
-    # 5. 보호선(본전/익절 보존선) vs 초기 손절선(SL) 분리 검증 (고점 이전 캔들에 의한 오작동 원천 차단)
+    # 5. 보호선(본전/익절 보존선) 이탈 확인 (최고점 이후 시점에만 판정)
     is_protected_mode = bool(t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("be_armed"))
 
     if is_protected_mode:
-        # 보호선 마감 조건: 최고점을 찍은 이후(last_1m_ts_ms > peak_ts_ms) 현재 최신 1분봉 종가가 보호선 이하로 내려왔을 때만 마감
         if last_1m_ts_ms > peak_ts_ms and last_1m_close <= stop_p:
             t_item["tp3_completed"] = True
             t_item["tp3_at"] = now_ts
             if just_armed_protection and messages:
-                # 과거 소급 종목이 이미 보호선 아래에 있는 경우 메시지 2개를 중복 전송하지 않고 1개로 통합
                 messages[-1] += f"\n• 🔒 현재가({fmt_price(last_1m_close)})가 보호선 아래로 내려와 안전 마감 처리합니다."
             else:
                 messages.append(
@@ -214,13 +212,26 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
                 )
         return {"messages": messages, "sl_record": None}
 
-    # 초기 손절선(진입가 아래 -3%~-5%) 이탈 확인
+    # 6. [오답노트 $SOL·$XLM·$BEAM·$XRP 38시간 보유 후 손절 처방: 8시간 좀비 타점 시간 청산(Time-Stop)]
+    zombie_min_limit = getattr(cfg, "ZOMBIE_TIME_STOP_MINUTES", 480)
+    zombie_fav_limit = getattr(cfg, "ZOMBIE_MIN_FAVORABLE_PCT", 3.0)
+    if hold_min >= zombie_min_limit and max_fav_pct < zombie_fav_limit and last_1m_close <= entry_ref * 0.992:
+        t_item["tp3_completed"] = True
+        t_item["tp3_at"] = now_ts
+        curr_diff_pct = (last_1m_close - entry_ref) / max(entry_ref, 1e-8) * 100.0
+        messages.append(
+            f"⏱️ [초동 모멘텀 소멸 시간 청산(Time-Stop)] ${base_coin} ({symbol})\n"
+            f"• 보유 {hold_min // 60}시간({hold_min}분) 경과 | 최고 상승폭 +{max_fav_pct:.1f}% (기준 +{zombie_fav_limit:.1f}% 미달)\n"
+            f"• 장기 횡보 중 BTC 급락 연쇄 손절을 피하기 위해 현재가({fmt_price(last_1m_close)}, {curr_diff_pct:+.1f}%)에서 선제 정리합니다."
+        )
+        return {"messages": messages, "sl_record": None}
+
+    # 7. 초기 손절선(진입가 아래 -3%~-5%) 이탈 확인
     min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
     min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
 
     if min_1m_low <= init_stop_p and (min_1m_close <= init_stop_p or last_1m_close <= init_stop_p):
         trigger_price = min(min_1m_close, last_1m_close)
-        hold_min = max(1, int((now_ts - created_at) // 60))
 
         t_item["sl_alerted"] = True
         t_item["sl_at"] = now_ts
@@ -357,6 +368,10 @@ def main():
     to_analyze = []
     for coin in candidates:
         sym = coin["symbol"]
+        base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
+        if hasattr(cfg, "is_heavy_major_coin") and cfg.is_heavy_major_coin(base_c):
+            continue
+
         last_alert_ts = int(alert_history.get(sym, 0))
         prev_t = tracked.get(sym)
 
