@@ -19,32 +19,36 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [2026-11-13 11:11 KST 리포트 권장값 + $BARD/$MAGMA FVG·포켓피벗 반영]
+# [2026-11-13 13:48 KST 리포트 권장값 + 메이저 제외 + 좀비 타임스탑 통합]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 평시 85점 이상 알림 발송
 BTC_DUMP_SCORE_THRESHOLD = 90          # [오답노트 유형1 방어] BTC 15분봉 급락(-0.7%↓) 시 90점으로 자동 상향
 BTC_DUMP_DROP_15M_PCT = -0.70          # BTC 15분봉 최근 3캔들 고점 대비 -0.70% 이하 시 위험장 판정
 
-PULLBACK_DRYUP_STRICT = 0.12           # 발화봉 대비 눌림 거래량 12% 이하 극건조 ($BARD 0%, $MAGMA 4%, $TIA 3%)
-PULLBACK_DRYUP_MAX = 0.18              # [11:11 튜닝] 발화봉 대비 눌림 거래량 상한 18% 유지
-SR_FLIP_DRYUP_RATIO_MAX = 0.20         # 돌파 후 S/R Flip 리테스트 거래량 상한
+PULLBACK_DRYUP_STRICT = 0.14           # 발화봉 대비 눌림 거래량 14% 이하 극건조 ($BARD 13%, $MAGMA 14%)
+PULLBACK_DRYUP_MAX = 0.19              # [13:48 튜닝] 리포트 권장값 0.19 반영
+SR_FLIP_DRYUP_RATIO_MAX = 0.27         # 돌파 후 S/R Flip 리테스트 거래량 상한 ($APR 27%, $SKDD 0%)
 SR_FLIP_TOLERANCE_PCT = 1.20           # 전고점 S/R Flip 칼지지 허용 오차 (1.20% 이내)
 
-PRE_BOX_RANGE_MAX_PCT = 6.5            # [11:11 튜닝] 9.5 -> 6.5% (리포트 권장 5.5% 반영해 느슨한 박스권 걸러내기)
+PRE_BOX_RANGE_MAX_PCT = 5.5            # [13:48 튜닝] 리포트 권장값 5.5% 반영 ($BARD 3.0%, $MAGMA 4.9%, $APR 2.3%)
 PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한 (14.0%)
-PRE_BOX_TIGHT_PCT = 4.5                # [11:11 튜닝] 4.5% 이내 초응축($BARD 2.9%, $TIA 3.1%) 시 가산점 부여
-EMA_RIBBON_MAX_SPREAD_PCT = 1.9        # Top 5 전원(0.2%~1.9%) 적중한 이평선 리본 초밀집 기준
-PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20 ($BARD 0%, $MAGMA 10%, $TIA 13%)
+PRE_BOX_TIGHT_PCT = 4.0                # 4.0% 이내 초응축 시 가산점 부여
+EMA_RIBBON_MAX_SPREAD_PCT = 1.6        # Top 5 중 4종목(0.0%~0.4%) 적중한 이평선 리본 초밀집 기준
+PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20 ($BARD 24%, $ARIA 19%, $APR 0%)
 
-EARLY_VOL_MULT_MIN = 3.5               # [11:11 튜닝] 2.6 -> 3.5x (리포트 권장 4.0x 및 $MAGMA 4.4x·$TIA 6.5x 반영)
+EARLY_VOL_MULT_MIN = 2.6               # [13:48 튜닝] 리포트 권장값 2.6x 반영 ($APR 2.5x, $MAGMA 3.4x, $ARIA 4.0x)
 EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 돌파 대응 상한
 EARLY_BREAKOUT_MAX_PCT = 4.2           # 정각 오프닝 장대양봉 후 10분차 공중 눌림(Bull Flag/FVG) 허용 (4.2%)
 BULL_FLAG_MAX_RETRACE = 0.382          # 돌파 양봉 상단 38.2% 이내 공중 지지 기준
 
 SL_ATR_MULT_TRACK_B = 1.45             # 돌파 타점 ATR 손절 버퍼 1.45배 확대
 SL_ATR_MULT_TRACK_A = 1.45             # 선취매 타점 ATR 손절 버퍼 1.45배 확대
-BREAKEVEN_TRIGGER_PCT = 4.5            # [오답노트 $XMR +4.7% 방어] +4.5% 도달 시 본전(진입가 위) 손절선 자동 고정
+BREAKEVEN_TRIGGER_PCT = 4.5            # +4.5% 도달 시 본전(진입가 위) 손절선 자동 고정
 SL_RECOVERY_COOLDOWN_SEC = 14400       # 스탑헌팅 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
+
+# [오답노트 $SOL·$XLM·$BEAM·$XRP 38시간 보유 후 BTC 급락 손절 처방: 좀비 타점 타임스탑]
+ZOMBIE_TIME_STOP_MINUTES = 480         # 진입 후 8시간(480분) 경과 시점 점검
+ZOMBIE_MIN_FAVORABLE_PCT = 3.0         # 8시간 동안 최고 수익률이 +3.0% 미만이면서 현재 본전 이하면 모멘텀 소멸 조기 종료
 
 MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
 MAX_PRIOR_PUMP_PCT = 20.0              # 최근 12시간 내 이미 +20% 이상 폭등 이력 시 설거지 경계
@@ -65,6 +69,13 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
 }
 
+# 오답 노트에서 반복 손절된 무거운 초대형 시총 코인 (단기 +8%~+20% 급등 탄력 부족 & BTC 하락 100% 연동)
+HEAVY_MAJOR_COINS = {
+    "BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX", "LTC", "BCH",
+    "DOT", "AVAX", "LINK", "XLM", "TON", "SHIB", "ETC", "XMR", "ZEC", "EOS",
+    "FIL", "ATOM", "NEAR", "ICP", "HBAR", "VET"
+}
+
 NON_CRYPTO_META_KEYWORDS = (
     "xstock", "dinari", "backed", "tokenized", "ondo", "spdr", "ishares",
     "proshares", "direxion", "vanguard", "invesco", "wisdomtree", "tradr", "ark-",
@@ -76,8 +87,9 @@ NON_CRYPTO_META_KEYWORDS = (
 )
 
 TRADFI_BLACKLIST = {
-    "CLS", "GGLL", "GGLS", "AAPU", "AAPD", "AMZU", "AMZD", "MSFU", "MSFD", "METU", "METD",
-    "NFXL", "NFXS", "PLTU", "PLTD", "AVL", "AVS", "TSMX", "BRKU", "BRKD", "LLYU", "LLYD",
+    "SKDD", "SKLL", "SKUU", "CLS", "GGLL", "GGLS", "AAPU", "AAPD", "AMZU", "AMZD",
+    "MSFU", "MSFD", "METU", "METD", "NFXL", "NFXS", "PLTU", "PLTD", "AVL", "AVS",
+    "TSMX", "BRKU", "BRKD", "LLYU", "LLYD", "NVDD", "NVDG", "TSDD", "TSLG",
     "RKLB", "APPSTOCK", "APP", "COHR", "NBIS", "CRWV", "MRNA", "MUU", "CBRS",
     "SPCX", "SPCXX", "SNDK", "SNXX", "SKHYNIX", "KORU", "CEG", "AKAM", "USDBRL",
     "OPENAI", "ANTHROPIC", "STRIPE", "DATABRICKS", "DISCORD", "EPIC", "CANVA", "REVOLUT",
@@ -149,6 +161,9 @@ def is_tradfi_ticker(base_coin):
     b1 = base_coin.upper()
     if b1.endswith("STOCK"):
         return True
+    # 4글자 레버리지 ETF 접미사 패턴 (SKDD, GGLL, NVDD, TSDD 등) 차단
+    if len(b1) == 4 and (b1.endswith("DD") or b1.endswith("LL") or b1.endswith("UU")) and b1 not in {"SPELL", "CELL", "BULL", "NULL", "CALL", "FULL", "ROLL"}:
+        return True
     b2 = strip_multiplier_prefix(b1)
     b3 = strip_tokenized_suffix(b2)
     if (b1 in TRADFI_BLACKLIST) or (b2 in TRADFI_BLACKLIST) or (b3 in TRADFI_BLACKLIST):
@@ -156,3 +171,8 @@ def is_tradfi_ticker(base_coin):
     if len(b1) == 6 and (b1.startswith("USD") or b1.endswith("USD")):
         return True
     return False
+
+
+def is_heavy_major_coin(base_coin):
+    b = strip_multiplier_prefix(base_coin.upper())
+    return b in HEAVY_MAJOR_COINS
