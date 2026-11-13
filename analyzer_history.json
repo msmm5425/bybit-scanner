@@ -206,37 +206,37 @@
     },
     {
       "date_str": "2026-11-13",
-      "timestamp": 1794527039,
+      "timestamp": 1794535910,
       "coins": [
         {
+          "symbol": "BARDUSDT",
+          "ign_price": 0.0845,
+          "support_line": 0.0835,
+          "swing_high_line": 0.0845
+        },
+        {
           "symbol": "MAGMAUSDT",
-          "ign_price": 0.29232,
-          "support_line": 0.2742,
-          "swing_high_line": 0.29456
+          "ign_price": 0.29565,
+          "support_line": 0.24414,
+          "swing_high_line": 0.30709
         },
         {
-          "symbol": "AKEUSDT",
-          "ign_price": 0.0026951,
-          "support_line": 0.0024938,
-          "swing_high_line": 0.0027951
+          "symbol": "CLSUSDT",
+          "ign_price": 244.8,
+          "support_line": 234.0,
+          "swing_high_line": 244.8
         },
         {
-          "symbol": "QUSDT",
-          "ign_price": 0.02665,
-          "support_line": 0.025608,
-          "swing_high_line": 0.026808
+          "symbol": "GGLLUSDT",
+          "ign_price": 70.17,
+          "support_line": 67.91,
+          "swing_high_line": 70.17
         },
         {
-          "symbol": "HANAUSDT",
-          "ign_price": 0.01633,
-          "support_line": 0.01624,
-          "swing_high_line": 0.01639
-        },
-        {
-          "symbol": "PLUMEUSDT",
-          "ign_price": 0.013112,
-          "support_line": 0.012879,
-          "swing_high_line": 0.013112
+          "symbol": "TIAUSDT",
+          "ign_price": 0.4069,
+          "support_line": 0.3974,
+          "swing_high_line": 0.4102
         }
       ]
     }
