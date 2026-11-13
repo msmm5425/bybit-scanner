@@ -190,9 +190,9 @@
         "OI 실수급 유입(OI 181.5M·비중 203%)",
         "음수 펀딩 숏스퀴즈 수급(-0.0003%)"
       ],
-      "max_high_price": 74.314,
-      "peak_ts_ms": 1794579660000,
-      "max_favorable_pct": 0.28,
+      "max_high_price": 74.616,
+      "peak_ts_ms": 1794579840000,
+      "max_favorable_pct": 0.69,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -1764,7 +1764,7 @@
       "max_high_price": 0.03729,
       "max_favorable_pct": 4.32,
       "history_backfilled": true,
-      "peak_ts_ms": 1794578760000
+      "peak_ts_ms": 1794578880000
     },
     "HANAUSDT": {
       "created_at": 1794478203,
@@ -2595,9 +2595,9 @@
         "OI 실수급 유입(OI 2.7M·비중 169%)",
         "청정 펀딩 수급(+0.0100%)"
       ],
-      "max_high_price": 1.544,
-      "peak_ts_ms": 1794578940000,
-      "max_favorable_pct": 2.52,
+      "max_high_price": 1.551,
+      "peak_ts_ms": 1794580260000,
+      "max_favorable_pct": 2.99,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -2696,9 +2696,9 @@
         "OI 실수급 유입(OI 2.3M·비중 130%)",
         "음수 펀딩 숏스퀴즈 수급(-0.0036%)"
       ],
-      "max_high_price": 0.03792,
-      "peak_ts_ms": 1794578760000,
-      "max_favorable_pct": 2.4,
+      "max_high_price": 0.03798,
+      "peak_ts_ms": 1794579780000,
+      "max_favorable_pct": 2.57,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -2848,9 +2848,9 @@
         "OI 실수급 유입(OI 12.4M·비중 110%)",
         "청정 펀딩 수급(+0.0100%)"
       ],
-      "max_high_price": 0.1501,
-      "peak_ts_ms": 1794576840000,
-      "max_favorable_pct": 1.67,
+      "max_high_price": 0.15024,
+      "peak_ts_ms": 1794580320000,
+      "max_favorable_pct": 1.76,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3457,9 +3457,9 @@
         "초동수급 폭발(3.6배)",
         "음수 펀딩 숏스퀴즈 수급(-0.1173%)"
       ],
-      "max_high_price": 12.452,
-      "peak_ts_ms": 1794579480000,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 12.506,
+      "peak_ts_ms": 1794580140000,
+      "max_favorable_pct": 0.43,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3508,9 +3508,9 @@
         "OI 수급 동조(OI 0.7M)",
         "음수 펀딩 숏스퀴즈 수급(-0.0358%)"
       ],
-      "max_high_price": 0.00803,
-      "peak_ts_ms": 1794579760000,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 0.00806,
+      "peak_ts_ms": 1794579900000,
+      "max_favorable_pct": 0.37,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3578,6 +3578,7 @@
     "UNIUSDT": 1794578260,
     "PURRUSDT": 1794578561,
     "NUUSDT": 1794579460,
+    "HUMAUSDT": 1794579760,
     "NEARUSDT": 1794231004,
     "B2USDT": 1794232204,
     "USELESSUSDT": 1794237604,
@@ -3609,8 +3610,7 @@
     "SOPHUSDT": 1794466763,
     "ERAUSDT": 1794471604,
     "PARTIUSDT": 1794472204,
-    "HANAUSDT": 1794478203,
-    "HUMAUSDT": 1794579760
+    "HANAUSDT": 1794478203
   },
   "sl_history": {
     "B2USDT_1794232204": {
@@ -5912,8 +5912,8 @@
         1.72437,
         1.82226
       ],
-      "max_high_price": 1.544,
-      "max_favorable_pct": 2.52,
+      "max_high_price": 1.551,
+      "max_favorable_pct": 2.99,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -5990,8 +5990,8 @@
         0.04239935,
         0.0448063
       ],
-      "max_high_price": 0.03792,
-      "max_favorable_pct": 2.4,
+      "max_high_price": 0.03798,
+      "max_favorable_pct": 2.57,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6120,8 +6120,8 @@
         0.1690478,
         0.17864439999999998
       ],
-      "max_high_price": 0.1501,
-      "max_favorable_pct": 1.67,
+      "max_high_price": 0.15024,
+      "max_favorable_pct": 1.76,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6536,8 +6536,8 @@
         84.85366,
         89.67068
       ],
-      "max_high_price": 74.314,
-      "max_favorable_pct": 0.28,
+      "max_high_price": 74.616,
+      "max_favorable_pct": 0.69,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6614,8 +6614,8 @@
         14.25754,
         15.06692
       ],
-      "max_high_price": 12.452,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 12.506,
+      "max_favorable_pct": 0.43,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6640,8 +6640,8 @@
         0.00919435,
         0.0097163
       ],
-      "max_high_price": 0.00803,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 0.00806,
+      "max_favorable_pct": 0.37,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
