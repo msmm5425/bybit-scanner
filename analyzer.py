@@ -10,6 +10,40 @@ import api as api_mod
 _BTC_REGIME_CACHE = {"ts": 0, "is_dumping": False, "drop_pct": 0.0}
 
 
+class SafeAlertDict(dict):
+    """notifier.py에서 어떤 키 별칭(last_price, price 등)으로 조회하든 KeyError가 발생하지 않도록 보장"""
+    def __getitem__(self, key):
+        if key in self.keys():
+            return super().__getitem__(key)
+        alias_map = {
+            "last_price": "price",
+            "curr_price": "price",
+            "current_price": "price",
+            "close": "price",
+            "base": "base_coin",
+            "ticker": "symbol",
+            "title": "track_title",
+            "track_label": "track_title",
+            "total_score": "score",
+            "chg_24h": "change_24h",
+            "price24hPcnt": "change_24h",
+            "turnover_24h_m": "turnover_m",
+            "vol_24h_m": "turnover_m",
+            "open_interest_m": "oi_m",
+            "funding_rate_pct": "funding_pct",
+            "htf_trend": "htf_status",
+            "rsi_15m": "rsi6_15m",
+            "kdj_j": "kdj_j_15m",
+            "sl_price": "stop_price",
+            "stop_pct": "sl_pct",
+            "tp_prices": "tps",
+        }
+        target = alias_map.get(key)
+        if target and target in self.keys():
+            return super().__getitem__(target)
+        return 0.0 if key.endswith(("_price", "_pct", "_m", "_mult")) else ""
+
+
 def _normalize_df(raw, expected_interval_min=None):
     df = pd.DataFrame()
     if isinstance(raw, pd.DataFrame) and not raw.empty:
@@ -188,7 +222,6 @@ def analyze_symbol(coin):
     base_coin = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
     to_float = cfg.to_float
 
-    # [오답노트 처방]: $SOL, $XRP, $XLM, $ETH 등 무거운 초대형 시총 코인은 단기 +8~20% 급등 탄력이 없으므로 즉시 배제
     if cfg.is_tradfi_ticker(base_coin):
         return None
     if hasattr(cfg, "is_heavy_major_coin") and cfg.is_heavy_major_coin(base_coin):
@@ -379,7 +412,7 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 3) 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지 (13:48 리포트 Top 5 중 4종목 적중 핵심 알파)
+    # 3) 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지
     fvg_mid_line = (ignition_open + ignition_high) * 0.5
     cond_fvg_mid_hold = (
         (not is_current_ignition)
@@ -547,20 +580,25 @@ def analyze_symbol(coin):
         "1H Fib 3.86(48h고점)"
     ]
 
-    return {
+    return SafeAlertDict({
         "symbol": symbol,
         "base_coin": base_coin,
+        "base": base_coin,
         "track_type": track_type,
         "track_title": "🚀 [2차 돌파/리테스트 타점 포착]" if track_type == "TRACK_B" else "🟢 [1차 선취매/눌림 타점 포착]",
         "score": score,
         "price": close,
+        "last_price": close,
+        "curr_price": close,
         "change_24h": change_24h,
         "turnover_m": turnover_m,
         "oi_m": oi_m,
+        "oi_ratio": oi_turnover_ratio,
         "funding_pct": funding_pct,
         "htf_status": htf_status,
         "htf_diag": htf_status,
         "rsi6_15m": round(rsi6_15m, 1),
+        "rsi6_1h": round(rsi6_1h, 1),
         "kdj_j_15m": round(kdj_j_15m, 1),
         "j_15m": round(kdj_j_15m, 1),
         "reasons": reasons,
@@ -570,12 +608,20 @@ def analyze_symbol(coin):
         "entry_low": entry_low,
         "entry_high": entry_high,
         "stop_price": stop_price,
+        "sl_price": stop_price,
         "sl_pct": sl_pct_int,
         "sl_reason": sl_note,
         "sl_note": sl_note,
         "tps": [tp1, tp2, tp3],
+        "tp1": tp1,
+        "tp2": tp2,
+        "tp3": tp3,
         "tp_pcts": [tp1_pct, tp2_pct, tp3_pct],
+        "tp1_pct": tp1_pct,
+        "tp2_pct": tp2_pct,
+        "tp3_pct": tp3_pct,
         "tp_labels": tp_labels,
         "tp_notes": tp_labels,
         "vol_mult": round(vol_mult, 1),
-    }
+        "pre_box_range_pct": round(pre_box_range_pct, 1),
+    })
