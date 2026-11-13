@@ -212,21 +212,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
                 )
         return {"messages": messages, "sl_record": None}
 
-    # 6. [오답노트 $SOL·$XLM·$BEAM·$XRP 38시간 보유 후 손절 처방: 8시간 좀비 타점 시간 청산(Time-Stop)]
-    zombie_min_limit = getattr(cfg, "ZOMBIE_TIME_STOP_MINUTES", 480)
-    zombie_fav_limit = getattr(cfg, "ZOMBIE_MIN_FAVORABLE_PCT", 3.0)
-    if hold_min >= zombie_min_limit and max_fav_pct < zombie_fav_limit and last_1m_close <= entry_ref * 0.992:
-        t_item["tp3_completed"] = True
-        t_item["tp3_at"] = now_ts
-        curr_diff_pct = (last_1m_close - entry_ref) / max(entry_ref, 1e-8) * 100.0
-        messages.append(
-            f"⏱️ [초동 모멘텀 소멸 시간 청산(Time-Stop)] ${base_coin} ({symbol})\n"
-            f"• 보유 {hold_min // 60}시간({hold_min}분) 경과 | 최고 상승폭 +{max_fav_pct:.1f}% (기준 +{zombie_fav_limit:.1f}% 미달)\n"
-            f"• 장기 횡보 중 BTC 급락 연쇄 손절을 피하기 위해 현재가({fmt_price(last_1m_close)}, {curr_diff_pct:+.1f}%)에서 선제 정리합니다."
-        )
-        return {"messages": messages, "sl_record": None}
-
-    # 7. 초기 손절선(진입가 아래 -3%~-5%) 이탈 확인
+    # 6. 원칙 준수: 시간 청산(Time-Stop) 없이 전략적 초기 손절선(init_stop_p) 이탈 시에만 손절 판정
     min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
     min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
 
