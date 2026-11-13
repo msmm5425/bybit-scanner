@@ -1534,10 +1534,10 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.111,
-      "max_favorable_pct": 3.43,
+      "max_high_price": 0.1113,
+      "max_favorable_pct": 3.71,
       "history_backfilled": true,
-      "peak_ts_ms": 1794579420000
+      "peak_ts_ms": 1794581160000
     },
     "QUSDT": {
       "created_at": 1794575197,
@@ -2595,9 +2595,9 @@
         "OI 실수급 유입(OI 2.7M·비중 169%)",
         "청정 펀딩 수급(+0.0100%)"
       ],
-      "max_high_price": 1.553,
-      "peak_ts_ms": 1794580800000,
-      "max_favorable_pct": 3.12,
+      "max_high_price": 1.559,
+      "peak_ts_ms": 1794581160000,
+      "max_favorable_pct": 3.52,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -5062,8 +5062,8 @@
         0.12320016640450293,
         0.13493958
       ],
-      "max_high_price": 0.111,
-      "max_favorable_pct": 3.43,
+      "max_high_price": 0.1113,
+      "max_favorable_pct": 3.71,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -5946,8 +5946,8 @@
         1.72437,
         1.82226
       ],
-      "max_high_price": 1.553,
-      "max_favorable_pct": 3.12,
+      "max_high_price": 1.559,
+      "max_favorable_pct": 3.52,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
