@@ -19,32 +19,32 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [2026-11-13 08:35 KST 리포트 권장값 + $XCN 본전방어 + $Q V자 재진입 반영]
+# [2026-11-13 08:43 KST 최종 리포트 권장값 + 오답 노트 4대 방어벽 통합]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 평시 85점 이상 알림 발송
-BTC_DUMP_SCORE_THRESHOLD = 90          # BTC 15분봉 급락(-0.7%↓) 시 컷오프 90점으로 자동 상향
+BTC_DUMP_SCORE_THRESHOLD = 90          # [오답노트 유형1 방어] BTC 15분봉 급락(-0.7%↓) 시 90점으로 자동 상향
 BTC_DUMP_DROP_15M_PCT = -0.70          # BTC 15분봉 최근 3캔들 고점 대비 -0.70% 이하 시 위험장 판정
 
 PULLBACK_DRYUP_STRICT = 0.15           # 발화봉 대비 눌림 거래량 15% 이하 극건조
-PULLBACK_DRYUP_MAX = 0.20              # [튜닝] 0.22 -> 0.20 (08:35 리포트 권장 0.18 반영해 수급둔화 차단)
-SR_FLIP_DRYUP_RATIO_MAX = 0.22         # 돌파 후 S/R Flip 리테스트 거래량 상한 (Top 5 $MAGMA 13%, $Q 19%)
+PULLBACK_DRYUP_MAX = 0.18              # [08:43 튜닝] 0.18 (눌림 거래량 18% 이하 건조 기준 강화로 유형5 이탈 차단)
+SR_FLIP_DRYUP_RATIO_MAX = 0.20         # 돌파 후 S/R Flip 리테스트 거래량 상한 ($MAGMA 13%, $Q 19% 적중)
 SR_FLIP_TOLERANCE_PCT = 1.20           # 전고점 S/R Flip 칼지지 허용 오차 (1.20% 이내)
 
-PRE_BOX_RANGE_MAX_PCT = 9.5            # [튜닝] 8.3 -> 9.5% (08:35 리포트 권장값 9.5% 그대로 반영)
+PRE_BOX_RANGE_MAX_PCT = 9.5            # [08:43 튜닝] 9.5% (직전 2시간 박스 변동폭 상한 권장값 반영)
 PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한 (14.0%)
 PRE_BOX_TIGHT_PCT = 5.2                # 5.2% 이내 초응축 시 가산점 및 첫 발화 이격 완화
 EMA_RIBBON_MAX_SPREAD_PCT = 1.8        # Top 5 중 4종목(0.6%~1.7%) 적중한 이평선 리본 초밀집 기준
 PRE_VOL_POCKET_MAX_RATIO = 0.40        # 발화 직전 5캔들 최저거래량 / vol_ma20 (40% 이하)
 
-EARLY_VOL_MULT_MIN = 2.8               # [튜닝] 3.3 -> 2.8x (08:35 리포트 권장 2.6x 및 $HANA 2.7x·$Q 3.1x 반영)
+EARLY_VOL_MULT_MIN = 2.6               # [08:43 튜닝] 2.6x ($HANA 2.7x, $Q 3.1x 등 리포트 권장 하한 2.6배 반영)
 EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 돌파 대응 상한
 EARLY_BREAKOUT_MAX_PCT = 4.2           # 정각 오프닝 장대양봉 후 10분차 공중 눌림(Bull Flag) 허용 (4.2%)
 BULL_FLAG_MAX_RETRACE = 0.382          # 돌파 양봉 상단 38.2% 이내 공중 지지 기준
 
-SL_ATR_MULT_TRACK_B = 1.45             # 오답 노트($Q 스탑헌팅 방어) 처방: 돌파 타점 ATR 버퍼 1.45배
-SL_ATR_MULT_TRACK_A = 1.45             # 선취매 타점 ATR 손절 버퍼 1.45배
-BREAKEVEN_TRIGGER_PCT = 4.5             # [신규] 오답 노트($XCN +7.9% 후 반락) 처방: +4.5% 도달 시 본전 손절선 고정
-SL_RECOVERY_COOLDOWN_SEC = 14400       # [신규] 오답 노트($Q V자 반등) 처방: 스탑헌팅 후 4시간 경과 & 88점 이상 시 재진입 허용
+SL_ATR_MULT_TRACK_B = 1.45             # [오답노트 유형2 $Q 방어] 돌파 타점 ATR 손절 버퍼 1.45배 확대
+SL_ATR_MULT_TRACK_A = 1.45             # 선취매 타점 ATR 손절 버퍼 1.45배 확대
+BREAKEVEN_TRIGGER_PCT = 4.5            # [오답노트 유형3 $XCN 방어] +4.5% 도달 시 본전(진입가 위) 손절선 자동 고정
+SL_RECOVERY_COOLDOWN_SEC = 14400       # [오답노트 유형2 $Q 재포착] 스탑헌팅 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
 
 MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
 MAX_PRIOR_PUMP_PCT = 20.0              # 최근 12시간 내 이미 +20% 이상 폭등 이력 시 설거지 경계
