@@ -2595,9 +2595,9 @@
         "OI 실수급 유입(OI 2.7M·비중 169%)",
         "청정 펀딩 수급(+0.0100%)"
       ],
-      "max_high_price": 1.552,
-      "peak_ts_ms": 1794580320000,
-      "max_favorable_pct": 3.05,
+      "max_high_price": 1.553,
+      "peak_ts_ms": 1794580800000,
+      "max_favorable_pct": 3.12,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3317,8 +3317,11 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794580919,
+      "sl_trigger_price": 0.03701,
+      "hold_minutes": 49
     },
     "UNIUSDT": {
       "created_at": 1794578260,
@@ -3891,6 +3894,37 @@
         "이평리본 초밀집 확산(0.3%)",
         "초동수급 폭발(7.8배)",
         "OI 실수급 유입(OI 1.8M·비중 70%)",
+        "청정 펀딩 수급(+0.0050%)"
+      ]
+    },
+    "APRUSDT_1794577960": {
+      "symbol": "APRUSDT",
+      "track_type": "TRACK_A",
+      "score": 98,
+      "entry_price": 0.03825,
+      "stop_price": 0.0371025,
+      "sl_trigger_price": 0.03701,
+      "sl_pct": 3.0,
+      "created_at": 1794577960,
+      "sl_at": 1794580919,
+      "hold_minutes": 49,
+      "max_high_price": 0.03841,
+      "max_favorable_pct": 0.42,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 5.2,
+      "rsi6_15m": 54.1,
+      "kdj_j_15m": 81.8,
+      "oi_m": 2.63473777214,
+      "turnover_m": 2.27372787951,
+      "funding_pct": 0.005,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(3%)",
+        "바닥 이평리본 수렴 돌파(0.2%)",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "초응축(3.8%)+OBV 선행매집",
+        "이평리본 초밀집 확산(0.2%)",
+        "초동수급 폭발(5.2배)",
+        "OI 실수급 유입(OI 2.6M·비중 116%)",
         "청정 펀딩 수급(+0.0050%)"
       ]
     }
@@ -5912,8 +5946,8 @@
         1.72437,
         1.82226
       ],
-      "max_high_price": 1.552,
-      "max_favorable_pct": 3.05,
+      "max_high_price": 1.553,
+      "max_favorable_pct": 3.12,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6519,8 +6553,8 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794580919
     },
     "HYPEUSDT_1794578260": {
       "symbol": "HYPEUSDT",
