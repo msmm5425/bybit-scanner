@@ -3265,9 +3265,9 @@
         "OI 수급 동조(OI 0.8M)",
         "음수 펀딩 숏스퀴즈 수급(-0.0015%)"
       ],
-      "max_high_price": 0.07408,
-      "peak_ts_ms": 1794577660000,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 0.07409,
+      "peak_ts_ms": 1794583500000,
+      "max_favorable_pct": 0.01,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3381,8 +3381,11 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794583722,
+      "sl_trigger_price": 5.771,
+      "hold_minutes": 91
     },
     "PURRUSDT": {
       "created_at": 1794578561,
@@ -4113,6 +4116,37 @@
         "이평리본 초밀집 확산(0.3%)",
         "초동수급 폭발(5.8배)",
         "OI 실수급 유입(OI 3.7M·비중 86%)",
+        "청정 펀딩 수급(+0.0047%)"
+      ]
+    },
+    "UNIUSDT_1794578260": {
+      "symbol": "UNIUSDT",
+      "track_type": "TRACK_A",
+      "score": 93,
+      "entry_price": 5.958,
+      "stop_price": 5.77926,
+      "sl_trigger_price": 5.771,
+      "sl_pct": 3.0,
+      "created_at": 1794578260,
+      "sl_at": 1794583722,
+      "hold_minutes": 91,
+      "max_high_price": 5.965,
+      "max_favorable_pct": 0.12,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 14.6,
+      "rsi6_15m": 71.3,
+      "kdj_j_15m": 85.4,
+      "oi_m": 22.711169048000002,
+      "turnover_m": 14.304571730000001,
+      "funding_pct": 0.004699999999999999,
+      "reasons": [
+        "거래량 건조 선취매 포켓(14%)",
+        "완전 정배열(5>20>50>112) 지지",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(4.1%)+OBV/CVD 선행매집",
+        "이평리본 초밀집 확산(0.3%)",
+        "초동수급 폭발(14.6배)",
+        "OI 실수급 유입(OI 22.7M·비중 159%)",
         "청정 펀딩 수급(+0.0047%)"
       ]
     }
@@ -6706,8 +6740,8 @@
         0.0848216,
         0.08963679999999999
       ],
-      "max_high_price": 0.07408,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 0.07409,
+      "max_favorable_pct": 0.01,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6793,8 +6827,8 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794583722
     },
     "PURRUSDT_1794578561": {
       "symbol": "PURRUSDT",
