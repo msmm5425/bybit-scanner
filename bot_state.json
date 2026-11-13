@@ -1534,10 +1534,10 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.1113,
-      "max_favorable_pct": 3.71,
+      "max_high_price": 0.1116,
+      "max_favorable_pct": 3.99,
       "history_backfilled": true,
-      "peak_ts_ms": 1794581160000
+      "peak_ts_ms": 1794581220000
     },
     "QUSDT": {
       "created_at": 1794575197,
@@ -3421,19 +3421,22 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794581518,
+      "sl_trigger_price": 8.835,
+      "hold_minutes": 49
     },
     "NUUSDT": {
       "created_at": 1794579460,
-      "track_type": "TRACK_A",
+      "track_type": "TRACK_B",
       "score": 90,
       "entry_price": 12.452,
       "swing_high_line": 12.553,
       "entry_low": 12.42087,
       "entry_high": 12.464451999999998,
       "initial_stop_price": 12.07844,
-      "stop_price": 12.07844,
+      "stop_price": 12.476904,
       "sl_pct": 3,
       "tps": [
         13.448160000000001,
@@ -3470,7 +3473,7 @@
       "tp1_alerted": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "breakout_alerted": false,
+      "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false
     },
@@ -3580,7 +3583,7 @@
     "HYPEUSDT": 1794578260,
     "UNIUSDT": 1794578260,
     "PURRUSDT": 1794578561,
-    "NUUSDT": 1794579460,
+    "NUUSDT": 1794581518,
     "HUMAUSDT": 1794579760,
     "NEARUSDT": 1794231004,
     "B2USDT": 1794232204,
@@ -3926,6 +3929,36 @@
         "초동수급 폭발(5.2배)",
         "OI 실수급 유입(OI 2.6M·비중 116%)",
         "청정 펀딩 수급(+0.0050%)"
+      ]
+    },
+    "PURRUSDT_1794578561": {
+      "symbol": "PURRUSDT",
+      "track_type": "TRACK_A",
+      "score": 90,
+      "entry_price": 9.118,
+      "stop_price": 8.84446,
+      "sl_trigger_price": 8.835,
+      "sl_pct": 3.0,
+      "created_at": 1794578561,
+      "sl_at": 1794581518,
+      "hold_minutes": 49,
+      "max_high_price": 9.118,
+      "max_favorable_pct": 0.0,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 1.2,
+      "rsi6_15m": 62.6,
+      "kdj_j_15m": 59.9,
+      "oi_m": 0.1375162560200005,
+      "turnover_m": 1.57881606645,
+      "funding_pct": 0.0063,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(0%)",
+        "완전 정배열(5>20>50>112) 지지",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(3.8%)+CVD 강세 다이버전스(저점 스윕 매수흡수)",
+        "이평리본 초밀집 확산(0.6%)",
+        "발화전 거래량 극건조 포켓(3%)",
+        "청정 펀딩 수급(+0.0063%)"
       ]
     }
   },
@@ -5062,8 +5095,8 @@
         0.12320016640450293,
         0.13493958
       ],
-      "max_high_price": 0.1113,
-      "max_favorable_pct": 3.71,
+      "max_high_price": 0.1116,
+      "max_favorable_pct": 3.99,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6631,17 +6664,17 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794581518
     },
     "NUUSDT_1794579460": {
       "symbol": "NUUSDT",
       "created_at": 1794579460,
-      "track_type": "TRACK_A",
+      "track_type": "TRACK_B",
       "score": 90,
       "entry_price": 12.452,
       "initial_stop_price": 12.07844,
-      "stop_price": 12.07844,
+      "stop_price": 12.476904,
       "sl_pct": 3.0,
       "tps": [
         13.448160000000001,
