@@ -269,7 +269,8 @@
       "tp3_completed": false,
       "max_high_price": 8.734,
       "max_favorable_pct": 2.77,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794253504000
     },
     "LITUSDT": {
       "created_at": 1794255303,
@@ -322,7 +323,8 @@
       "max_high_price": 0.2695,
       "max_favorable_pct": 7.16,
       "be_armed": true,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794271504000
     },
     "ARIAUSDT": {
       "created_at": 1794272704,
@@ -394,7 +396,8 @@
       "max_high_price": 1.442,
       "max_favorable_pct": 4.92,
       "be_armed": true,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794279604000
     },
     "GRAMUSDT": {
       "created_at": 1794280504,
@@ -446,11 +449,13 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false,
-      "tp3_completed": false,
+      "tp3_completed": true,
       "max_high_price": 0.00952,
       "max_favorable_pct": 5.92,
       "be_armed": true,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794288903000,
+      "tp3_at": 1794539680
     },
     "SANDUSDT": {
       "created_at": 1794292204,
@@ -579,7 +584,8 @@
       "max_high_price": 1.627,
       "max_favorable_pct": 4.93,
       "history_backfilled": true,
-      "be_armed": true
+      "be_armed": true,
+      "peak_ts_ms": 1794381604000
     },
     "ICPUSDT": {
       "created_at": 1794381903,
@@ -604,7 +610,8 @@
       "tp3_completed": false,
       "max_high_price": 2.636,
       "max_favorable_pct": 3.7,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794381903000
     },
     "DOSUSDT": {
       "created_at": 1794388804,
@@ -732,11 +739,15 @@
         23.3
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
+      "sl_alerted": true,
       "tp3_completed": false,
       "max_high_price": 85.81,
       "max_favorable_pct": 2.57,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794398704000,
+      "sl_at": 1794539680,
+      "sl_trigger_price": 79.74,
+      "hold_minutes": 2349
     },
     "SIRENUSDT": {
       "created_at": 1794401104,
@@ -761,7 +772,8 @@
       "tp3_completed": false,
       "max_high_price": 0.02867,
       "max_favorable_pct": 4.22,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794401104000
     },
     "BEAMUSDT": {
       "created_at": 1794404773,
@@ -782,11 +794,15 @@
         23.2
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
+      "sl_alerted": true,
       "tp3_completed": false,
       "max_high_price": 0.004535,
       "max_favorable_pct": 2.2,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794404773000,
+      "sl_at": 1794539680,
+      "sl_trigger_price": 0.00424,
+      "hold_minutes": 2248
     },
     "TRUMPUSDT": {
       "created_at": 1794409203,
@@ -876,11 +892,15 @@
         22.0
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
+      "sl_alerted": true,
       "tp3_completed": false,
       "max_high_price": 0.15192,
       "max_favorable_pct": 0.96,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794416103000,
+      "sl_at": 1794539680,
+      "sl_trigger_price": 0.14438,
+      "hold_minutes": 2059
     },
     "PONSUSDT": {
       "created_at": 1794417303,
@@ -997,7 +1017,8 @@
       "tp3_completed": false,
       "max_high_price": 0.6717,
       "max_favorable_pct": 2.06,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794425403000
     },
     "ZECUSDT": {
       "created_at": 1794434704,
@@ -1045,7 +1066,8 @@
       "tp3_completed": false,
       "max_high_price": 0.0807,
       "max_favorable_pct": 2.89,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794435904000
     },
     "XCNUSDT": {
       "created_at": 1794437100,
@@ -1093,7 +1115,8 @@
       "tp3_completed": false,
       "max_high_price": 0.1104,
       "max_favorable_pct": 2.87,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794444604000
     },
     "QUSDT": {
       "created_at": 1794446104,
@@ -1141,7 +1164,8 @@
       "tp3_completed": false,
       "max_high_price": 0.10574,
       "max_favorable_pct": 3.69,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794459004000
     },
     "KITEUSDT": {
       "created_at": 1794462603,
@@ -1166,7 +1190,8 @@
       "tp3_completed": false,
       "max_high_price": 0.13009,
       "max_favorable_pct": 3.2,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794462603000
     },
     "OPGUSDT": {
       "created_at": 1794465904,
@@ -1218,7 +1243,8 @@
       "tp3_completed": false,
       "max_high_price": 0.001351,
       "max_favorable_pct": 3.94,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794539160000
     },
     "ERAUSDT": {
       "created_at": 1794471604,
@@ -1270,7 +1296,8 @@
       "tp3_completed": false,
       "max_high_price": 0.03715,
       "max_favorable_pct": 3.93,
-      "history_backfilled": true
+      "history_backfilled": true,
+      "peak_ts_ms": 1794472204000
     },
     "HANAUSDT": {
       "created_at": 1794478203,
@@ -1296,7 +1323,8 @@
       "max_high_price": 0.01773,
       "max_favorable_pct": 4.94,
       "history_backfilled": true,
-      "be_armed": true
+      "be_armed": true,
+      "peak_ts_ms": 1794478203000
     }
   },
   "alert_history": {
@@ -1477,6 +1505,72 @@
       "hold_minutes": 2323,
       "max_high_price": 1.0803,
       "max_favorable_pct": 2.04,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 1.0,
+      "rsi6_15m": 50.0,
+      "kdj_j_15m": 50.0,
+      "oi_m": 0.0,
+      "turnover_m": 0.0,
+      "funding_pct": 0.0,
+      "reasons": []
+    },
+    "SOLUSDT_1794398704": {
+      "symbol": "SOLUSDT",
+      "track_type": "TRACK_A",
+      "score": 85,
+      "entry_price": 83.66263651499999,
+      "stop_price": 80.31613105439999,
+      "sl_trigger_price": 79.74,
+      "sl_pct": 4.0,
+      "created_at": 1794398704,
+      "sl_at": 1794539680,
+      "hold_minutes": 2349,
+      "max_high_price": 85.81,
+      "max_favorable_pct": 2.57,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 1.0,
+      "rsi6_15m": 50.0,
+      "kdj_j_15m": 50.0,
+      "oi_m": 0.0,
+      "turnover_m": 0.0,
+      "funding_pct": 0.0,
+      "reasons": []
+    },
+    "XLMUSDT_1794416103": {
+      "symbol": "XLMUSDT",
+      "track_type": "TRACK_A",
+      "score": 85,
+      "entry_price": 0.15048259642857142,
+      "stop_price": 0.14446329257142856,
+      "sl_trigger_price": 0.14438,
+      "sl_pct": 4.0,
+      "created_at": 1794416103,
+      "sl_at": 1794539680,
+      "hold_minutes": 2059,
+      "max_high_price": 0.15192,
+      "max_favorable_pct": 0.96,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 1.0,
+      "rsi6_15m": 50.0,
+      "kdj_j_15m": 50.0,
+      "oi_m": 0.0,
+      "turnover_m": 0.0,
+      "funding_pct": 0.0,
+      "reasons": []
+    },
+    "BEAMUSDT_1794404773": {
+      "symbol": "BEAMUSDT",
+      "track_type": "TRACK_A",
+      "score": 85,
+      "entry_price": 0.0044375381249999995,
+      "stop_price": 0.004260036599999999,
+      "sl_trigger_price": 0.00424,
+      "sl_pct": 4.0,
+      "created_at": 1794404773,
+      "sl_at": 1794539680,
+      "hold_minutes": 2248,
+      "max_high_price": 0.004535,
+      "max_favorable_pct": 2.2,
       "tp1_hit_before_sl": false,
       "vol_mult": 1.0,
       "rsi6_15m": 50.0,
@@ -1880,7 +1974,7 @@
       "be_armed": true,
       "tp1_hit": false,
       "tp2_hit": false,
-      "tp3_completed": false,
+      "tp3_completed": true,
       "sl_alerted": false,
       "sl_at": 0
     },
@@ -2123,8 +2217,8 @@
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794539680
     },
     "SIRENUSDT_1794401104": {
       "symbol": "SIRENUSDT",
@@ -2167,8 +2261,8 @@
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794539680
     },
     "TRUMPUSDT_1794409203": {
       "symbol": "TRUMPUSDT",
@@ -2255,8 +2349,8 @@
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794539680
     },
     "PONSUSDT_1794417303": {
       "symbol": "PONSUSDT",
