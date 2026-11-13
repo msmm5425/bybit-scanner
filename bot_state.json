@@ -19,9 +19,12 @@
         20.4
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
+      "sl_alerted": true,
       "max_high_price": 0.8181809999999999,
-      "max_favorable_pct": 0.0
+      "max_favorable_pct": 0.0,
+      "sl_at": 1794530404,
+      "sl_trigger_price": 0.8016,
+      "hold_minutes": 5784
     },
     "ENAUSDT": {
       "created_at": 1794220241,
@@ -1235,8 +1238,8 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.0174,
-      "max_favorable_pct": 2.99
+      "max_high_price": 0.01745,
+      "max_favorable_pct": 3.28
     }
   },
   "alert_history": {
@@ -1350,6 +1353,28 @@
       "sl_at": 1794530104,
       "hold_minutes": 975,
       "max_high_price": 0.09228573250000001,
+      "max_favorable_pct": 0.0,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 1.0,
+      "rsi6_15m": 50.0,
+      "kdj_j_15m": 50.0,
+      "oi_m": 0.0,
+      "turnover_m": 0.0,
+      "funding_pct": 0.0,
+      "reasons": []
+    },
+    "SUIUSDT_1794183313": {
+      "symbol": "SUIUSDT",
+      "track_type": "TRACK_B",
+      "score": 85,
+      "entry_price": 0.8181809999999999,
+      "stop_price": 0.8018173799999999,
+      "sl_trigger_price": 0.8016,
+      "sl_pct": 2.0,
+      "created_at": 1794183313,
+      "sl_at": 1794530404,
+      "hold_minutes": 5784,
+      "max_high_price": 0.8181809999999999,
       "max_favorable_pct": 0.0,
       "tp1_hit_before_sl": false,
       "vol_mult": 1.0,
