@@ -1576,9 +1576,9 @@
         "OI 실수급 유입(OI 2.4M·비중 115%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.03018,
-      "peak_ts_ms": 1794582540000,
-      "max_favorable_pct": 2.94,
+      "max_high_price": 0.030231,
+      "peak_ts_ms": 1794582900000,
+      "max_favorable_pct": 3.11,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3566,9 +3566,9 @@
         "OI 실수급 유입(OI 1.9M·비중 21%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.09354,
-      "peak_ts_ms": 1794582719000,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 0.0938,
+      "peak_ts_ms": 1794582840000,
+      "max_favorable_pct": 0.28,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3637,6 +3637,7 @@
     "PURRUSDT": 1794578561,
     "NUUSDT": 1794581518,
     "HUMAUSDT": 1794579760,
+    "KGENUSDT": 1794582719,
     "NEARUSDT": 1794231004,
     "B2USDT": 1794232204,
     "USELESSUSDT": 1794237604,
@@ -3668,8 +3669,7 @@
     "SOPHUSDT": 1794466763,
     "ERAUSDT": 1794471604,
     "PARTIUSDT": 1794472204,
-    "HANAUSDT": 1794478203,
-    "KGENUSDT": 1794582719
+    "HANAUSDT": 1794478203
   },
   "sl_history": {
     "B2USDT_1794232204": {
@@ -6396,8 +6396,8 @@
         0.03515438,
         0.03685278
       ],
-      "max_high_price": 0.03018,
-      "max_favorable_pct": 2.94,
+      "max_high_price": 0.030231,
+      "max_favorable_pct": 3.11,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6786,8 +6786,8 @@
         0.1214734,
         0.13098539999999997
       ],
-      "max_high_price": 0.09354,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 0.0938,
+      "max_favorable_pct": 0.28,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
