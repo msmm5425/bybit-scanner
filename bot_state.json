@@ -210,8 +210,8 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.6397,
-      "max_favorable_pct": 3.11
+      "max_high_price": 0.641,
+      "max_favorable_pct": 3.32
     },
     "PYTHUSDT": {
       "created_at": 1794251530,
@@ -234,8 +234,8 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.06788,
-      "max_favorable_pct": 2.95
+      "max_high_price": 0.0679,
+      "max_favorable_pct": 2.98
     },
     "AVAXUSDT": {
       "created_at": 1794253504,
@@ -282,8 +282,8 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 3.257472,
-      "max_favorable_pct": 0.0
+      "max_high_price": 3.259,
+      "max_favorable_pct": 0.05
     },
     "JUPUSDT": {
       "created_at": 1794271504,
@@ -402,8 +402,8 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 1.1436,
-      "max_favorable_pct": 5.72,
+      "max_high_price": 1.1602,
+      "max_favorable_pct": 7.26,
       "be_armed": true
     },
     "SIGNUSDT": {
@@ -521,10 +521,13 @@
         26.9
       ],
       "breakout_alerted": false,
-      "sl_alerted": false,
+      "sl_alerted": true,
       "tp3_completed": false,
       "max_high_price": 568.8654317438409,
-      "max_favorable_pct": 0.0
+      "max_favorable_pct": 0.0,
+      "sl_at": 1794534003,
+      "sl_trigger_price": 541.88,
+      "hold_minutes": 2539
     },
     "ZROUSDT": {
       "created_at": 1794381604,
@@ -547,8 +550,8 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 1.5568,
-      "max_favorable_pct": 0.4
+      "max_high_price": 1.5851,
+      "max_favorable_pct": 2.23
     },
     "ICPUSDT": {
       "created_at": 1794381903,
@@ -595,8 +598,8 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.16671,
-      "max_favorable_pct": 2.15
+      "max_high_price": 0.16703,
+      "max_favorable_pct": 2.34
     },
     "ETHUSDT": {
       "created_at": 1794396604,
@@ -997,8 +1000,8 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.07875,
-      "max_favorable_pct": 0.4
+      "max_high_price": 0.08012,
+      "max_favorable_pct": 2.15
     },
     "XCNUSDT": {
       "created_at": 1794437100,
@@ -1044,8 +1047,8 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.10835,
-      "max_favorable_pct": 0.96
+      "max_high_price": 0.10849,
+      "max_favorable_pct": 1.09
     },
     "QUSDT": {
       "created_at": 1794446104,
@@ -1091,8 +1094,8 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.10364,
-      "max_favorable_pct": 1.63
+      "max_high_price": 0.10403,
+      "max_favorable_pct": 2.01
     },
     "KITEUSDT": {
       "created_at": 1794462603,
@@ -1163,8 +1166,8 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.001299759992733788,
-      "max_favorable_pct": 0.0
+      "max_high_price": 0.001318,
+      "max_favorable_pct": 1.4
     },
     "ERAUSDT": {
       "created_at": 1794471604,
@@ -1243,8 +1246,6 @@
     }
   },
   "alert_history": {
-    "CTUSDT": 1794444604,
-    "QUSDT": 1794446104,
     "CAPUSDT": 1794459004,
     "KITEUSDT": 1794462603,
     "OPGUSDT": 1794465904,
@@ -1294,7 +1295,9 @@
     "ASTERUSDT": 1794425403,
     "ZECUSDT": 1794434704,
     "BEATUSDT": 1794435904,
-    "XCNUSDT": 1794437100
+    "XCNUSDT": 1794437100,
+    "CTUSDT": 1794444604,
+    "QUSDT": 1794446104
   },
   "sl_history": {
     "B2USDT_1794232204": {
@@ -1375,6 +1378,28 @@
       "sl_at": 1794530404,
       "hold_minutes": 5784,
       "max_high_price": 0.8181809999999999,
+      "max_favorable_pct": 0.0,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 1.0,
+      "rsi6_15m": 50.0,
+      "kdj_j_15m": 50.0,
+      "oi_m": 0.0,
+      "turnover_m": 0.0,
+      "funding_pct": 0.0,
+      "reasons": []
+    },
+    "XMRUSDT_1794381604": {
+      "symbol": "XMRUSDT",
+      "track_type": "TRACK_A",
+      "score": 85,
+      "entry_price": 568.8654317438409,
+      "stop_price": 546.1108144740872,
+      "sl_trigger_price": 541.88,
+      "sl_pct": 4.0,
+      "created_at": 1794381604,
+      "sl_at": 1794534003,
+      "hold_minutes": 2539,
+      "max_high_price": 568.8654317438409,
       "max_favorable_pct": 0.0,
       "tp1_hit_before_sl": false,
       "vol_mult": 1.0,
