@@ -19,36 +19,33 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [2026-11-13 13:48 KST 리포트 권장값 + 메이저 제외 + 좀비 타임스탑 통합]
+# [스캐너 핵심 파라미터 및 알림 폭탄 방지 설정]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 평시 85점 이상 알림 발송
-BTC_DUMP_SCORE_THRESHOLD = 90          # [오답노트 유형1 방어] BTC 15분봉 급락(-0.7%↓) 시 90점으로 자동 상향
+BTC_DUMP_SCORE_THRESHOLD = 90          # BTC 15분봉 급락(-0.7%↓) 시 90점으로 자동 상향
 BTC_DUMP_DROP_15M_PCT = -0.70          # BTC 15분봉 최근 3캔들 고점 대비 -0.70% 이하 시 위험장 판정
+MAX_NEW_ALERTS_PER_SCAN = 3            # [신규] 1회 스캔(5분)당 최고점 상위 3종목만 발송 (텔레그램 도배/누락 방지)
 
-PULLBACK_DRYUP_STRICT = 0.14           # 발화봉 대비 눌림 거래량 14% 이하 극건조 ($BARD 13%, $MAGMA 14%)
-PULLBACK_DRYUP_MAX = 0.19              # [13:48 튜닝] 리포트 권장값 0.19 반영
-SR_FLIP_DRYUP_RATIO_MAX = 0.27         # 돌파 후 S/R Flip 리테스트 거래량 상한 ($APR 27%, $SKDD 0%)
+PULLBACK_DRYUP_STRICT = 0.14           # 발화봉 대비 눌림 거래량 14% 이하 극건조
+PULLBACK_DRYUP_MAX = 0.19              # 발화봉 대비 눌림 거래량 상한 19%
+SR_FLIP_DRYUP_RATIO_MAX = 0.27         # 돌파 후 S/R Flip 리테스트 거래량 상한
 SR_FLIP_TOLERANCE_PCT = 1.20           # 전고점 S/R Flip 칼지지 허용 오차 (1.20% 이내)
 
-PRE_BOX_RANGE_MAX_PCT = 5.5            # [13:48 튜닝] 리포트 권장값 5.5% 반영 ($BARD 3.0%, $MAGMA 4.9%, $APR 2.3%)
+PRE_BOX_RANGE_MAX_PCT = 5.5            # 직전 2시간 박스 변동폭 상한 (5.5%)
 PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한 (14.0%)
 PRE_BOX_TIGHT_PCT = 4.0                # 4.0% 이내 초응축 시 가산점 부여
-EMA_RIBBON_MAX_SPREAD_PCT = 1.6        # Top 5 중 4종목(0.0%~0.4%) 적중한 이평선 리본 초밀집 기준
-PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20 ($BARD 24%, $ARIA 19%, $APR 0%)
+EMA_RIBBON_MAX_SPREAD_PCT = 1.6        # 이평선 리본 초밀집 기준 (1.6%)
+PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20 (35% 이하)
 
-EARLY_VOL_MULT_MIN = 2.6               # [13:48 튜닝] 리포트 권장값 2.6x 반영 ($APR 2.5x, $MAGMA 3.4x, $ARIA 4.0x)
+EARLY_VOL_MULT_MIN = 2.6               # 초동 최소 거래량 배수 (2.6배)
 EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 돌파 대응 상한
-EARLY_BREAKOUT_MAX_PCT = 4.2           # 정각 오프닝 장대양봉 후 10분차 공중 눌림(Bull Flag/FVG) 허용 (4.2%)
+EARLY_BREAKOUT_MAX_PCT = 4.2           # 돌파 양봉 직후 공중 눌림(Bull Flag/FVG) 허용 상한 (4.2%)
 BULL_FLAG_MAX_RETRACE = 0.382          # 돌파 양봉 상단 38.2% 이내 공중 지지 기준
 
-SL_ATR_MULT_TRACK_B = 1.45             # 돌파 타점 ATR 손절 버퍼 1.45배 확대
-SL_ATR_MULT_TRACK_A = 1.45             # 선취매 타점 ATR 손절 버퍼 1.45배 확대
-BREAKEVEN_TRIGGER_PCT = 4.5            # +4.5% 도달 시 본전(진입가 위) 손절선 자동 고정
-SL_RECOVERY_COOLDOWN_SEC = 14400       # 스탑헌팅 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
-
-# [오답노트 $SOL·$XLM·$BEAM·$XRP 38시간 보유 후 BTC 급락 손절 처방: 좀비 타점 타임스탑]
-ZOMBIE_TIME_STOP_MINUTES = 480         # 진입 후 8시간(480분) 경과 시점 점검
-ZOMBIE_MIN_FAVORABLE_PCT = 3.0         # 8시간 동안 최고 수익률이 +3.0% 미만이면서 현재 본전 이하면 모멘텀 소멸 조기 종료
+SL_ATR_MULT_TRACK_B = 1.45             # 돌파 타점 ATR 손절 버퍼 1.45배
+SL_ATR_MULT_TRACK_A = 1.45             # 선취매 타점 ATR 손절 버퍼 1.45배
+BREAKEVEN_TRIGGER_PCT = 4.5            # 진입 후 +4.5% 도달 시 본전(진입가 위) 손절선 자동 고정
+SL_RECOVERY_COOLDOWN_SEC = 14400       # 스탑헌팅 손절 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
 
 MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
 MAX_PRIOR_PUMP_PCT = 20.0              # 최근 12시간 내 이미 +20% 이상 폭등 이력 시 설거지 경계
@@ -69,11 +66,11 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
 }
 
-# 오답 노트에서 반복 손절된 무거운 초대형 시총 코인 (단기 +8%~+20% 급등 탄력 부족 & BTC 하락 100% 연동)
+# 단기 +8%~+20% 급등 탄력이 떨어지고 BTC 하락에 직격탄을 맞는 무거운 초대형 시총 코인 제외
 HEAVY_MAJOR_COINS = {
     "BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX", "LTC", "BCH",
     "DOT", "AVAX", "LINK", "XLM", "TON", "SHIB", "ETC", "XMR", "ZEC", "EOS",
-    "FIL", "ATOM", "NEAR", "ICP", "HBAR", "VET"
+    "FIL", "ATOM", "NEAR", "ICP", "HBAR", "VET", "UNI", "AAVE"
 }
 
 NON_CRYPTO_META_KEYWORDS = (
@@ -83,10 +80,13 @@ NON_CRYPTO_META_KEYWORDS = (
     "gold", "silver", "platinum", "palladium", "copper", "forex", "treasury",
     "inc", "corp", "ltd", "plc", "holdings", "nasdaq", "s&p", "spacex",
     "space exploration", "pre-ipo", "sandisk", "hynix", "technologies", "rocket lab",
-    "moderna", "coherent", "coreweave", "nebius", "applovin", "celestica"
+    "moderna", "coherent", "coreweave", "nebius", "applovin", "celestica", "pax gold", "tether gold"
 )
 
+# 금(PAXG, XAUT), 원자재, 주식, ETF 토큰 블랙리스트
 TRADFI_BLACKLIST = {
+    "PAXG", "XAUT", "VNXAU", "DGX", "PMGT", "KAU", "KAG",
+    "EWY", "AAOI", "EWJ", "EWZ", "EWT", "EWG", "EWU", "EWC", "EWA", "EWH",
     "SKDD", "SKLL", "SKUU", "CLS", "GGLL", "GGLS", "AAPU", "AAPD", "AMZU", "AMZD",
     "MSFU", "MSFD", "METU", "METD", "NFXL", "NFXS", "PLTU", "PLTD", "AVL", "AVS",
     "TSMX", "BRKU", "BRKD", "LLYU", "LLYD", "NVDD", "NVDG", "TSDD", "TSLG",
@@ -161,7 +161,6 @@ def is_tradfi_ticker(base_coin):
     b1 = base_coin.upper()
     if b1.endswith("STOCK"):
         return True
-    # 4글자 레버리지 ETF 접미사 패턴 (SKDD, GGLL, NVDD, TSDD 등) 차단
     if len(b1) == 4 and (b1.endswith("DD") or b1.endswith("LL") or b1.endswith("UU")) and b1 not in {"SPELL", "CELL", "BULL", "NULL", "CALL", "FULL", "ROLL"}:
         return True
     b2 = strip_multiplier_prefix(b1)
