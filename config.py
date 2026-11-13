@@ -19,32 +19,32 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [2026-11-13 08:43 KST 최종 리포트 권장값 + 오답 노트 4대 방어벽 통합]
+# [2026-11-13 11:11 KST 리포트 권장값 + $BARD/$MAGMA FVG·포켓피벗 반영]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 평시 85점 이상 알림 발송
 BTC_DUMP_SCORE_THRESHOLD = 90          # [오답노트 유형1 방어] BTC 15분봉 급락(-0.7%↓) 시 90점으로 자동 상향
 BTC_DUMP_DROP_15M_PCT = -0.70          # BTC 15분봉 최근 3캔들 고점 대비 -0.70% 이하 시 위험장 판정
 
-PULLBACK_DRYUP_STRICT = 0.15           # 발화봉 대비 눌림 거래량 15% 이하 극건조
-PULLBACK_DRYUP_MAX = 0.18              # [08:43 튜닝] 0.18 (눌림 거래량 18% 이하 건조 기준 강화로 유형5 이탈 차단)
-SR_FLIP_DRYUP_RATIO_MAX = 0.20         # 돌파 후 S/R Flip 리테스트 거래량 상한 ($MAGMA 13%, $Q 19% 적중)
+PULLBACK_DRYUP_STRICT = 0.12           # 발화봉 대비 눌림 거래량 12% 이하 극건조 ($BARD 0%, $MAGMA 4%, $TIA 3%)
+PULLBACK_DRYUP_MAX = 0.18              # [11:11 튜닝] 발화봉 대비 눌림 거래량 상한 18% 유지
+SR_FLIP_DRYUP_RATIO_MAX = 0.20         # 돌파 후 S/R Flip 리테스트 거래량 상한
 SR_FLIP_TOLERANCE_PCT = 1.20           # 전고점 S/R Flip 칼지지 허용 오차 (1.20% 이내)
 
-PRE_BOX_RANGE_MAX_PCT = 9.5            # [08:43 튜닝] 9.5% (직전 2시간 박스 변동폭 상한 권장값 반영)
+PRE_BOX_RANGE_MAX_PCT = 6.5            # [11:11 튜닝] 9.5 -> 6.5% (리포트 권장 5.5% 반영해 느슨한 박스권 걸러내기)
 PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한 (14.0%)
-PRE_BOX_TIGHT_PCT = 5.2                # 5.2% 이내 초응축 시 가산점 및 첫 발화 이격 완화
-EMA_RIBBON_MAX_SPREAD_PCT = 1.8        # Top 5 중 4종목(0.6%~1.7%) 적중한 이평선 리본 초밀집 기준
-PRE_VOL_POCKET_MAX_RATIO = 0.40        # 발화 직전 5캔들 최저거래량 / vol_ma20 (40% 이하)
+PRE_BOX_TIGHT_PCT = 4.5                # [11:11 튜닝] 4.5% 이내 초응축($BARD 2.9%, $TIA 3.1%) 시 가산점 부여
+EMA_RIBBON_MAX_SPREAD_PCT = 1.9        # Top 5 전원(0.2%~1.9%) 적중한 이평선 리본 초밀집 기준
+PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20 ($BARD 0%, $MAGMA 10%, $TIA 13%)
 
-EARLY_VOL_MULT_MIN = 2.6               # [08:43 튜닝] 2.6x ($HANA 2.7x, $Q 3.1x 등 리포트 권장 하한 2.6배 반영)
+EARLY_VOL_MULT_MIN = 3.5               # [11:11 튜닝] 2.6 -> 3.5x (리포트 권장 4.0x 및 $MAGMA 4.4x·$TIA 6.5x 반영)
 EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 돌파 대응 상한
-EARLY_BREAKOUT_MAX_PCT = 4.2           # 정각 오프닝 장대양봉 후 10분차 공중 눌림(Bull Flag) 허용 (4.2%)
+EARLY_BREAKOUT_MAX_PCT = 4.2           # 정각 오프닝 장대양봉 후 10분차 공중 눌림(Bull Flag/FVG) 허용 (4.2%)
 BULL_FLAG_MAX_RETRACE = 0.382          # 돌파 양봉 상단 38.2% 이내 공중 지지 기준
 
-SL_ATR_MULT_TRACK_B = 1.45             # [오답노트 유형2 $Q 방어] 돌파 타점 ATR 손절 버퍼 1.45배 확대
+SL_ATR_MULT_TRACK_B = 1.45             # 돌파 타점 ATR 손절 버퍼 1.45배 확대
 SL_ATR_MULT_TRACK_A = 1.45             # 선취매 타점 ATR 손절 버퍼 1.45배 확대
-BREAKEVEN_TRIGGER_PCT = 4.5            # [오답노트 유형3 $XCN 방어] +4.5% 도달 시 본전(진입가 위) 손절선 자동 고정
-SL_RECOVERY_COOLDOWN_SEC = 14400       # [오답노트 유형2 $Q 재포착] 스탑헌팅 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
+BREAKEVEN_TRIGGER_PCT = 4.5            # [오답노트 $XMR +4.7% 방어] +4.5% 도달 시 본전(진입가 위) 손절선 자동 고정
+SL_RECOVERY_COOLDOWN_SEC = 14400       # 스탑헌팅 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
 
 MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
 MAX_PRIOR_PUMP_PCT = 20.0              # 최근 12시간 내 이미 +20% 이상 폭등 이력 시 설거지 경계
@@ -72,10 +72,12 @@ NON_CRYPTO_META_KEYWORDS = (
     "gold", "silver", "platinum", "palladium", "copper", "forex", "treasury",
     "inc", "corp", "ltd", "plc", "holdings", "nasdaq", "s&p", "spacex",
     "space exploration", "pre-ipo", "sandisk", "hynix", "technologies", "rocket lab",
-    "moderna", "coherent", "coreweave", "nebius", "applovin"
+    "moderna", "coherent", "coreweave", "nebius", "applovin", "celestica"
 )
 
 TRADFI_BLACKLIST = {
+    "CLS", "GGLL", "GGLS", "AAPU", "AAPD", "AMZU", "AMZD", "MSFU", "MSFD", "METU", "METD",
+    "NFXL", "NFXS", "PLTU", "PLTD", "AVL", "AVS", "TSMX", "BRKU", "BRKD", "LLYU", "LLYD",
     "RKLB", "APPSTOCK", "APP", "COHR", "NBIS", "CRWV", "MRNA", "MUU", "CBRS",
     "SPCX", "SPCXX", "SNDK", "SNXX", "SKHYNIX", "KORU", "CEG", "AKAM", "USDBRL",
     "OPENAI", "ANTHROPIC", "STRIPE", "DATABRICKS", "DISCORD", "EPIC", "CANVA", "REVOLUT",
