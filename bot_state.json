@@ -771,12 +771,15 @@
         24.2
       ],
       "breakout_alerted": true,
-      "sl_alerted": false,
+      "sl_alerted": true,
       "tp3_completed": false,
       "max_high_price": 0.02867,
       "max_favorable_pct": 4.22,
       "history_backfilled": true,
-      "peak_ts_ms": 1794401104000
+      "peak_ts_ms": 1794401104000,
+      "sl_at": 1794550141,
+      "sl_trigger_price": 0.02583,
+      "hold_minutes": 2483
     },
     "BEAMUSDT": {
       "created_at": 1794404773,
@@ -1244,10 +1247,10 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.001414,
-      "max_favorable_pct": 8.79,
+      "max_high_price": 0.001467,
+      "max_favorable_pct": 12.87,
       "history_backfilled": true,
-      "peak_ts_ms": 1794544440000,
+      "peak_ts_ms": 1794548820000,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -1334,8 +1337,6 @@
     }
   },
   "alert_history": {
-    "CAPUSDT": 1794459004,
-    "KITEUSDT": 1794462603,
     "OPGUSDT": 1794465904,
     "SOPHUSDT": 1794466763,
     "ERAUSDT": 1794471604,
@@ -1385,7 +1386,9 @@
     "BEATUSDT": 1794435904,
     "XCNUSDT": 1794437100,
     "CTUSDT": 1794444604,
-    "QUSDT": 1794446104
+    "QUSDT": 1794446104,
+    "CAPUSDT": 1794459004,
+    "KITEUSDT": 1794462603
   },
   "sl_history": {
     "B2USDT_1794232204": {
@@ -1577,6 +1580,28 @@
       "hold_minutes": 2248,
       "max_high_price": 0.004535,
       "max_favorable_pct": 2.2,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 1.0,
+      "rsi6_15m": 50.0,
+      "kdj_j_15m": 50.0,
+      "oi_m": 0.0,
+      "turnover_m": 0.0,
+      "funding_pct": 0.0,
+      "reasons": []
+    },
+    "SIRENUSDT_1794401104": {
+      "symbol": "SIRENUSDT",
+      "track_type": "TRACK_B",
+      "score": 85,
+      "entry_price": 0.027509126785714287,
+      "stop_price": 0.026408761714285713,
+      "sl_trigger_price": 0.02583,
+      "sl_pct": 4.0,
+      "created_at": 1794401104,
+      "sl_at": 1794550141,
+      "hold_minutes": 2483,
+      "max_high_price": 0.02867,
+      "max_favorable_pct": 4.22,
       "tp1_hit_before_sl": false,
       "vol_mult": 1.0,
       "rsi6_15m": 50.0,
@@ -2245,8 +2270,8 @@
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794550141
     },
     "BEAMUSDT_1794404773": {
       "symbol": "BEAMUSDT",
@@ -2658,7 +2683,7 @@
         0.0014816108399999996,
         0.0016058059520000002
       ],
-      "max_favorable_pct": 8.79,
+      "max_favorable_pct": 12.87,
       "be_armed": false,
       "tp1_hit": true,
       "tp2_hit": false,
