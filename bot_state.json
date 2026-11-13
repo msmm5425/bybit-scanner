@@ -1675,10 +1675,10 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.13119,
-      "max_favorable_pct": 4.08,
+      "max_high_price": 0.13121,
+      "max_favorable_pct": 4.09,
       "history_backfilled": true,
-      "peak_ts_ms": 1794590700000
+      "peak_ts_ms": 1794590940000
     },
     "OPGUSDT": {
       "created_at": 1794465904,
@@ -3202,9 +3202,9 @@
         "OI 수급 동조(OI 0.8M)",
         "음수 펀딩 숏스퀴즈 수급(-0.0015%)"
       ],
-      "max_high_price": 0.0755,
-      "peak_ts_ms": 1794589740000,
-      "max_favorable_pct": 1.92,
+      "max_high_price": 0.07573,
+      "peak_ts_ms": 1794591060000,
+      "max_favorable_pct": 2.23,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3414,7 +3414,7 @@
         "음수 펀딩 숏스퀴즈 수급(-0.1173%)"
       ],
       "max_high_price": 13.177,
-      "peak_ts_ms": 1794589440000,
+      "peak_ts_ms": 1794589740000,
       "max_favorable_pct": 5.82,
       "history_backfilled": true,
       "be_armed": true,
@@ -5526,8 +5526,8 @@
         0.14485948044,
         0.15416135939999995
       ],
-      "max_high_price": 0.13119,
-      "max_favorable_pct": 4.08,
+      "max_high_price": 0.13121,
+      "max_favorable_pct": 4.09,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6952,8 +6952,8 @@
         0.0848216,
         0.08963679999999999
       ],
-      "max_high_price": 0.0755,
-      "max_favorable_pct": 1.92,
+      "max_high_price": 0.07573,
+      "max_favorable_pct": 2.23,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
