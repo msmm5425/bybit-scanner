@@ -190,9 +190,9 @@
         "OI 실수급 유입(OI 181.5M·비중 203%)",
         "음수 펀딩 숏스퀴즈 수급(-0.0003%)"
       ],
-      "max_high_price": 74.108,
-      "peak_ts_ms": 1794578260000,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 74.2,
+      "peak_ts_ms": 1794578400000,
+      "max_favorable_pct": 0.12,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -386,8 +386,11 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794578561,
+      "sl_trigger_price": 0.5902,
+      "hold_minutes": 152
     },
     "PYTHUSDT": {
       "created_at": 1794576397,
@@ -1328,8 +1331,11 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794578561,
+      "sl_trigger_price": 0.1516,
+      "hold_minutes": 26
     },
     "BLUAIUSDT": {
       "created_at": 1794423604,
@@ -1755,10 +1761,10 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.03715,
-      "max_favorable_pct": 3.93,
+      "max_high_price": 0.03722,
+      "max_favorable_pct": 4.12,
       "history_backfilled": true,
-      "peak_ts_ms": 1794472204000
+      "peak_ts_ms": 1794578460000
     },
     "HANAUSDT": {
       "created_at": 1794478203,
@@ -2690,9 +2696,9 @@
         "OI 실수급 유입(OI 2.3M·비중 130%)",
         "음수 펀딩 숏스퀴즈 수급(-0.0036%)"
       ],
-      "max_high_price": 0.03788,
-      "peak_ts_ms": 1794577080000,
-      "max_favorable_pct": 2.3,
+      "max_high_price": 0.0379,
+      "peak_ts_ms": 1794578460000,
+      "max_favorable_pct": 2.35,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3300,9 +3306,9 @@
         "OI 실수급 유입(OI 2.6M·비중 116%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.0384,
-      "peak_ts_ms": 1794578220000,
-      "max_favorable_pct": 0.39,
+      "max_high_price": 0.03841,
+      "peak_ts_ms": 1794578340000,
+      "max_favorable_pct": 0.42,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3351,8 +3357,58 @@
         "OI 실수급 유입(OI 22.7M·비중 159%)",
         "청정 펀딩 수급(+0.0047%)"
       ],
-      "max_high_price": 5.958,
-      "peak_ts_ms": 1794578260000,
+      "max_high_price": 5.965,
+      "peak_ts_ms": 1794578280000,
+      "max_favorable_pct": 0.12,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
+    },
+    "PURRUSDT": {
+      "created_at": 1794578561,
+      "track_type": "TRACK_A",
+      "score": 90,
+      "entry_price": 9.118,
+      "swing_high_line": 9.251,
+      "entry_low": 9.095205,
+      "entry_high": 9.127118,
+      "initial_stop_price": 8.84446,
+      "stop_price": 8.84446,
+      "sl_pct": 3,
+      "tps": [
+        9.84744,
+        10.44011,
+        11.03278
+      ],
+      "tp_pcts": [
+        8.0,
+        14.5,
+        21.0
+      ],
+      "vol_mult": 1.2,
+      "rsi6_15m": 62.6,
+      "kdj_j_15m": 59.9,
+      "oi_m": 0.1375162560200005,
+      "turnover_m": 1.57881606645,
+      "funding_pct": 0.0063,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(0%)",
+        "완전 정배열(5>20>50>112) 지지",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(3.8%)+CVD 강세 다이버전스(저점 스윕 매수흡수)",
+        "이평리본 초밀집 확산(0.6%)",
+        "발화전 거래량 극건조 포켓(3%)",
+        "청정 펀딩 수급(+0.0063%)"
+      ],
+      "max_high_price": 9.118,
+      "peak_ts_ms": 1794578561000,
       "max_favorable_pct": 0.0,
       "history_backfilled": true,
       "be_armed": false,
@@ -3418,6 +3474,7 @@
     "BIRBUSDT": 1794577660,
     "APRUSDT": 1794577960,
     "HYPEUSDT": 1794578260,
+    "UNIUSDT": 1794578260,
     "NEARUSDT": 1794231004,
     "B2USDT": 1794232204,
     "USELESSUSDT": 1794237604,
@@ -3450,7 +3507,7 @@
     "ERAUSDT": 1794471604,
     "PARTIUSDT": 1794472204,
     "HANAUSDT": 1794478203,
-    "UNIUSDT": 1794578260
+    "PURRUSDT": 1794578561
   },
   "sl_history": {
     "B2USDT_1794232204": {
@@ -3672,6 +3729,67 @@
       "turnover_m": 0.0,
       "funding_pct": 0.0,
       "reasons": []
+    },
+    "ETHFIUSDT_1794569389": {
+      "symbol": "ETHFIUSDT",
+      "track_type": "TRACK_A",
+      "score": 92,
+      "entry_price": 0.6113,
+      "stop_price": 0.592961,
+      "sl_trigger_price": 0.5902,
+      "sl_pct": 3.0,
+      "created_at": 1794569389,
+      "sl_at": 1794578561,
+      "hold_minutes": 152,
+      "max_high_price": 0.6187,
+      "max_favorable_pct": 1.21,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 2.2,
+      "rsi6_15m": 61.0,
+      "kdj_j_15m": 70.3,
+      "oi_m": 5.1848691729799965,
+      "turnover_m": 1.97843568457,
+      "funding_pct": -0.0031999999999999997,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(1%)",
+        "바닥 이평리본 수렴 돌파(0.3%)",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "초응축(2.8%)+OBV 선행매집",
+        "이평리본 초밀집 확산(0.3%)",
+        "OI 실수급 유입(OI 5.2M·비중 262%)",
+        "음수 펀딩 숏스퀴즈 수급(-0.0032%)"
+      ]
+    },
+    "PONSUSDT_1794576997": {
+      "symbol": "PONSUSDT",
+      "track_type": "TRACK_A",
+      "score": 96,
+      "entry_price": 0.1563,
+      "stop_price": 0.151611,
+      "sl_trigger_price": 0.1516,
+      "sl_pct": 3.0,
+      "created_at": 1794576997,
+      "sl_at": 1794578561,
+      "hold_minutes": 26,
+      "max_high_price": 0.1569,
+      "max_favorable_pct": 0.38,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 7.8,
+      "rsi6_15m": 62.3,
+      "kdj_j_15m": 52.2,
+      "oi_m": 1.81265565429,
+      "turnover_m": 2.59120789857,
+      "funding_pct": 0.005,
+      "reasons": [
+        "거래량 건조 선취매 포켓(18%)",
+        "유동성 스윕(Spring 아랫꼬리 1.7배) 반전",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(2.6%)+CVD 강세 다이버전스(저점 스윕 매수흡수)",
+        "이평리본 초밀집 확산(0.3%)",
+        "초동수급 폭발(7.8배)",
+        "OI 실수급 유입(OI 1.8M·비중 70%)",
+        "청정 펀딩 수급(+0.0050%)"
+      ]
     }
   },
   "signal_episodes": {
@@ -4989,8 +5107,8 @@
         0.04125706848484848,
         0.044010283039999994
       ],
-      "max_high_price": 0.03715,
-      "max_favorable_pct": 3.93,
+      "max_high_price": 0.03722,
+      "max_favorable_pct": 4.12,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -5440,8 +5558,8 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794578561
     },
     "ONDOUSDT_1794569389": {
       "symbol": "ONDOUSDT",
@@ -5769,8 +5887,8 @@
         0.04239935,
         0.0448063
       ],
-      "max_high_price": 0.03788,
-      "max_favorable_pct": 2.3,
+      "max_high_price": 0.0379,
+      "max_favorable_pct": 2.35,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6246,8 +6364,8 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794578561
     },
     "BIRBUSDT_1794577660": {
       "symbol": "BIRBUSDT",
@@ -6289,8 +6407,8 @@
         0.04379625,
         0.0462825
       ],
-      "max_high_price": 0.0384,
-      "max_favorable_pct": 0.39,
+      "max_high_price": 0.03841,
+      "max_favorable_pct": 0.42,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6315,8 +6433,8 @@
         84.85366,
         89.67068
       ],
-      "max_high_price": 74.108,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 74.2,
+      "max_favorable_pct": 0.12,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6341,7 +6459,33 @@
         6.82191,
         7.20918
       ],
-      "max_high_price": 5.958,
+      "max_high_price": 5.965,
+      "max_favorable_pct": 0.12,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "sl_at": 0
+    },
+    "PURRUSDT_1794578561": {
+      "symbol": "PURRUSDT",
+      "created_at": 1794578561,
+      "track_type": "TRACK_A",
+      "score": 90,
+      "entry_price": 9.118,
+      "initial_stop_price": 8.84446,
+      "stop_price": 8.84446,
+      "sl_pct": 3.0,
+      "tps": [
+        9.84744,
+        10.44011,
+        11.03278
+      ],
+      "max_high_price": 9.118,
       "max_favorable_pct": 0.0,
       "be_armed": false,
       "tp1_hit": false,
