@@ -3180,9 +3180,9 @@
         "OI 수급 동조(OI 0.8M)",
         "음수 펀딩 숏스퀴즈 수급(-0.0015%)"
       ],
-      "max_high_price": 0.07419,
-      "peak_ts_ms": 1794586320000,
-      "max_favorable_pct": 0.15,
+      "max_high_price": 0.07427,
+      "peak_ts_ms": 1794586560000,
+      "max_favorable_pct": 0.26,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -3510,6 +3510,58 @@
       "sl_at": 1794584779,
       "sl_trigger_price": 0.08768,
       "hold_minutes": 34
+    },
+    "INJUSDT": {
+      "created_at": 1794586741,
+      "track_type": "TRACK_A",
+      "score": 95,
+      "entry_price": 8.125,
+      "swing_high_line": 8.278,
+      "entry_low": 8.1046875,
+      "entry_high": 8.133125,
+      "initial_stop_price": 7.88125,
+      "stop_price": 7.88125,
+      "sl_pct": 3,
+      "tps": [
+        8.775,
+        9.303125,
+        9.831249999999999
+      ],
+      "tp_pcts": [
+        8.0,
+        14.5,
+        21.0
+      ],
+      "vol_mult": 3.9,
+      "rsi6_15m": 53.1,
+      "kdj_j_15m": 44.4,
+      "oi_m": 14.804760838800007,
+      "turnover_m": 9.9554570986,
+      "funding_pct": 0.0048000000000000004,
+      "reasons": [
+        "거래량 건조 선취매 포켓(17%)",
+        "바닥 이평리본 수렴 돌파(1.0%)",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(3.8%)+CVD 강세 다이버전스(저점 스윕 매수흡수)",
+        "이평리본 초밀집 확산(1.0%)",
+        "초동수급 폭발(3.9배)",
+        "OI 실수급 유입(OI 14.8M·비중 149%)",
+        "청정 펀딩 수급(+0.0048%)"
+      ],
+      "max_high_price": 8.125,
+      "peak_ts_ms": 1794586741000,
+      "max_favorable_pct": 0.0,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false,
+      "closed_alerted": false
     }
   },
   "alert_history": {
@@ -3568,7 +3620,8 @@
     "PURRUSDT": 1794578561,
     "NUUSDT": 1794581518,
     "HUMAUSDT": 1794584022,
-    "KGENUSDT": 1794582719
+    "KGENUSDT": 1794582719,
+    "INJUSDT": 1794586741
   },
   "sl_history": {
     "B2USDT_1794232204": {
@@ -6794,8 +6847,8 @@
         0.0848216,
         0.08963679999999999
       ],
-      "max_high_price": 0.07419,
-      "max_favorable_pct": 0.15,
+      "max_high_price": 0.07427,
+      "max_favorable_pct": 0.26,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6995,6 +7048,33 @@
       "sl_alerted": true,
       "closed_alerted": true,
       "sl_at": 1794584779
+    },
+    "INJUSDT_1794586741": {
+      "symbol": "INJUSDT",
+      "created_at": 1794586741,
+      "track_type": "TRACK_A",
+      "score": 95,
+      "entry_price": 8.125,
+      "initial_stop_price": 7.88125,
+      "stop_price": 7.88125,
+      "sl_pct": 3.0,
+      "tps": [
+        8.775,
+        9.303125,
+        9.831249999999999
+      ],
+      "max_high_price": 8.125,
+      "max_favorable_pct": 0.0,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
     }
   }
 }
