@@ -15,7 +15,7 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 55
 
     steps:
       - name: 1. 저장소 코드 불러오기
@@ -34,27 +34,56 @@ jobs:
           pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install requests pandas numpy; fi
 
-      - name: 4. 멀티프레임 스캐너 1회 실행 (scanner.py)
+      - name: 4. 5분 주기 연속 멀티프레임 스캔 및 무충돌 상태 저장 (50분간 5분 정각 실행)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: |
-          python scanner.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: 5. 상태 파일(bot_state.json) 무충돌 안전 저장
-        run: |
-          if [ -f bot_state.json ]; then
-            cp bot_state.json /tmp/bot_state_backup.json
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git fetch origin main
-            git reset --hard origin/main
-            mv /tmp/bot_state_backup.json bot_state.json
-            git add bot_state.json
-            if ! git diff --cached --quiet; then
-              git commit -m "chore: update scanner state [skip ci]"
-              git push origin HEAD:main
+          for i in {1..10}; do
+            echo "=== [회차 $i/10] 5분 주기 스캔 시작: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+            LOOP_START=$(date +%s)
+
+            # 1) 실행 전 최신 코드 및 최신 bot_state.json 동기화 (웹 코드 수정 시에도 충돌 0%)
+            if [ -f bot_state.json ]; then
+              cp bot_state.json /tmp/bot_state_backup.json
             fi
-          fi
+            git fetch origin main || true
+            git reset --hard origin/main || true
+            if [ -f /tmp/bot_state_backup.json ]; then
+              mv /tmp/bot_state_backup.json bot_state.json
+            fi
+
+            # 2) 스캐너 실행
+            python scanner.py || echo "[경고] scanner.py 실행 중 일시 예외 발생"
+
+            # 3) 변경된 bot_state.json 즉시 원격 저장
+            if [ -f bot_state.json ]; then
+              cp bot_state.json /tmp/bot_state_backup.json
+              git fetch origin main || true
+              git reset --hard origin/main || true
+              mv /tmp/bot_state_backup.json bot_state.json
+              git add bot_state.json
+              if ! git diff --cached --quiet; then
+                git commit -m "chore: update scanner state [skip ci]" || true
+                git push origin HEAD:main || true
+              fi
+            fi
+
+            # 4) 마지막 회차가 아니면 정확히 다음 5분(300초)까지 남은 시간만큼 대기
+            if [ "$i" -lt 10 ]; then
+              NOW=$(date +%s)
+              ELAPSED=$((NOW - LOOP_START))
+              SLEEP_SEC=$((300 - ELAPSED))
+              if [ "$SLEEP_SEC" -gt 5 ]; then
+                echo "다음 5분 스캔까지 ${SLEEP_SEC}초 대기..."
+                sleep "$SLEEP_SEC"
+              else
+                sleep 5
+              fi
+            fi
+          done
