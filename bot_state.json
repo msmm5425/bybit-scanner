@@ -440,8 +440,11 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794583421,
+      "sl_trigger_price": 0.06363,
+      "hold_minutes": 117
     },
     "AVAXUSDT": {
       "created_at": 1794253504,
@@ -3114,8 +3117,11 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794583421,
+      "sl_trigger_price": 0.4249,
+      "hold_minutes": 112
     },
     "XAUTUSDT": {
       "created_at": 1794576997,
@@ -3216,8 +3222,11 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": false,
+      "sl_at": 1794583421,
+      "sl_trigger_price": 0.4061,
+      "hold_minutes": 107
     },
     "BIRBUSDT": {
       "created_at": 1794577660,
@@ -4012,6 +4021,99 @@
         "이평리본 초밀집 확산(0.6%)",
         "발화전 거래량 극건조 포켓(3%)",
         "청정 펀딩 수급(+0.0063%)"
+      ]
+    },
+    "PYTHUSDT_1794576397": {
+      "symbol": "PYTHUSDT",
+      "track_type": "TRACK_B",
+      "score": 98,
+      "entry_price": 0.06569,
+      "stop_price": 0.06371929999999999,
+      "sl_trigger_price": 0.06363,
+      "sl_pct": 3.0,
+      "created_at": 1794576397,
+      "sl_at": 1794583421,
+      "hold_minutes": 117,
+      "max_high_price": 0.0668,
+      "max_favorable_pct": 1.69,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 3.2,
+      "rsi6_15m": 50.5,
+      "kdj_j_15m": 86.5,
+      "oi_m": 3.2145351055900004,
+      "turnover_m": 2.59185275862,
+      "funding_pct": 0.0043,
+      "reasons": [
+        "전고점 S/R Flip 칼지지(오차 0.30%/눌림거래량 5%)",
+        "바닥 이평리본 수렴 돌파(0.1%)",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "초응축(1.1%)+OBV 선행매집",
+        "이평리본 초밀집 확산(0.1%)",
+        "초동수급 폭발(3.2배)",
+        "OI 실수급 유입(OI 3.2M·비중 124%)",
+        "청정 펀딩 수급(+0.0043%)"
+      ]
+    },
+    "GRASSUSDT_1794576697": {
+      "symbol": "GRASSUSDT",
+      "track_type": "TRACK_B",
+      "score": 98,
+      "entry_price": 0.4401,
+      "stop_price": 0.42689699999999997,
+      "sl_trigger_price": 0.4249,
+      "sl_pct": 3.0,
+      "created_at": 1794576697,
+      "sl_at": 1794583421,
+      "hold_minutes": 112,
+      "max_high_price": 0.4471,
+      "max_favorable_pct": 1.59,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 8.4,
+      "rsi6_15m": 57.6,
+      "kdj_j_15m": 75.5,
+      "oi_m": 4.85160449536,
+      "turnover_m": 1.62552653663,
+      "funding_pct": 0.005,
+      "reasons": [
+        "포켓피벗 초동양봉 직격(직전거래량 8% 건조 후 8.4배 발화)",
+        "바닥 이평리본 수렴 돌파(0.7%)",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(2.0%)+CVD 강세 다이버전스(저점 스윕 매수흡수)",
+        "이평리본 초밀집 확산(0.7%)",
+        "초동수급 폭발(8.4배)",
+        "OI 실수급 유입(OI 4.9M·비중 298%)",
+        "청정 펀딩 수급(+0.0050%)"
+      ]
+    },
+    "TIAUSDT_1794576997": {
+      "symbol": "TIAUSDT",
+      "track_type": "TRACK_A",
+      "score": 98,
+      "entry_price": 0.4206,
+      "stop_price": 0.40798199999999996,
+      "sl_trigger_price": 0.4061,
+      "sl_pct": 3.0,
+      "created_at": 1794576997,
+      "sl_at": 1794583421,
+      "hold_minutes": 107,
+      "max_high_price": 0.4235,
+      "max_favorable_pct": 0.69,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 5.8,
+      "rsi6_15m": 69.7,
+      "kdj_j_15m": 62.1,
+      "oi_m": 3.7129681983499996,
+      "turnover_m": 4.29306494858,
+      "funding_pct": 0.004699999999999999,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(6%)",
+        "바닥 이평리본 수렴 돌파(0.3%)",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(2.8%)+CVD 강세 다이버전스(저점 스윕 매수흡수)",
+        "이평리본 초밀집 확산(0.3%)",
+        "초동수급 폭발(5.8배)",
+        "OI 실수급 유입(OI 3.7M·비중 86%)",
+        "청정 펀딩 수급(+0.0047%)"
       ]
     }
   },
@@ -6457,8 +6559,8 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794583421
     },
     "PAXGUSDT_1794576697": {
       "symbol": "PAXGUSDT",
@@ -6509,8 +6611,8 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794583421
     },
     "XAUTUSDT_1794576997": {
       "symbol": "XAUTUSDT",
@@ -6561,8 +6663,8 @@
       "tp2_alerted": false,
       "tp3_alerted": false,
       "tp3_completed": false,
-      "sl_alerted": false,
-      "sl_at": 0
+      "sl_alerted": true,
+      "sl_at": 1794583421
     },
     "PONSUSDT_1794576997": {
       "symbol": "PONSUSDT",
