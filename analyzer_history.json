@@ -206,13 +206,13 @@
     },
     {
       "date_str": "2026-11-13",
-      "timestamp": 1794535910,
+      "timestamp": 1794537213,
       "coins": [
         {
           "symbol": "BARDUSDT",
-          "ign_price": 0.0845,
-          "support_line": 0.0835,
-          "swing_high_line": 0.0845
+          "ign_price": 0.0903,
+          "support_line": 0.0853,
+          "swing_high_line": 0.0905
         },
         {
           "symbol": "MAGMAUSDT",
@@ -221,22 +221,22 @@
           "swing_high_line": 0.30709
         },
         {
-          "symbol": "CLSUSDT",
-          "ign_price": 244.8,
-          "support_line": 234.0,
-          "swing_high_line": 244.8
-        },
-        {
-          "symbol": "GGLLUSDT",
-          "ign_price": 70.17,
-          "support_line": 67.91,
-          "swing_high_line": 70.17
-        },
-        {
           "symbol": "TIAUSDT",
-          "ign_price": 0.4069,
-          "support_line": 0.3974,
-          "swing_high_line": 0.4102
+          "ign_price": 0.4039,
+          "support_line": 0.3988,
+          "swing_high_line": 0.4045
+        },
+        {
+          "symbol": "AKEUSDT",
+          "ign_price": 0.0027787,
+          "support_line": 0.002571,
+          "swing_high_line": 0.0027974
+        },
+        {
+          "symbol": "APRUSDT",
+          "ign_price": 0.03573,
+          "support_line": 0.035,
+          "swing_high_line": 0.03576
         }
       ]
     }
