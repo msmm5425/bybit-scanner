@@ -2,7 +2,6 @@ import os
 import sys
 import json
 import time
-import inspect
 import requests
 import numpy as np
 import pandas as pd
@@ -16,7 +15,9 @@ try:
     KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
     BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
     is_tradfi_ticker = getattr(cfg, "is_tradfi_ticker", lambda x: False)
-except Exception:
+    NON_CRYPTO_META_KEYWORDS = getattr(cfg, "NON_CRYPTO_META_KEYWORDS", ())
+except Exception as e:
+    print(f"[설정 로드 경고] config.py 기본값 대체: {e}")
     cfg = None
     TELEGRAM_BOT_TOKEN = ""
     TELEGRAM_CHAT_ID = ""
@@ -24,15 +25,18 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0"}
     is_tradfi_ticker = lambda x: False
+    NON_CRYPTO_META_KEYWORDS = ()
 
 try:
     import api as api_mod
-except Exception:
+except Exception as e:
+    print(f"[모듈 로드 안내] api.py 미사용: {e}")
     api_mod = None
 
 try:
     import notifier as notifier_mod
-except Exception:
+except Exception as e:
+    print(f"[모듈 로드 안내] notifier.py 미사용: {e}")
     notifier_mod = None
 
 if not TELEGRAM_BOT_TOKEN:
@@ -50,6 +54,17 @@ if not TELEGRAM_CHAT_ID:
     ).strip()
 
 HISTORY_FILE = "analyzer_history.json"
+
+
+def check_required_secrets():
+    """IDE 권고 반영: 시작 시 텔레그램 환경변수 누락 여부 즉시 검증"""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print(
+            "[경고] TELEGRAM_TOKEN 또는 TELEGRAM_CHAT_ID 환경변수가 설정되지 않았습니다. "
+            "GitHub Settings -> Secrets 설정을 확인하세요."
+        )
+        return False
+    return True
 
 
 def to_float(value, default=0.0):
@@ -90,6 +105,7 @@ def fmt_price(price):
 
 
 def _normalize_kline_df(raw, expected_interval_min=None):
+    """거래소별 오름차순/내림차순 차이를 타임스탬프 기준 오름차순(과거->최신)으로 강제 정렬 및 간격 검증"""
     df = pd.DataFrame()
     if isinstance(raw, pd.DataFrame) and not raw.empty:
         df = raw.copy()
@@ -133,7 +149,7 @@ def _normalize_kline_df(raw, expected_interval_min=None):
             if ts.max() < 1e11:
                 ts = ts * 1000.0
             df["timestamp"] = ts
-            df = df.sort_values("timestamp")
+            df = df.sort_values("timestamp", ascending=True)
             if expected_interval_min is not None and len(df) >= 5:
                 median_diff_sec = df["timestamp"].diff().median() / 1000.0
                 target_sec = expected_interval_min * 60.0
@@ -144,23 +160,11 @@ def _normalize_kline_df(raw, expected_interval_min=None):
 
 
 def fetch_klines(symbol, interval="5", limit=180):
+    """
+    IDE 권고 반영: 느린 무료 웹 프록시(allorigins 등)를 거치지 않고
+    GitHub Actions 미국 서버에서 무차단 직통 연결되는 거래소 API를 1순위로 호출
+    """
     iv_min = int(interval)
-    if api_mod is not None:
-        excluded = {
-            "get_scanner_candidates", "fetch_verified_1m_klines",
-            "to_float", "is_tradfi_ticker", "strip_multiplier_prefix", "strip_tokenized_suffix",
-        }
-        for name, fn in inspect.getmembers(api_mod, inspect.isfunction):
-            if name in excluded or name.startswith("_") or fn.__module__ != api_mod.__name__:
-                continue
-            for args in [(symbol, str(interval), int(limit)), (symbol, int(interval), int(limit))]:
-                try:
-                    df = _normalize_kline_df(fn(*args), expected_interval_min=iv_min)
-                    if not df.empty and len(df) >= 20:
-                        return df
-                except Exception:
-                    continue
-
     base = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
     clean_base = base
     for prefix in ("1000000", "100000", "10000", "1000", "100"):
@@ -168,17 +172,7 @@ def fetch_klines(symbol, interval="5", limit=180):
             clean_base = clean_base[len(prefix):]
             break
 
-    bybit_params = {"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)}
-    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com", "https://api.bybit.com"):
-        try:
-            resp = requests.get(f"{host}/v5/market/kline", params=bybit_params, headers=BROWSER_HEADERS, timeout=5)
-            if resp.status_code == 200:
-                df = _normalize_kline_df(resp.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 20:
-                    return df
-        except Exception:
-            pass
-
+    # 1순위: Gate.io 선물 직통 API (미국 러너 무차단, 응답 0.1~0.2초)
     gate_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h", 240: "4h"}.get(iv_min, "5m")
     for contract in (f"{base}_USDT", f"{clean_base}_USDT"):
         try:
@@ -186,15 +180,16 @@ def fetch_klines(symbol, interval="5", limit=180):
                 "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
                 params={"contract": contract, "interval": gate_iv, "limit": int(limit)},
                 headers=BROWSER_HEADERS,
-                timeout=5,
+                timeout=4,
             )
             if resp.status_code == 200:
                 df = _normalize_kline_df(resp.json(), expected_interval_min=iv_min)
                 if not df.empty and len(df) >= 20:
                     return df
-        except Exception:
+        except requests.RequestException:
             pass
 
+    # 2순위: Bitget 선물 직통 API (미국 러너 무차단)
     bg_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1H", 240: "4H"}.get(iv_min, "5m")
     for bg_sym in (symbol, f"{clean_base}USDT"):
         try:
@@ -202,23 +197,83 @@ def fetch_klines(symbol, interval="5", limit=180):
                 "https://api.bitget.com/api/v2/mix/market/candles",
                 params={"symbol": bg_sym, "productType": "USDT-FUTURES", "granularity": bg_iv, "limit": str(limit)},
                 headers=BROWSER_HEADERS,
-                timeout=5,
+                timeout=4,
             )
             if resp.status_code == 200:
                 df = _normalize_kline_df(resp.json().get("data", []), expected_interval_min=iv_min)
                 if not df.empty and len(df) >= 20:
                     return df
-        except Exception:
+        except requests.RequestException:
             pass
 
+    # 3순위: Bybit 공식 글로벌 미러 (프록시 없이 직접 호출)
+    bybit_params = {"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)}
+    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com"):
+        try:
+            resp = requests.get(f"{host}/v5/market/kline", params=bybit_params, headers=BROWSER_HEADERS, timeout=4)
+            if resp.status_code == 200:
+                df = _normalize_kline_df(resp.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
+                if not df.empty and len(df) >= 20:
+                    return df
+        except requests.RequestException:
+            pass
+
+    # 4순위: MEXC 선물 직통 API (중소형 신규 상장 코인 백업)
+    mexc_iv = {1: "Min1", 5: "Min5", 15: "Min15", 60: "Min60"}.get(iv_min, "Min5")
+    for m_sym in (f"{base}_USDT", f"{clean_base}_USDT"):
+        try:
+            resp = requests.get(
+                f"https://contract.mexc.com/api/v1/contract/kline/{m_sym}",
+                params={"interval": mexc_iv},
+                headers=BROWSER_HEADERS,
+                timeout=4,
+            )
+            if resp.status_code == 200:
+                d = resp.json().get("data", {})
+                if isinstance(d, dict) and d.get("close"):
+                    df = pd.DataFrame({
+                        "timestamp": pd.to_numeric(d.get("time", []), errors="coerce") * 1000.0,
+                        "open": pd.to_numeric(d.get("open", []), errors="coerce"),
+                        "high": pd.to_numeric(d.get("high", []), errors="coerce"),
+                        "low": pd.to_numeric(d.get("low", []), errors="coerce"),
+                        "close": pd.to_numeric(d.get("close", []), errors="coerce"),
+                        "volume": pd.to_numeric(d.get("vol", []), errors="coerce"),
+                    })
+                    df = _normalize_kline_df(df.iloc[-int(limit):], expected_interval_min=iv_min)
+                    if not df.empty and len(df) >= 20:
+                        return df
+        except requests.RequestException:
+            pass
+
+    # 5순위: Binance Data Vision (미국 공식 허용 엔드포인트)
+    bn_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h"}.get(iv_min, "5m")
+    for bn_sym in (symbol, f"{clean_base}USDT"):
+        try:
+            resp = requests.get(
+                "https://data-api.binance.vision/api/v3/klines",
+                params={"symbol": bn_sym, "interval": bn_iv, "limit": int(limit)},
+                headers=BROWSER_HEADERS,
+                timeout=4,
+            )
+            if resp.status_code == 200:
+                rows = resp.json()
+                if isinstance(rows, list) and len(rows) >= 20:
+                    df = pd.DataFrame([r[:6] for r in rows], columns=["timestamp", "open", "high", "low", "close", "volume"])
+                    df = _normalize_kline_df(df, expected_interval_min=iv_min)
+                    if not df.empty:
+                        return df
+        except requests.RequestException:
+            pass
+
+    print(f"[캔들 수집 실패] {symbol} (interval={interval}m): 모든 직통 거래소 엔드포인트 응답 없음")
     return pd.DataFrame()
 
 
 def enrich_ticker_metrics(candidates):
     ticker_map = {}
-    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com", "https://api.bybit.com"):
+    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com"):
         try:
-            r = requests.get(f"{host}/v5/market/tickers", params={"category": "linear"}, headers=BROWSER_HEADERS, timeout=6)
+            r = requests.get(f"{host}/v5/market/tickers", params={"category": "linear"}, headers=BROWSER_HEADERS, timeout=5)
             if r.status_code == 200:
                 items = r.json().get("result", {}).get("list", [])
                 if items:
@@ -230,28 +285,27 @@ def enrich_ticker_metrics(candidates):
                             "funding_pct": to_float(it.get("fundingRate")) * 100.0,
                         }
                     break
-        except Exception:
+        except requests.RequestException:
             pass
 
     gate_map = {}
-    if not ticker_map:
-        try:
-            r = requests.get("https://api.gateio.ws/api/v4/futures/usdt/tickers", headers=BROWSER_HEADERS, timeout=6)
-            if r.status_code == 200:
-                for it in r.json():
-                    sym = str(it.get("contract", "")).replace("_", "")
-                    vol_usd_m = to_float(it.get("volume_24h_settle") or it.get("volume_24h_quote")) / 1e6
-                    mark_p = to_float(it.get("mark_price") or it.get("last"))
-                    quanto = to_float(it.get("quanto_multiplier"), 1.0)
-                    total_size = to_float(it.get("total_size"))
-                    oi_usd_m = (total_size * quanto * mark_p) / 1e6 if quanto > 0 else 0.0
-                    gate_map[sym] = {
-                        "turnover_m": vol_usd_m,
-                        "oi_m": oi_usd_m,
-                        "funding_pct": to_float(it.get("funding_rate")) * 100.0,
-                    }
-        except Exception:
-            pass
+    try:
+        r = requests.get("https://api.gateio.ws/api/v4/futures/usdt/tickers", headers=BROWSER_HEADERS, timeout=5)
+        if r.status_code == 200:
+            for it in r.json():
+                sym = str(it.get("contract", "")).replace("_", "")
+                vol_usd_m = to_float(it.get("volume_24h_settle") or it.get("volume_24h_quote")) / 1e6
+                mark_p = to_float(it.get("mark_price") or it.get("last"))
+                quanto = to_float(it.get("quanto_multiplier"), 1.0)
+                total_size = to_float(it.get("total_size"))
+                oi_usd_m = (total_size * quanto * mark_p) / 1e6 if quanto > 0 else 0.0
+                gate_map[sym] = {
+                    "turnover_m": vol_usd_m,
+                    "oi_m": oi_usd_m,
+                    "funding_pct": to_float(it.get("funding_rate")) * 100.0,
+                }
+    except requests.RequestException:
+        pass
 
     for c in candidates:
         sym = c.get("symbol", "")
@@ -289,6 +343,10 @@ def enrich_ticker_metrics(candidates):
 
 
 def fetch_top_gainer_candidates():
+    """
+    1순위: api.get_scanner_candidates() 호출
+    2순위(자체 폴백): api.py의 프록시나 코인게코가 실패할 경우 직통 거래소 티커에서 순수 코인 상승률 상위 추출
+    """
     if api_mod is not None and hasattr(api_mod, "get_scanner_candidates"):
         try:
             res = api_mod.get_scanner_candidates()
@@ -296,7 +354,43 @@ def fetch_top_gainer_candidates():
             if isinstance(cands, list) and len(cands) > 0:
                 return enrich_ticker_metrics(cands)
         except Exception as e:
-            print(f"[get_scanner_candidates 예외] {e}")
+            print(f"[api.get_scanner_candidates 실패 -> 직통 폴백 전환] {e}")
+
+    # 자체 직통 폴백 (프록시 무관, Bitget + Gate.io 교차 검증된 순수 코인 선물 티커)
+    try:
+        bg_resp = requests.get(
+            "https://api.bitget.com/api/v2/mix/market/tickers",
+            params={"productType": "USDT-FUTURES"},
+            headers=BROWSER_HEADERS,
+            timeout=6,
+        )
+        if bg_resp.status_code == 200:
+            items = bg_resp.json().get("data", [])
+            fallback_cands = []
+            for it in items:
+                sym = str(it.get("symbol", ""))
+                if not sym.endswith("USDT"):
+                    continue
+                base = sym[:-4].upper()
+                if is_tradfi_ticker(base):
+                    continue
+                turnover_m = to_float(it.get("usdtVolume") or it.get("quoteVolume")) / 1e6
+                if turnover_m < 2.0:
+                    continue
+                fallback_cands.append({
+                    "symbol": sym,
+                    "base_coin": base,
+                    "price": to_float(it.get("lastPr")),
+                    "change_24h": to_float(it.get("change24h")) * 100.0,
+                    "turnover_m": turnover_m,
+                    "oi_m": to_float(it.get("holdingAmount")) * to_float(it.get("lastPr")) / 1e6,
+                    "funding_pct": to_float(it.get("fundingRate")) * 100.0,
+                })
+            if fallback_cands:
+                return enrich_ticker_metrics(fallback_cands)
+    except Exception as e:
+        print(f"[자체 폴백 후보군 조회 오류] {e}")
+
     return []
 
 
@@ -326,8 +420,8 @@ def send_telegram_chunked(text):
                 sent_any = True
                 time.sleep(0.4)
                 continue
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[notifier.send_telegram_single 예외] {e}")
 
         if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -340,6 +434,8 @@ def send_telegram_chunked(text):
                 if resp.status_code == 200:
                     sent_any = True
                     time.sleep(0.4)
+                else:
+                    print(f"[텔레그램 전송 실패] HTTP {resp.status_code}: {resp.text}")
             except Exception as e:
                 print(f"[텔레그램 전송 예외] {e}")
 
@@ -410,8 +506,8 @@ def load_json_file(path, default_val):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[JSON 로드 경고] {path}: {e}")
     return default_val
 
 
@@ -427,10 +523,11 @@ def save_json_file(path, data):
 # [1. 전문가급 급등 Top 5 초동 발화점 심층 역추적 엔진]
 # =====================================================================
 def reverse_engineer_top_coin(coin, now_ts):
+    symbol = coin.get("symbol", "UNKNOWN")
     try:
-        symbol = coin["symbol"]
         df_5m = fetch_klines(symbol, "5", limit=180)
         if df_5m is None or df_5m.empty or len(df_5m) < 25:
+            print(f"[분석 제외] {symbol}: 5분봉 데이터 부족 ({0 if df_5m is None else len(df_5m)}개)")
             return None
 
         df_1h = fetch_klines(symbol, "60", limit=75)
@@ -651,12 +748,12 @@ def reverse_engineer_top_coin(coin, now_ts):
             "swing_high_line": ign_high,
         }
     except Exception as e:
-        print(f"[종목 분석 예외] {coin.get('symbol')}: {e}")
+        print(f"[종목 역추적 오류] {symbol}: {type(e).__name__} - {e}")
         return None
 
 
 # =====================================================================
-# [2. 내 스캐너 알림 종목 오답 노트 (15분봉 50시간 범위로 실제 익절·최고수익 완벽 복원)]
+# [2. 내 스캐너 알림 종목 오답 노트 (15분봉 50시간 범위로 실제 익절·최고수익 복원)]
 # =====================================================================
 def analyze_scanner_sl_postmortem(now_ts):
     state = load_json_file(STATE_FILE, {"tracked": {}, "sl_history": {}})
@@ -963,7 +1060,6 @@ def evaluate_48h_history(history_list, now_ts):
         ign_p = to_float(item.get("ign_price") or item.get("ignition_price") or item.get("entry_price") or item.get("price"))
         ign_ts = int(item.get("timestamp_ms", int(target_snap.get("timestamp", now_ts - 172800)) * 1000))
 
-        # 3~5일 전 코호트도 발화 직후 고점을 놓치지 않도록 1시간봉 200개(8.3일 범위) 조회
         df_1h = fetch_klines(sym, "60", limit=200)
         if df_1h is None or df_1h.empty or ign_p <= 0:
             continue
@@ -992,13 +1088,14 @@ def evaluate_48h_history(history_list, now_ts):
 
 
 def main():
+    check_required_secrets()
     now_ts = int(time.time())
     now_dt = datetime.now(KST)
     now_str = now_dt.strftime("%Y-%m-%d %H:%M KST")
 
     candidates = fetch_top_gainer_candidates()
     if not candidates:
-        print("[알림] Top 5 후보군 조회 실패")
+        print("[치명적 오류] Top 5 후보군 조회 실패 (모든 엔드포인트 응답 없음)")
         sys.exit(1)
 
     candidates.sort(
@@ -1015,7 +1112,7 @@ def main():
             break
 
     if not analyzed_top5:
-        print("[알림] 상위 종목 캔들 분석 결과 없음")
+        print("[치명적 오류] 상위 종목 캔들 분석 결과 없음")
         sys.exit(1)
 
     num_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
