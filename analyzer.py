@@ -65,41 +65,18 @@ def _normalize_df(raw, expected_interval_min=None):
 
 
 def fetch_klines(symbol, interval="5", limit=150):
-    iv_min = int(interval)
-    if api_mod is not None:
-        excluded = {
-            "get_scanner_candidates", "fetch_verified_1m_klines",
-            "to_float", "is_tradfi_ticker", "strip_multiplier_prefix", "strip_tokenized_suffix",
-        }
-        for name, fn in inspect.getmembers(api_mod, inspect.isfunction):
-            if name in excluded or name.startswith("_") or fn.__module__ != api_mod.__name__:
-                continue
-            for args in [(symbol, str(interval), int(limit)), (symbol, int(interval), int(limit))]:
-                try:
-                    df = _normalize_df(fn(*args), expected_interval_min=iv_min)
-                    if not df.empty and len(df) >= 20:
-                        return df
-                except Exception:
-                    continue
+    if api_mod is not None and hasattr(api_mod, "fetch_klines"):
+        try:
+            df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
+            if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= 20:
+                return df
+        except Exception:
+            pass
 
+    iv_min = int(interval)
     headers = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
     base = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
     clean_base = cfg.strip_multiplier_prefix(base)
-
-    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com", "https://api.bybit.com"):
-        try:
-            r = requests.get(
-                f"{host}/v5/market/kline",
-                params={"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)},
-                headers=headers,
-                timeout=5,
-            )
-            if r.status_code == 200:
-                df = _normalize_df(r.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 20:
-                    return df
-        except Exception:
-            pass
 
     gate_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h", 240: "4h"}.get(iv_min, "5m")
     for contract in (f"{base}_USDT", f"{clean_base}_USDT"):
@@ -208,7 +185,14 @@ def get_btc_market_regime():
 
 def analyze_symbol(coin):
     symbol = coin["symbol"]
+    base_coin = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
     to_float = cfg.to_float
+
+    # [오답노트 처방]: $SOL, $XRP, $XLM, $ETH 등 무거운 초대형 시총 코인은 단기 +8~20% 급등 탄력이 없으므로 즉시 배제
+    if cfg.is_tradfi_ticker(base_coin):
+        return None
+    if hasattr(cfg, "is_heavy_major_coin") and cfg.is_heavy_major_coin(base_coin):
+        return None
 
     df_5m = fetch_klines(symbol, "5", limit=150)
     if df_5m.empty or len(df_5m) < 60:
@@ -277,7 +261,7 @@ def analyze_symbol(coin):
     if bb_mid_ext_pct > allowed_bb_ext:
         return None
 
-    # 4. 1H 상위프레임 구조적 지지 확인 (오답 노트 처방: 수급 둔화 종목 원천 차단)
+    # 4. 1H 상위프레임 구조적 지지 확인
     ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
     ema20_1h = to_float(df_1h["close"].ewm(span=20, adjust=False).mean().iloc[-1], close)
     htf_support_ok = (close >= ma20_1h * 0.992) or (close >= ema20_1h * 0.992)
@@ -395,18 +379,18 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 3) 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지
+    # 3) 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지 (13:48 리포트 Top 5 중 4종목 적중 핵심 알파)
     fvg_mid_line = (ignition_open + ignition_high) * 0.5
     cond_fvg_mid_hold = (
         (not is_current_ignition)
-        and (close > prev_box_high)
+        and (close >= prev_box_high * 0.995)
         and (breakout_diff_pct <= cfg.EARLY_BREAKOUT_MAX_PCT)
         and (pullback_low >= fvg_mid_line * 0.998)
-        and (pullback_vol_ratio <= cfg.PULLBACK_DRYUP_MAX)
+        and (pullback_vol_ratio <= 0.35)
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 4) 포켓 피벗(Pocket Pivot) 초동 양봉 직격 (08:21 Top 5 중 3종목 적중 핵심 전략)
+    # 4) 포켓 피벗(Pocket Pivot) 초동 양봉 직격
     cond_pocket_pivot = (
         is_current_ignition
         and (close > open_p)
@@ -461,7 +445,7 @@ def analyze_symbol(coin):
         score += 15
         reasons.append("완전 정배열(5>20>50>112) 지지")
     elif ma_short_aligned:
-        score += 13
+        score += 14
         reasons.append("단기 정배열(5>20>50) 지지")
     elif cond_spring:
         score += 14
@@ -527,7 +511,6 @@ def analyze_symbol(coin):
     if score < active_threshold:
         return None
 
-    # 오답 노트($Q 스탑헌팅 후 +5.1% 반등) 처방 반영: ATR 버퍼 1.45배 및 최소 손절폭 -3% 보장
     atr_val = to_float(atr_5m.iloc[-1], close * 0.008)
     support_line = max(prev_box_low, min(ma50, ignition_low))
     swing_high_line = max(prev_box_high, ignition_high)
@@ -566,7 +549,7 @@ def analyze_symbol(coin):
 
     return {
         "symbol": symbol,
-        "base_coin": symbol.replace("USDT", ""),
+        "base_coin": base_coin,
         "track_type": track_type,
         "track_title": "🚀 [2차 돌파/리테스트 타점 포착]" if track_type == "TRACK_B" else "🟢 [1차 선취매/눌림 타점 포착]",
         "score": score,
