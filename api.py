@@ -18,6 +18,24 @@ BYBIT_DIRECT_HOSTS = (
     "https://api.bybit.com",
 )
 
+# $EWY, $AAOI 등 선물 마켓에 상장된 해외 주식/국가별 ETF 추가 차단 목록
+EXTRA_TRADFI_TICKERS = {
+    "EWY", "AAOI", "EWJ", "EWZ", "EWT", "EWG", "EWU", "EWC", "EWA", "EWH",
+    "EWS", "EWW", "EWL", "EWP", "EWQ", "EWI", "EWD", "EWN", "EWK", "EWO",
+    "INDA", "MCHI", "ASHR", "YINN", "YANG", "CWEB", "DIREXION", "PROSHARES",
+    "IONQ", "RGTI", "QBTS", "QUBT", "SOUN", "HIMS", "TEM", "ALAB", "ASTS",
+    "LUNR", "SERV", "OKLO", "SMR", "VST", "TLN", "DELL", "HPE", "HPQ",
+    "ANET", "CLS", "GGLL", "GGLS", "SKDD", "SKLL", "FN", "LITE", "CIEN",
+}
+
+
+def _is_blocked_ticker(base_coin):
+    b1 = base_coin.upper()
+    b2 = strip_multiplier_prefix(b1)
+    if b1 in EXTRA_TRADFI_TICKERS or b2 in EXTRA_TRADFI_TICKERS:
+        return True
+    return is_tradfi_ticker(b1) or is_tradfi_ticker(b2)
+
 
 def _normalize_funding(val):
     v = to_float(val, 0.0)
@@ -60,7 +78,6 @@ def _fetch_bybit_tickers():
                             "openInterestValue": to_float(it.get("openInterestValue")),
                             "funding_pct": _normalize_funding(f_rate * 100.0),
                             "fundingRate": f_rate,
-                            "has_funding": (f_raw not in (None, "", "0", "0.0", "0.000000") and abs(f_rate) > 1e-8),
                         }
                     if out:
                         return out
@@ -92,8 +109,7 @@ def _fetch_gate_tickers():
                 total_size = to_float(it.get("total_size"))
                 oi_usd = (total_size * quanto * price) if quanto > 0 else 0.0
                 chg_pct = to_float(it.get("change_percentage"))
-                f_raw = it.get("funding_rate")
-                f_rate = to_float(f_raw, 0.0)
+                f_rate = to_float(it.get("funding_rate"), 0.0)
                 out[sym] = {
                     "symbol": sym,
                     "base_coin": base,
@@ -106,7 +122,6 @@ def _fetch_gate_tickers():
                     "openInterestValue": oi_usd,
                     "funding_pct": _normalize_funding(f_rate * 100.0),
                     "fundingRate": f_rate,
-                    "has_funding": (f_raw not in (None, "", "0", "0.0") and abs(f_rate) > 1e-8),
                 }
     except requests.RequestException as e:
         print(f"[Gate 티커 조회 경고] {e}")
@@ -134,8 +149,7 @@ def _fetch_bitget_tickers():
                 vol_usd = to_float(it.get("usdtVolume") or it.get("quoteVolume"))
                 oi_usd = to_float(it.get("holdingAmount")) * price
                 chg_raw = to_float(it.get("change24h"))
-                f_raw = it.get("fundingRate")
-                f_rate = to_float(f_raw, 0.0)
+                f_rate = to_float(it.get("fundingRate"), 0.0)
                 out[sym] = {
                     "symbol": sym,
                     "base_coin": base,
@@ -148,7 +162,6 @@ def _fetch_bitget_tickers():
                     "openInterestValue": oi_usd,
                     "funding_pct": _normalize_funding(f_rate * 100.0),
                     "fundingRate": f_rate,
-                    "has_funding": (f_raw not in (None, "", "0", "0.0") and abs(f_rate) > 1e-8),
                 }
     except requests.RequestException as e:
         print(f"[Bitget 티커 조회 경고] {e}")
@@ -156,8 +169,13 @@ def _fetch_bitget_tickers():
 
 
 def _fetch_spot_pure_crypto_bases():
-    """Binance Vision, OKX, Gate.io 현물 마켓에 상장된 진짜 암호화폐 심볼 수집 ($CLS, $GGLL 등 주식/ETF 배제)"""
+    """
+    오직 순수 암호화폐 현물 마켓(Binance Spot, OKX Spot, Bitget Spot) 및
+    CoinPaprika 암호화폐 도감에 등재된 심볼만 수집 ($EWY, $AAOI, $CLS, $SKDD 등 주식/ETF 완벽 차단)
+    """
     pure_bases = set()
+
+    # 1. Binance Spot
     try:
         r = requests.get("https://data-api.binance.vision/api/v3/ticker/price", headers=BROWSER_HEADERS, timeout=4)
         if r.status_code == 200:
@@ -168,6 +186,7 @@ def _fetch_spot_pure_crypto_bases():
     except requests.RequestException:
         pass
 
+    # 2. OKX Spot
     try:
         r = requests.get(
             "https://www.okx.com/api/v5/market/tickers",
@@ -183,18 +202,33 @@ def _fetch_spot_pure_crypto_bases():
     except requests.RequestException:
         pass
 
+    # 3. Bitget Spot (토큰화 주식이 없는 순수 코인 현물 마켓)
     try:
         r = requests.get(
-            "https://api.gateio.ws/api/v4/spot/currency_pairs",
+            "https://api.bitget.com/api/v2/spot/market/tickers",
             headers=BROWSER_HEADERS,
             timeout=4,
         )
         if r.status_code == 200:
-            for it in r.json():
-                if str(it.get("quote", "")).upper() == "USDT":
-                    b = str(it.get("base", "")).upper()
-                    if not is_tradfi_ticker(b):
+            for it in r.json().get("data", []):
+                s = str(it.get("symbol", ""))
+                if s.endswith("USDT"):
+                    b = s[:-4].upper()
+                    if not _is_blocked_ticker(b):
                         pure_bases.add(b)
+    except requests.RequestException:
+        pass
+
+    # 4. CoinPaprika 글로벌 순수 암호화폐 목록 (무료·무제한·미국 서버 무차단, 주식/ETF 0개)
+    try:
+        r = requests.get("https://api.coinpaprika.com/v1/tickers", headers=BROWSER_HEADERS, timeout=5)
+        if r.status_code == 200:
+            for it in r.json():
+                sym = str(it.get("symbol", "")).upper()
+                name_low = str(it.get("name", "")).lower()
+                if sym and not _is_blocked_ticker(sym):
+                    if not any(k in name_low for k in getattr(cfg, "NON_CRYPTO_META_KEYWORDS", ())):
+                        pure_bases.add(sym)
     except requests.RequestException:
         pass
 
@@ -211,34 +245,24 @@ def get_scanner_candidates():
         bybit_map = f_bybit.result()
         gate_map = f_gate.result()
         bitget_map = f_bitget.result()
-        spot_crypto_bases = f_spot.result()
-
-    pure_crypto_bases = set(spot_crypto_bases)
-    # 2개 이상 선물 거래소에 동시 상장되고 실제 펀딩비가 작동하는 종목만 순수 코인으로 인정
-    for sym in (set(bybit_map.keys()) | set(gate_map.keys()) | set(bitget_map.keys())):
-        b = sym[:-4].upper()
-        cb = strip_multiplier_prefix(b)
-        in_count = int(sym in bybit_map) + int(sym in gate_map) + int(sym in bitget_map)
-        has_any_funding = (
-            bool(bybit_map.get(sym, {}).get("has_funding"))
-            or bool(gate_map.get(sym, {}).get("has_funding"))
-            or bool(bitget_map.get(sym, {}).get("has_funding"))
-        )
-        if in_count >= 2 and has_any_funding:
-            pure_crypto_bases.add(b)
-            pure_crypto_bases.add(cb)
+        pure_crypto_bases = f_spot.result()
 
     primary_map = bybit_map if bybit_map else (bitget_map if bitget_map else gate_map)
     all_symbols = set(primary_map.keys()) | (set(gate_map.keys()) & set(bitget_map.keys()))
 
-    rwa_blocked_bases = set()
+    rwa_blocked_bases = set(EXTRA_TRADFI_TICKERS)
     candidates = []
 
     for sym in all_symbols:
         base = sym[:-4].upper()
         clean_base = strip_multiplier_prefix(base)
 
-        if is_tradfi_ticker(base) or is_tradfi_ticker(clean_base):
+        if _is_blocked_ticker(base) or _is_blocked_ticker(clean_base):
+            rwa_blocked_bases.add(base)
+            continue
+
+        # 핵심: 현물 코인 마켓 또는 크립토 도감(pure_crypto_bases)에 없는 선물 전용 주식/ETF($EWY, $AAOI 등) 무조건 차단!
+        if pure_crypto_bases and (base not in pure_crypto_bases) and (clean_base not in pure_crypto_bases):
             rwa_blocked_bases.add(base)
             continue
 
@@ -260,15 +284,6 @@ def get_scanner_candidates():
         if to_float(item.get("funding_pct")) == 0.0:
             f_backup = to_float(b_it.get("funding_pct")) or to_float(g_it.get("funding_pct"))
             item["funding_pct"] = _normalize_funding(f_backup)
-
-        # 핵심 차단벽: 현물 마켓(pure_crypto_bases)에도 없고 펀딩비도 0.0000%인 주식/ETF 토큰($CLS, $GGLL 등) 즉시 차단
-        is_verified_crypto = (base in pure_crypto_bases) or (clean_base in pure_crypto_bases)
-        if not is_verified_crypto:
-            rwa_blocked_bases.add(base)
-            continue
-        if abs(to_float(item.get("funding_pct"))) < 1e-7 and (base not in spot_crypto_bases and clean_base not in spot_crypto_bases):
-            rwa_blocked_bases.add(base)
-            continue
 
         turnover_m = to_float(item.get("turnover_m"))
         change_24h = to_float(item.get("change_24h"))
