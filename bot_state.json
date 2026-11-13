@@ -1488,14 +1488,18 @@
       ],
       "breakout_alerted": true,
       "sl_alerted": false,
-      "tp3_completed": false,
+      "tp3_completed": true,
       "max_high_price": 0.11501,
       "max_favorable_pct": 12.78,
       "history_backfilled": true,
       "peak_ts_ms": 1794568260000,
       "be_armed": true,
       "tp1_hit": true,
-      "tp1_alerted": true
+      "tp1_alerted": true,
+      "tp3_at": 1794574898,
+      "tp2_hit": true,
+      "tp2_alerted": true,
+      "tp3_alerted": true
     },
     "KITEUSDT": {
       "created_at": 1794462603,
@@ -1763,7 +1767,7 @@
         "음수 펀딩 숏스퀴즈 수급(-0.0030%)"
       ],
       "max_high_price": 0.006133,
-      "peak_ts_ms": 1794573120000,
+      "peak_ts_ms": 1794573780000,
       "max_favorable_pct": 0.82,
       "history_backfilled": true,
       "be_armed": false,
@@ -2116,7 +2120,7 @@
         "음수 펀딩 숏스퀴즈 수급(-0.0001%)"
       ],
       "max_high_price": 0.5492,
-      "peak_ts_ms": 1794573180000,
+      "peak_ts_ms": 1794573780000,
       "max_favorable_pct": 0.48,
       "history_backfilled": true,
       "be_armed": false,
@@ -2930,6 +2934,7 @@
     "ARBUSDT": 1794574297,
     "AAVEUSDT": 1794574297,
     "PIEVERSEUSDT": 1794574297,
+    "PUMPUSDT": 1794574597,
     "HYPEUSDT": 1794223804,
     "NEARUSDT": 1794231004,
     "B2USDT": 1794232204,
@@ -2966,8 +2971,7 @@
     "SOPHUSDT": 1794466763,
     "ERAUSDT": 1794471604,
     "PARTIUSDT": 1794472204,
-    "HANAUSDT": 1794478203,
-    "PUMPUSDT": 1794574597
+    "HANAUSDT": 1794478203
   },
   "sl_history": {
     "B2USDT_1794232204": {
@@ -4380,11 +4384,11 @@
       "max_favorable_pct": 12.78,
       "be_armed": true,
       "tp1_hit": true,
-      "tp2_hit": false,
+      "tp2_hit": true,
       "tp1_alerted": true,
-      "tp2_alerted": false,
-      "tp3_alerted": false,
-      "tp3_completed": false,
+      "tp2_alerted": true,
+      "tp3_alerted": true,
+      "tp3_completed": true,
       "sl_alerted": false,
       "sl_at": 0
     },
