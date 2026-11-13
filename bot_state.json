@@ -1537,7 +1537,7 @@
       "max_high_price": 0.111,
       "max_favorable_pct": 3.43,
       "history_backfilled": true,
-      "peak_ts_ms": 1794577380000
+      "peak_ts_ms": 1794579420000
     },
     "QUSDT": {
       "created_at": 1794575197,
@@ -1643,10 +1643,10 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.13084,
-      "max_favorable_pct": 3.8,
+      "max_high_price": 0.13087,
+      "max_favorable_pct": 3.82,
       "history_backfilled": true,
-      "peak_ts_ms": 1794577920000
+      "peak_ts_ms": 1794579420000
     },
     "OPGUSDT": {
       "created_at": 1794465904,
@@ -3420,6 +3420,56 @@
       "breakout_alerted": false,
       "sl_alerted": false,
       "tp3_completed": false
+    },
+    "NUUSDT": {
+      "created_at": 1794579460,
+      "track_type": "TRACK_A",
+      "score": 90,
+      "entry_price": 12.452,
+      "swing_high_line": 12.553,
+      "entry_low": 12.42087,
+      "entry_high": 12.464451999999998,
+      "initial_stop_price": 12.07844,
+      "stop_price": 12.07844,
+      "sl_pct": 3,
+      "tps": [
+        13.448160000000001,
+        14.25754,
+        15.06692
+      ],
+      "tp_pcts": [
+        8.0,
+        14.5,
+        21.0
+      ],
+      "vol_mult": 3.6,
+      "rsi6_15m": 57.9,
+      "kdj_j_15m": 35.6,
+      "oi_m": 0.39403669200000013,
+      "turnover_m": 1.5726387778,
+      "funding_pct": -0.1173,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(0%)",
+        "완전 정배열(5>20>50>112) 지지",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "초응축(1.4%)+OBV 선행매집",
+        "이평리본 초밀집 확산(0.8%)",
+        "초동수급 폭발(3.6배)",
+        "음수 펀딩 숏스퀴즈 수급(-0.1173%)"
+      ],
+      "max_high_price": 12.452,
+      "peak_ts_ms": 1794579460000,
+      "max_favorable_pct": 0.0,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": false,
+      "sl_alerted": false,
+      "tp3_completed": false
     }
   },
   "alert_history": {
@@ -3507,7 +3557,8 @@
     "SOPHUSDT": 1794466763,
     "ERAUSDT": 1794471604,
     "PARTIUSDT": 1794472204,
-    "HANAUSDT": 1794478203
+    "HANAUSDT": 1794478203,
+    "NUUSDT": 1794579460
   },
   "sl_history": {
     "B2USDT_1794232204": {
@@ -5003,8 +5054,8 @@
         0.14485948044,
         0.15416135939999995
       ],
-      "max_high_price": 0.13084,
-      "max_favorable_pct": 3.8,
+      "max_high_price": 0.13087,
+      "max_favorable_pct": 3.82,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -6486,6 +6537,32 @@
         11.03278
       ],
       "max_high_price": 9.118,
+      "max_favorable_pct": 0.0,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "sl_at": 0
+    },
+    "NUUSDT_1794579460": {
+      "symbol": "NUUSDT",
+      "created_at": 1794579460,
+      "track_type": "TRACK_A",
+      "score": 90,
+      "entry_price": 12.452,
+      "initial_stop_price": 12.07844,
+      "stop_price": 12.07844,
+      "sl_pct": 3.0,
+      "tps": [
+        13.448160000000001,
+        14.25754,
+        15.06692
+      ],
+      "max_high_price": 12.452,
       "max_favorable_pct": 0.0,
       "be_armed": false,
       "tp1_hit": false,
