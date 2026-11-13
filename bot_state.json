@@ -1675,10 +1675,10 @@
       "breakout_alerted": true,
       "sl_alerted": false,
       "tp3_completed": false,
-      "max_high_price": 0.13087,
-      "max_favorable_pct": 3.82,
+      "max_high_price": 0.13119,
+      "max_favorable_pct": 4.08,
       "history_backfilled": true,
-      "peak_ts_ms": 1794579420000
+      "peak_ts_ms": 1794590700000
     },
     "OPGUSDT": {
       "created_at": 1794465904,
@@ -3414,7 +3414,7 @@
         "음수 펀딩 숏스퀴즈 수급(-0.1173%)"
       ],
       "max_high_price": 13.177,
-      "peak_ts_ms": 1794589140000,
+      "peak_ts_ms": 1794589440000,
       "max_favorable_pct": 5.82,
       "history_backfilled": true,
       "be_armed": true,
@@ -5526,8 +5526,8 @@
         0.14485948044,
         0.15416135939999995
       ],
-      "max_high_price": 0.13087,
-      "max_favorable_pct": 3.82,
+      "max_high_price": 0.13119,
+      "max_favorable_pct": 4.08,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
