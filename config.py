@@ -17,9 +17,10 @@ TELEGRAM_CHAT_ID = (
 
 KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
+HISTORY_FILE = "analyzer_history.json"
 
 # =====================================================================
-# [가벼운 코인 단기 10~50% 급등 포착 + -6% 고정 손절(휩소 방어) 세팅]
+# [2026-11-14 17:53 KST 주간·일일 3파동 로데이터 심층 학습 반영 세팅]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 평시 85점 이상 알림 발송
 BTC_DUMP_SCORE_THRESHOLD = 90          # BTC 급락 시 컷오프 90점으로 자동 상향
@@ -27,28 +28,36 @@ BTC_DUMP_DROP_15M_PCT = -0.70          # BTC 15분봉 최근 3캔들 고점 대�
 BTC_DUMP_DROP_1H_PCT = -1.20           # BTC 1시간봉 최근 4캔들 고점 대비 -1.20% 이하 시 도미노 투매장 판정
 MAX_NEW_ALERTS_PER_SCAN = 3            # 1회 스캔(5분)당 최고점 상위 3종목만 발송
 
-# [고정 손절 -6% 및 1R(+6%) 본전 방어 설정]
+# [주간 리포트 스탑헌팅 51건 방어를 위한 -6% 고정 손절 & 1R(+6%) 본전 방어]
 FIXED_SL_PCT = 6                       # 급등 전 아랫꼬리 휩소 방어를 위한 -6% 고정 손절
 BREAKEVEN_TRIGGER_PCT = 6.0            # 손절폭(-6%)과 1:1(1R)인 +6.0% 도달 시 본전(진입가 위) 방어 자동 가동
 SL_RECOVERY_COOLDOWN_SEC = 14400       # 스탑헌팅 손절 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
 
-# [단기 10~50% 수익 목표에 맞춘 3단계 TP 최소 보장 하한선]
-TP1_MIN_PCT = 10.0                     # 1차 목표가 최소 +10.0% 이상 (파동 Fib 2.13배와 비교해 큰 값 적용)
-TP2_MIN_PCT = 18.0                     # 2차 목표가 최소 +18.0% 이상 (파동 Fib 3.06배와 비교해 큰 값 적용)
-TP3_MIN_PCT = 28.0                     # 3차 목표가 최소 +28.0% 이상 (파동 Fib 3.86배로 +30~50%까지 자동 확장)
+# [Top 5 + 스캐너 코인 1·2·3차 파동 로데이터 결합 TP 기준값]
+# - 1차(첫 조정 고점): 본전마감 54건을 수익확정으로 바꾸기 위해 첫 조정 직전(+9.0%, Fib 1.85, MA20 +4.5%) 설정
+# - 2차(중간 조정 고점): 스캐너 포착 코인 중위 고점(+17.0%, Fib 2.75, MA20 +7.7%) 설정
+# - 3차(최종 클라이맥스): Top 5 & 주간 베스트($ARIA +30.9%, $PIEVERSE +30.7%, $B2 +29.1%) 기준(+29.0%, Fib 4.04) 설정
+TP1_MIN_PCT = 9.0
+TP2_MIN_PCT = 17.0
+TP3_MIN_PCT = 29.0
+TP3_MAX_CAP_PCT = 52.0
+
+TP1_FIB_MULT = 1.85
+TP2_FIB_MULT = 2.75
+TP3_FIB_MULT = 4.04
 
 PULLBACK_DRYUP_STRICT = 0.14           # 발화봉 대비 눌림 거래량 14% 이하 극건조
-PULLBACK_DRYUP_MAX = 0.28              # 발화봉 대비 눌림 거래량 상한 28%
-SR_FLIP_DRYUP_RATIO_MAX = 0.25         # 돌파 후 S/R Flip 리테스트 거래량 상한
-SR_FLIP_TOLERANCE_PCT = 1.20           # 전고점 S/R Flip 칼지지 허용 오차 (1.20% 이내)
+PULLBACK_DRYUP_MAX = 0.20              # [17:53 튜닝] 리포트 권장값 0.18 반영하여 수급 둔화 종목 차단
+SR_FLIP_DRYUP_RATIO_MAX = 0.22         # 돌파 후 S/R Flip 리테스트 거래량 상한 ($SHELL 2%, $UNITAS 4%, $NIGHT 1%)
+SR_FLIP_TOLERANCE_PCT = 1.25           # 전고점 S/R Flip 칼지지 허용 오차 ($NIGHT 1.22% 포착 반영)
 
-PRE_BOX_RANGE_MAX_PCT = 9.5            # 직전 2시간 박스 변동폭 상한 (9.5%)
-PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한 (14.0%)
-PRE_BOX_TIGHT_PCT = 4.5                # 4.5% 이내 초응축 시 가산점 부여
-EMA_RIBBON_MAX_SPREAD_PCT = 1.6        # 이평선 리본 초밀집 기준 (1.6%)
-PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20 (35% 이하)
+PRE_BOX_RANGE_MAX_PCT = 6.5            # [17:53 튜닝] 리포트 권장 5.5% 반영 ($SHELL 1.0%, $PIEVERSE 2.6%, $NIGHT 1.7%)
+PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한
+PRE_BOX_TIGHT_PCT = 4.0                # 4.0% 이내 초응축 시 가산점 부여
+EMA_RIBBON_MAX_SPREAD_PCT = 1.6        # 이평선 리본 초밀집 기준 ($SHELL 0.0%, $PIEVERSE 0.0%, $NIGHT 0.2%)
+PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20 ($SHELL 0%, $NIGHT 3%)
 
-EARLY_VOL_MULT_MIN = 2.6               # 초동 최소 거래량 배수 (2.6배)
+EARLY_VOL_MULT_MIN = 2.6               # [17:53 튜닝] 리포트 권장값 2.6x 유지
 EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 돌파 대응 상한
 EARLY_BREAKOUT_MAX_PCT = 4.2           # 돌파 양봉 직후 공중 눌림(Bull Flag/FVG) 허용 상한 (4.2%)
 BULL_FLAG_MAX_RETRACE = 0.382          # 돌파 양봉 상단 38.2% 이내 공중 지지 기준
@@ -72,12 +81,16 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
 }
 
-# 단기 10~50% 급등 탄력이 둔하고 BTC 하락에 연동되는 무거운 시총 코인 제외
+# [오답노트 반영] 시총이 무거워 +1~2%만 오르고 꺾이는 메이저·준메이저 구코인을 전수 제외하여 가벼운 급등 코인에만 집중
 HEAVY_MAJOR_COINS = {
     "BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX", "LTC", "BCH",
     "DOT", "AVAX", "LINK", "XLM", "TON", "SHIB", "ETC", "XMR", "ZEC", "EOS",
     "FIL", "ATOM", "NEAR", "ICP", "HBAR", "VET", "UNI", "AAVE",
-    "LDO", "BGB", "OKB", "CRO", "GT", "KCS", "MKR", "POL", "MATIC", "ALGO"
+    "LDO", "BGB", "OKB", "CRO", "GT", "KCS", "MKR", "POL", "MATIC", "ALGO",
+    "RENDER", "RNDR", "JUP", "ONE", "ZRO", "ARB", "OP", "SUI", "APT", "SEI",
+    "TIA", "INJ", "FET", "TAO", "WLD", "PENDLE", "ENA", "STRK", "ONDO", "QNT",
+    "CRV", "SNX", "COMP", "SUSHI", "1INCH", "DYDX", "GMX", "GRT", "SAND", "MANA",
+    "AXS", "APE", "GALA", "IMX", "FLOW", "THETA", "EGLD", "XTZ", "NEO", "IOTA", "KAS"
 }
 
 NON_CRYPTO_META_KEYWORDS = (
@@ -164,7 +177,10 @@ def strip_tokenized_suffix(base_coin):
 
 
 def is_tradfi_ticker(base_coin):
-    b1 = base_coin.upper()
+    b1 = str(base_coin).upper()
+    # 비ASCII(한자/특수문자 예: $牛来) 티커 차단
+    if not b1.isascii():
+        return True
     if b1.endswith("STOCK"):
         return True
     if len(b1) == 4 and (b1.endswith("DD") or b1.endswith("LL") or b1.endswith("UU")) and b1 not in {"SPELL", "CELL", "BULL", "NULL", "CALL", "FULL", "ROLL"}:
@@ -179,5 +195,5 @@ def is_tradfi_ticker(base_coin):
 
 
 def is_heavy_major_coin(base_coin):
-    b = strip_multiplier_prefix(base_coin.upper())
+    b = strip_multiplier_prefix(str(base_coin).upper())
     return b in HEAVY_MAJOR_COINS
