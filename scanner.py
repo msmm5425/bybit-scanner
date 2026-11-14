@@ -11,10 +11,12 @@ from api import get_scanner_candidates, fetch_verified_1m_klines, fetch_klines
 from analyzer import analyze_symbol
 from notifier import build_briefing_message, build_x_post_message, send_telegram_single, fmt_price
 
-# 동일 종목 재알림 최소 쿨타임 (12시간 = 43,200초)
+# 일반 종목 재알림 최소 쿨타임 (12시간 = 43,200초)
 RE_ALERT_COOLDOWN_SEC = 43200
 # 스탑헌팅 손절 후 V자 탈환(88점 이상) 재진입 허용 쿨타임 (4시간 = 14,400초)
 SL_RECOVERY_COOLDOWN_SEC = getattr(cfg, "SL_RECOVERY_COOLDOWN_SEC", 14400)
+# 본전/수익 보호선 안전마감(🔒) 후 신규 포착 금지 쿨타임 (48시간 = 172,800초)
+BE_PROTECT_COOLDOWN_SEC = getattr(cfg, "BE_PROTECT_COOLDOWN_SEC", 172800)
 # 오답 노트(손절 기록) 보관 주기 (72시간 = 259,200초)
 HISTORY_RETENTION_SEC = 259200
 # 위클리 리포트용 개별 신호 원장(signal_episodes) 보관 주기 (10일 = 864,000초)
@@ -93,7 +95,7 @@ def save_state(state):
 
 
 def sync_episode_ledger(signal_episodes, symbol, t_item):
-    """tracked와 signal_episodes 양방향으로 달성 플래그를 영구 잠금하여 중복 알림 원천 차단"""
+    """tracked와 signal_episodes 양방향으로 달성 플래그 및 안전마감(be_closed) 시각을 영구 동기화"""
     c_at = int(t_item.get("created_at", 0))
     if c_at <= 0:
         return
@@ -103,20 +105,36 @@ def sync_episode_ledger(signal_episodes, symbol, t_item):
     lock_flags = (
         "be_armed", "tp1_hit", "tp2_hit",
         "tp1_alerted", "tp2_alerted", "tp3_alerted",
-        "tp3_completed", "sl_alerted", "closed_alerted",
+        "tp3_completed", "sl_alerted", "closed_alerted", "be_closed",
     )
     for flag in lock_flags:
         if prev_ep.get(flag) or t_item.get(flag):
             t_item[flag] = True
 
+    # 기존 안전마감 종목 소급 감지: tp3_completed는 True인데 3차 졸업(tp3_alerted)이 아닌 경우 -> 보호선 안전마감(be_closed)
+    if t_item.get("tp3_completed") and not t_item.get("tp3_alerted") and not t_item.get("sl_alerted"):
+        t_item["be_closed"] = True
+
+    if t_item.get("be_closed"):
+        be_at = max(
+            int(to_float(prev_ep.get("be_closed_at"), 0)),
+            int(to_float(t_item.get("be_closed_at"), 0)),
+            int(to_float(t_item.get("tp3_at"), 0)),
+            c_at,
+        )
+        t_item["be_closed_at"] = be_at
+    else:
+        be_at = int(to_float(t_item.get("be_closed_at"), 0))
+
     if t_item.get("tp3_completed") or t_item.get("closed_alerted"):
-        t_item["tp1_hit"] = True
-        t_item["tp2_hit"] = True
-        t_item["tp1_alerted"] = True
-        t_item["tp2_alerted"] = True
-        t_item["tp3_alerted"] = True
         t_item["tp3_completed"] = True
         t_item["closed_alerted"] = True
+        if not t_item.get("be_closed"):
+            t_item["tp1_hit"] = True
+            t_item["tp2_hit"] = True
+            t_item["tp1_alerted"] = True
+            t_item["tp2_alerted"] = True
+            t_item["tp3_alerted"] = True
     elif t_item.get("tp2_hit") or t_item.get("tp2_alerted"):
         t_item["tp1_hit"] = True
         t_item["tp2_hit"] = True
@@ -159,8 +177,34 @@ def sync_episode_ledger(signal_episodes, symbol, t_item):
         "tp3_completed": bool(t_item.get("tp3_completed", False)),
         "sl_alerted": bool(t_item.get("sl_alerted", False)),
         "closed_alerted": bool(t_item.get("closed_alerted", False)),
+        "be_closed": bool(t_item.get("be_closed", False)),
+        "be_closed_at": be_at,
         "sl_at": int(t_item.get("sl_at", 0)),
     }
+
+
+def is_under_be_protect_cooldown(symbol, tracked, signal_episodes, now_ts):
+    """본전/수익 보호선 안전마감(🔒)된 이력이 있는 종목은 마감 시각부터 48시간(172,800초) 동안 신규 알림 차단"""
+    latest_be_close_ts = 0
+
+    t_item = tracked.get(symbol)
+    if isinstance(t_item, dict):
+        if t_item.get("be_closed") or (t_item.get("tp3_completed") and not t_item.get("tp3_alerted") and not t_item.get("sl_alerted")):
+            ts = int(to_float(t_item.get("be_closed_at") or t_item.get("tp3_at") or t_item.get("created_at"), 0))
+            if ts > latest_be_close_ts:
+                latest_be_close_ts = ts
+
+    for ep in signal_episodes.values():
+        if not isinstance(ep, dict) or ep.get("symbol") != symbol:
+            continue
+        if ep.get("be_closed") or (ep.get("tp3_completed") and not ep.get("tp3_alerted") and not ep.get("sl_alerted")):
+            ts = int(to_float(ep.get("be_closed_at") or ep.get("tp3_at") or ep.get("created_at"), 0))
+            if ts > latest_be_close_ts:
+                latest_be_close_ts = ts
+
+    if latest_be_close_ts > 0 and (now_ts - latest_be_close_ts) < BE_PROTECT_COOLDOWN_SEC:
+        return True
+    return False
 
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts):
@@ -304,20 +348,22 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
             f"• 차익 매물 반락에 대비해 손절선을 진입가 위({fmt_price(stop_p)} USDT)로 상향 고정합니다."
         )
 
-    # 5. 보호선(본전/익절 보존선) 이탈 확인 (최고점 이후 시점에만 단 1회 판정)
+    # 5. 보호선(본전/익절 보존선) 이탈 확인 -> 안전마감 시 48시간 재진입 제한 플래그(be_closed, be_closed_at) 기록
     is_protected_mode = bool(t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("be_armed"))
 
     if is_protected_mode:
         if last_1m_ts_ms > peak_ts_ms and last_1m_close <= stop_p and not t_item.get("closed_alerted"):
             t_item["tp3_completed"] = True
             t_item["closed_alerted"] = True
+            t_item["be_closed"] = True
+            t_item["be_closed_at"] = now_ts
             t_item["tp3_at"] = now_ts
             if just_armed_protection and messages:
-                messages[-1] += f"\n• 🔒 현재가({fmt_price(last_1m_close)})가 보호선 아래로 내려와 안전 마감 처리합니다."
+                messages[-1] += f"\n• 🔒 현재가({fmt_price(last_1m_close)})가 보호선 아래로 내려와 안전 마감 처리합니다. (48h 재진입 제한 적용)"
             else:
                 messages.append(
                     f"🔒 [수익/본전 보호선 마감 완료] ${base_coin} ({symbol})\n"
-                    f"• 진입 후 최고 +{max_fav_pct:.1f}% 도달 후 보호선({fmt_price(stop_p)}) 이탈(현재 {fmt_price(last_1m_close)})로 안전 마감합니다."
+                    f"• 진입 후 최고 +{max_fav_pct:.1f}% 도달 후 보호선({fmt_price(stop_p)}) 이탈(현재 {fmt_price(last_1m_close)})로 안전 마감합니다. (향후 48시간 신규 포착 제외)"
                 )
         return {"messages": messages, "sl_record": None}
 
@@ -427,7 +473,7 @@ def main():
                 alert_history[s] = c_at
 
     for h_sym in list(alert_history.keys()):
-        if now_ts - int(alert_history.get(h_sym, 0)) > 86400:
+        if now_ts - int(alert_history.get(h_sym, 0)) > BE_PROTECT_COOLDOWN_SEC:
             del alert_history[h_sym]
 
     for sl_k in list(sl_history.keys()):
@@ -456,10 +502,10 @@ def main():
         is_sl_done = bool(t_item.get("sl_alerted", False))
         is_tp3_done = bool(t_item.get("tp3_completed", False))
 
-        if is_sl_done and (now_ts - int(t_item.get("sl_at", created_at)) > 172800):
+        if is_sl_done and (now_ts - int(t_item.get("sl_at", created_at)) > BE_PROTECT_COOLDOWN_SEC):
             del tracked[sym]
             continue
-        elif is_tp3_done and (now_ts - int(t_item.get("tp3_at", created_at)) > 172800):
+        elif is_tp3_done and (now_ts - int(t_item.get("tp3_at", created_at)) > BE_PROTECT_COOLDOWN_SEC):
             del tracked[sym]
             continue
         elif age_sec > 604800:
@@ -510,6 +556,7 @@ def main():
         save_state(state)
         return
 
+    # 신규 후보군 필터링 (안전마감 48시간 쿨타임 적용)
     to_analyze = []
     for coin in candidates:
         sym = coin["symbol"]
@@ -519,12 +566,15 @@ def main():
         if hasattr(cfg, "is_heavy_major_coin") and cfg.is_heavy_major_coin(base_c):
             continue
 
-        last_alert_ts = int(alert_history.get(sym, 0))
         prev_t = tracked.get(sym)
-
         if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed"):
             continue
 
+        # 본전/수익 보호선 안전마감(🔒)된 종목은 마감 시점부터 48시간 동안 신규 포착 완전 제한
+        if is_under_be_protect_cooldown(sym, tracked, signal_episodes, now_ts):
+            continue
+
+        last_alert_ts = int(alert_history.get(sym, 0))
         was_stopped = bool(prev_t and prev_t.get("sl_alerted"))
         cooldown = SL_RECOVERY_COOLDOWN_SEC if was_stopped else RE_ALERT_COOLDOWN_SEC
         if (now_ts - last_alert_ts) < cooldown:
@@ -556,6 +606,9 @@ def main():
         prev_t = tracked.get(symbol)
 
         if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed"):
+            continue
+
+        if is_under_be_protect_cooldown(symbol, tracked, signal_episodes, now_ts):
             continue
 
         was_stopped = bool(prev_t and prev_t.get("sl_alerted"))
@@ -603,6 +656,8 @@ def main():
             "sl_alerted": False,
             "tp3_completed": False,
             "closed_alerted": False,
+            "be_closed": False,
+            "be_closed_at": 0,
         }
         alert_history[symbol] = now_ts
         sync_episode_ledger(signal_episodes, symbol, tracked[symbol])
