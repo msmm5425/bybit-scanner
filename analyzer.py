@@ -14,25 +14,21 @@ _DYNAMIC_TP_CACHE = {"ts": 0, "data": {}}
 
 
 def get_dynamic_tp_params():
-    """
-    binance_analyzer.py가 Top 5 + 오답노트의 1·2·3차 조정/고점 로데이터에서 학습한
-    [최소 보장 %, Fib 배수, MA20 과열 이격도 %]를 실시간 로드
-    """
     now = time.time()
     if now - _DYNAMIC_TP_CACHE["ts"] < 60 and _DYNAMIC_TP_CACHE["data"]:
         return _DYNAMIC_TP_CACHE["data"]
 
     params = {
-        "tp1_min_pct": cfg.to_float(getattr(cfg, "TP1_MIN_PCT", 11.0), 11.0),
-        "tp2_min_pct": cfg.to_float(getattr(cfg, "TP2_MIN_PCT", 20.0), 20.0),
-        "tp3_min_pct": cfg.to_float(getattr(cfg, "TP3_MIN_PCT", 35.0), 35.0),
+        "tp1_min_pct": cfg.to_float(getattr(cfg, "TP1_MIN_PCT", 9.0), 9.0),
+        "tp2_min_pct": cfg.to_float(getattr(cfg, "TP2_MIN_PCT", 17.0), 17.0),
+        "tp3_min_pct": cfg.to_float(getattr(cfg, "TP3_MIN_PCT", 29.0), 29.0),
         "tp3_max_cap_pct": cfg.to_float(getattr(cfg, "TP3_MAX_CAP_PCT", 52.0), 52.0),
-        "tp1_fib_mult": cfg.to_float(getattr(cfg, "TP1_FIB_MULT", 2.13), 2.13),
-        "tp2_fib_mult": cfg.to_float(getattr(cfg, "TP2_FIB_MULT", 3.20), 3.20),
-        "tp3_fib_mult": cfg.to_float(getattr(cfg, "TP3_FIB_MULT", 4.20), 4.20),
-        "tp1_ma20_ext_pct": 5.5,
-        "tp2_ma20_ext_pct": 11.0,
-        "tp3_ma20_ext_pct": 18.0,
+        "tp1_fib_mult": cfg.to_float(getattr(cfg, "TP1_FIB_MULT", 1.85), 1.85),
+        "tp2_fib_mult": cfg.to_float(getattr(cfg, "TP2_FIB_MULT", 2.75), 2.75),
+        "tp3_fib_mult": cfg.to_float(getattr(cfg, "TP3_FIB_MULT", 4.04), 4.04),
+        "tp1_ma20_ext_pct": 4.5,
+        "tp2_ma20_ext_pct": 7.7,
+        "tp3_ma20_ext_pct": 12.5,
     }
 
     hist_file = getattr(cfg, "HISTORY_FILE", "analyzer_history.json")
@@ -42,15 +38,15 @@ def get_dynamic_tp_params():
                 raw = json.load(f)
             if isinstance(raw, dict) and isinstance(raw.get("dynamic_tp_tuning"), dict):
                 dt = raw["dynamic_tp_tuning"]
-                params["tp1_min_pct"] = float(np.clip(cfg.to_float(dt.get("tp1_min_pct"), params["tp1_min_pct"]), 10.0, 16.0))
-                params["tp2_min_pct"] = float(np.clip(cfg.to_float(dt.get("tp2_min_pct"), params["tp2_min_pct"]), 18.0, 30.0))
-                params["tp3_min_pct"] = float(np.clip(cfg.to_float(dt.get("tp3_min_pct"), params["tp3_min_pct"]), 28.0, 50.0))
-                params["tp1_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp1_fib_mult"), params["tp1_fib_mult"]), 1.80, 2.60))
-                params["tp2_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp2_fib_mult"), params["tp2_fib_mult"]), 2.75, 3.80))
-                params["tp3_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp3_fib_mult"), params["tp3_fib_mult"]), 3.60, 4.80))
-                params["tp1_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp1_ma20_ext_pct"), 5.5), 3.0, 10.0))
-                params["tp2_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp2_ma20_ext_pct"), 11.0), 6.0, 18.0))
-                params["tp3_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp3_ma20_ext_pct"), 18.0), 11.0, 28.0))
+                params["tp1_min_pct"] = float(np.clip(cfg.to_float(dt.get("tp1_min_pct"), params["tp1_min_pct"]), 8.5, 14.0))
+                params["tp2_min_pct"] = float(np.clip(cfg.to_float(dt.get("tp2_min_pct"), params["tp2_min_pct"]), 15.0, 26.0))
+                params["tp3_min_pct"] = float(np.clip(cfg.to_float(dt.get("tp3_min_pct"), params["tp3_min_pct"]), 25.0, 50.0))
+                params["tp1_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp1_fib_mult"), params["tp1_fib_mult"]), 1.65, 2.45))
+                params["tp2_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp2_fib_mult"), params["tp2_fib_mult"]), 2.50, 3.60))
+                params["tp3_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp3_fib_mult"), params["tp3_fib_mult"]), 3.50, 4.80))
+                params["tp1_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp1_ma20_ext_pct"), 4.5), 3.0, 9.0))
+                params["tp2_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp2_ma20_ext_pct"), 7.7), 6.0, 16.0))
+                params["tp3_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp3_ma20_ext_pct"), 12.5), 10.0, 26.0))
         except Exception:
             pass
 
@@ -337,6 +333,16 @@ def analyze_symbol(coin):
     ma50 = to_float(df_5m["ma50"].iloc[-1], close)
     ma112 = to_float(df_5m["ma112"].iloc[-1], close)
 
+    # [오답노트 $PUMP·$ZRO·$Q 패인 차단]: 머리 바로 위(0%~+4.0%)에 5분봉 또는 15분봉 MA112 장기이평 저항이 가로막고 있으면 진입 차단!
+    ma50_15m = to_float(df_15m["close"].rolling(50, min_periods=15).mean().iloc[-1], close)
+    ma112_15m = to_float(df_15m["close"].rolling(112, min_periods=25).mean().iloc[-1], close)
+    if close < ma112 and ((ma112 - close) / close * 100.0) <= 4.0:
+        return None
+    if close < ma112_15m and ((ma112_15m - close) / close * 100.0) <= 4.5:
+        return None
+    if close < ma50_15m and ((ma50_15m - close) / close * 100.0) <= 3.0:
+        return None
+
     ribbon_max = df_5m[["ema5", "ema20", "ema50"]].max(axis=1)
     ribbon_min = df_5m[["ema5", "ema20", "ema50"]].min(axis=1)
     df_5m["ribbon_spread_pct"] = (ribbon_max - ribbon_min) / df_5m["close"].replace(0, np.nan) * 100.0
@@ -358,25 +364,23 @@ def analyze_symbol(coin):
     else:
         change_24h = to_float(coin.get("price24hPcnt")) * 100.0
 
-    # 4. 1H 상위프레임 구조적 지지 및 BTC 급락장 디커플링 검증
+    # 4. 1H 상위프레임 구조적 지지 (5종목 중 4종목 적중 필수 필터)
     ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
     ema20_1h = to_float(df_1h["close"].ewm(span=20, adjust=False).mean().iloc[-1], close)
-    htf_support_ok = (close >= ma20_1h * 0.992) or (close >= ema20_1h * 0.992)
+    htf_support_ok = (close >= ma20_1h * 0.995) or (close >= ema20_1h * 0.995)
 
-    if not htf_support_ok and rsi6_1h < 50.0:
+    if not htf_support_ok:
         return None
 
     btc_dumping, _ = get_btc_market_regime()
     if btc_dumping:
-        if not htf_support_ok or close < bb_mid_15m or change_24h < 2.0:
+        if close < bb_mid_15m or change_24h < 2.5:
             return None
 
     if close >= ma20_1h and rsi6_1h >= 55.0:
         htf_status = f"1H 상승우위(RSI6 {int(round(rsi6_1h))})"
-    elif htf_support_ok:
-        htf_status = f"1H 바닥반전시도(RSI6 {int(round(rsi6_1h))})"
     else:
-        htf_status = f"1H 단기반등시도(RSI6 {int(round(rsi6_1h))})"
+        htf_status = f"1H 중심선지지(RSI6 {int(round(rsi6_1h))})"
 
     vol_ma20_series = df_5m["volume"].rolling(20, min_periods=5).mean().shift(1)
     recent_window = df_5m.iloc[-6:]
@@ -449,7 +453,7 @@ def analyze_symbol(coin):
     upper_wick_ratio = (high_p - max(open_p, close)) / curr_range
     curr_candle_gain_pct = (close - open_p) / max(open_p, 1e-8) * 100.0
 
-    # 1) 전고점 S/R Flip 칼지지
+    # 1) 전고점 S/R Flip 칼지지 ($SHELL 0.25%, $UNITAS 0.43%, $NIGHT 1.22% 적중)
     cond_sr_flip_retest = (
         (not is_current_ignition)
         and (close >= prev_box_high * 0.996)
@@ -472,7 +476,7 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 3) 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지
+    # 3) 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지 ($PIEVERSE, $NIGHT 등 5종목 중 3종목 적중)
     fvg_mid_line = (ignition_open + ignition_high) * 0.5
     cond_fvg_mid_hold = (
         (not is_current_ignition)
@@ -495,12 +499,14 @@ def analyze_symbol(coin):
         and htf_support_ok
     )
 
-    # 5) Track A (박스권 선취매 & 거래량 건조 눌림 - 1H 구조적 지지 필수 동반)
+    # 5) Track A (박스권 선취매 - 초응축 및 초동 수급 확인 필수화)
     cond_track_a_pullback = (
         htf_support_ok
+        and (close >= ma112)
         and (close <= prev_box_high * 1.008)
-        and (close >= ma20 * 0.995)
+        and (close >= ma20 * 0.996)
         and (effective_dryup_ratio <= cfg.PULLBACK_DRYUP_MAX)
+        and (vol_mult >= 2.2 or cond_vol_pocket)
         and (ma_short_aligned or cond_spring or cond_ema_ribbon)
     )
 
@@ -616,7 +622,6 @@ def analyze_symbol(coin):
     sl_note = f"급등전 휩소·스탑헌팅 방어 고정손절(-{sl_pct_int}%)"
 
     # 2) Top 5 + 오답노트 로데이터 학습 기반 1·2·3차 익절(TP1~TP3) 산출
-    # (피보나치 파동 목표가와 15m/1H MA20 이격도 저항 목표가를 결합하여 정밀 산출)
     tp_params = get_dynamic_tp_params()
     tp1_min_ratio = 1.0 + tp_params["tp1_min_pct"] / 100.0
     tp2_min_ratio = 1.0 + tp_params["tp2_min_pct"] / 100.0
@@ -631,7 +636,7 @@ def analyze_symbol(coin):
     ext2_ratio = 1.0 + tp_params["tp2_ma20_ext_pct"] / 100.0
     ext3_ratio = 1.0 + tp_params["tp3_ma20_ext_pct"] / 100.0
 
-    wave_height = max(swing_high_line - support_line, close * 0.045)
+    wave_height = max(swing_high_line - support_line, close * 0.042)
     fib_tp1 = support_line + wave_height * fib1
     fib_tp2 = support_line + wave_height * fib2
     fib_tp3 = support_line + wave_height * fib3
@@ -640,12 +645,12 @@ def analyze_symbol(coin):
     ma_env_tp2 = max(bb_mid_15m, ma20_1h) * ext2_ratio
     ma_env_tp3 = max(bb_mid_15m, ma20_1h) * ext3_ratio
 
-    blended_w1 = (fib_tp1 * 0.65) + (ma_env_tp1 * 0.35)
-    blended_w2 = (fib_tp2 * 0.65) + (ma_env_tp2 * 0.35)
+    blended_w1 = (fib_tp1 * 0.60) + (ma_env_tp1 * 0.40)
+    blended_w2 = (fib_tp2 * 0.60) + (ma_env_tp2 * 0.40)
     blended_w3 = (fib_tp3 * 0.70) + (ma_env_tp3 * 0.30)
 
-    tp1 = max(close * tp1_min_ratio, min(close * 1.18, blended_w1))
-    tp2 = max(close * tp2_min_ratio, tp1 * 1.06, min(close * 1.32, blended_w2))
+    tp1 = max(close * tp1_min_ratio, min(close * 1.14, blended_w1))
+    tp2 = max(close * tp2_min_ratio, tp1 * 1.06, min(close * 1.28, blended_w2))
     tp3 = max(close * tp3_min_ratio, tp2 * 1.08, min(close * tp3_cap_ratio, blended_w3))
 
     tp1_pct = round((tp1 - close) / close * 100.0, 1)
