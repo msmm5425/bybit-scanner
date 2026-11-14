@@ -194,7 +194,6 @@ def calc_obv_and_cvd(df):
 
 
 def get_btc_market_regime():
-    """오답노트 유형1(BTC 도미노 급락 -1.68%~-2.18%) 방어: 15분봉 순단 투매 + 1시간봉 계단식 하락 동시 감지"""
     now = time.time()
     if now - _BTC_REGIME_CACHE["ts"] < 60:
         return _BTC_REGIME_CACHE["is_dumping"], _BTC_REGIME_CACHE["drop_pct"]
@@ -205,7 +204,7 @@ def get_btc_market_regime():
     if not df_btc.empty and len(df_btc) >= 16:
         c_now = cfg.to_float(df_btc["close"].iloc[-1])
         h_recent3 = cfg.to_float(df_btc["high"].iloc[-3:].max(), c_now)
-        h_recent12 = cfg.to_float(df_btc["high"].iloc[-12:].max(), c_now)  # 최근 3시간 고점
+        h_recent12 = cfg.to_float(df_btc["high"].iloc[-12:].max(), c_now)
         ma20_btc = cfg.to_float(df_btc["close"].rolling(20, min_periods=5).mean().iloc[-1], c_now)
         rsi_btc = cfg.to_float(calc_rsi(df_btc["close"], 6).iloc[-1], 50.0)
 
@@ -311,7 +310,7 @@ def analyze_symbol(coin):
     else:
         change_24h = to_float(coin.get("price24hPcnt")) * 100.0
 
-    # 4. 1H 상위프레임 구조적 지지 및 BTC 급락장 디커플링(상대강도 RS) 검증
+    # 4. 1H 상위프레임 구조적 지지 및 BTC 급락장 디커플링 검증
     ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
     ema20_1h = to_float(df_1h["close"].ewm(span=20, adjust=False).mean().iloc[-1], close)
     htf_support_ok = (close >= ma20_1h * 0.992) or (close >= ema20_1h * 0.992)
@@ -321,7 +320,6 @@ def analyze_symbol(coin):
 
     btc_dumping, _ = get_btc_market_regime()
     if btc_dumping:
-        # BTC 급락장에서는 1H 지지 + 15m 중심선(bb_mid_15m) 지지 + 24h 양봉(+2%↑)인 독자 강세 종목만 허용
         if not htf_support_ok or close < bb_mid_15m or change_24h < 2.0:
             return None
 
@@ -403,7 +401,7 @@ def analyze_symbol(coin):
     upper_wick_ratio = (high_p - max(open_p, close)) / curr_range
     curr_candle_gain_pct = (close - open_p) / max(open_p, 1e-8) * 100.0
 
-    # 1) 전고점 S/R Flip 칼지지 ($UNITAS 오차 0.07%, $BERA 오차 1.03% 적중)
+    # 1) 전고점 S/R Flip 칼지지
     cond_sr_flip_retest = (
         (not is_current_ignition)
         and (close >= prev_box_high * 0.996)
@@ -437,7 +435,7 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 4) 포켓 피벗(Pocket Pivot) 초동 양봉 직격 ($UNITAS 1% 건조 후 10.2배, $BERA 0% 건조 후 4.4배)
+    # 4) 포켓 피벗(Pocket Pivot) 초동 양봉 직격
     cond_pocket_pivot = (
         is_current_ignition
         and (close > open_p)
@@ -558,40 +556,35 @@ def analyze_symbol(coin):
     if score < active_threshold:
         return None
 
-    atr_val = to_float(atr_5m.iloc[-1], close * 0.008)
     support_line = max(prev_box_low, min(ma50, ignition_low))
     swing_high_line = max(prev_box_high, ignition_high)
 
     entry_low = close * 0.9975
     entry_high = close * 1.0010
 
-    atr_mult_b = getattr(cfg, "SL_ATR_MULT_TRACK_B", 1.45)
-    atr_mult_a = getattr(cfg, "SL_ATR_MULT_TRACK_A", 1.45)
-
-    if track_type == "TRACK_B":
-        raw_stop = min(prev_box_high, flag_support_line, ignition_low) - (atr_mult_b * atr_val)
-        sl_note = "S/R·포켓피벗지지선+스탑헌팅방어버퍼(1.45x)"
-    else:
-        raw_stop = support_line - (atr_mult_a * atr_val)
-        sl_note = "15m/1H 매집지지선+스탑헌팅방어버퍼(1.45x)"
-
-    raw_sl_pct = (close - raw_stop) / max(close, 1e-8) * 100.0
-    sl_pct_int = int(np.clip(round(raw_sl_pct), 3, 5))
+    # [핵심 수정]: 급등 전 아랫꼬리 휩소 방어를 위해 -6% 고정 손절 일괄 적용
+    sl_pct_int = int(getattr(cfg, "FIXED_SL_PCT", 6))
     stop_price = close * (1.0 - sl_pct_int / 100.0)
+    sl_note = f"급등전 휩소·스탑헌팅 방어 고정손절(-{sl_pct_int}%)"
 
-    wave_height = max(swing_high_line - support_line, close * 0.032)
-    tp1 = max(close * 1.080, support_line + wave_height * 2.13)
-    tp2 = max(close * 1.145, support_line + wave_height * 3.06)
-    tp3 = max(close * 1.210, support_line + wave_height * 3.86)
+    # [단기 10~50% 수익 목표 반영]: 최소 보장 하한(+10% / +18% / +28%)과 실전 피보나치 파동 확장 중 큰 값 적용
+    tp1_min_ratio = 1.0 + getattr(cfg, "TP1_MIN_PCT", 10.0) / 100.0
+    tp2_min_ratio = 1.0 + getattr(cfg, "TP2_MIN_PCT", 18.0) / 100.0
+    tp3_min_ratio = 1.0 + getattr(cfg, "TP3_MIN_PCT", 28.0) / 100.0
+
+    wave_height = max(swing_high_line - support_line, close * 0.045)
+    tp1 = max(close * tp1_min_ratio, support_line + wave_height * 2.13)
+    tp2 = max(close * tp2_min_ratio, support_line + wave_height * 3.06)
+    tp3 = max(close * tp3_min_ratio, support_line + wave_height * 3.86)
 
     tp1_pct = round((tp1 - close) / close * 100.0, 1)
     tp2_pct = round((tp2 - close) / close * 100.0, 1)
     tp3_pct = round((tp3 - close) / close * 100.0, 1)
 
     tp_labels = [
-        "Fib 2.13(1차표준)",
+        "Fib 2.13(1차단기)",
         "1H Fib 3.06(중기저항)",
-        "1H Fib 3.86(48h고점)"
+        "1H Fib 3.86(대시세목표)"
     ]
 
     return SafeAlertDict({
