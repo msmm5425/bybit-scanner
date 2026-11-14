@@ -12,15 +12,10 @@ from api import get_scanner_candidates, fetch_verified_1m_klines, fetch_klines
 from analyzer import analyze_symbol
 from notifier import build_briefing_message, build_x_post_message, send_telegram_single, fmt_price
 
-# 동일 종목 재알림 최소 쿨타임 (12시간 = 43,200초)
 RE_ALERT_COOLDOWN_SEC = 43200
-# 스탑헌팅 손절 후 V자 탈환(88점 이상) 재진입 허용 쿨타임 (4시간 = 14,400초)
 SL_RECOVERY_COOLDOWN_SEC = getattr(cfg, "SL_RECOVERY_COOLDOWN_SEC", 14400)
-# 오답 노트(손절 기록) 보관 주기 (72시간 = 259,200초)
 HISTORY_RETENTION_SEC = 259200
-# 위클리 리포트용 개별 신호 원장(signal_episodes) 보관 주기 (10일 = 864,000초)
 EPISODE_RETENTION_SEC = 864000
-# 1회 스캔 주기(5분)당 최대 신규 포착 알림 종목 수
 MAX_NEW_ALERTS_PER_SCAN = getattr(cfg, "MAX_NEW_ALERTS_PER_SCAN", 3)
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 
@@ -167,24 +162,27 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("closed_alerted"):
         return None
 
-    stop_p = to_float(t_item.get("stop_price"))
-    init_stop_p = to_float(t_item.get("initial_stop_price"), default=stop_p)
     entry_low = to_float(t_item.get("entry_low"))
     entry_high = to_float(t_item.get("entry_high"))
     entry_ref = to_float(t_item.get("entry_price"))
     if entry_ref <= 0:
         entry_ref = (entry_low + entry_high) / 2.0 if (entry_low > 0 and entry_high > 0) else max(entry_low, entry_high)
+    if entry_ref <= 0:
+        return None
+
+    # 기존에 -3% SL로 들어가 있던 미종결 보유 종목들을 -6% 고정 손절선으로 자동 업그레이드
+    if to_float(t_item.get("sl_pct"), 0.0) < DEFAULT_FIXED_SL_PCT and not t_item.get("be_armed") and not t_item.get("tp1_hit"):
+        new_fixed_stop = entry_ref * (1.0 - DEFAULT_FIXED_SL_PCT / 100.0)
+        t_item["sl_pct"] = DEFAULT_FIXED_SL_PCT
+        t_item["initial_stop_price"] = new_fixed_stop
+        t_item["stop_price"] = new_fixed_stop
+
+    stop_p = to_float(t_item.get("stop_price"))
+    init_stop_p = to_float(t_item.get("initial_stop_price"), default=stop_p)
     created_at = int(t_item.get("created_at", now_ts))
     created_ms = created_at * 1000
 
-    if stop_p <= 0 or entry_ref <= 0:
-        return None
-
-    # 종목별 설정된 손절폭(신규 -6% 고정, 기존 추적분 -3%~-6%)과 1:1(1R)로 본전 방어 발동 기준 동기화
-    item_sl_pct = to_float(t_item.get("sl_pct"), 0.0)
-    if item_sl_pct <= 0 and init_stop_p > 0:
-        item_sl_pct = round(abs(entry_ref - init_stop_p) / entry_ref * 100.0, 1)
-    be_trigger = float(np.clip(item_sl_pct, 2.0, 8.0)) if item_sl_pct > 0 else float(DEFAULT_FIXED_SL_PCT)
+    be_trigger = float(DEFAULT_FIXED_SL_PCT)
 
     prev_max_high = to_float(t_item.get("max_high_price"), default=entry_ref)
     prev_peak_ts_ms = int(to_float(t_item.get("peak_ts_ms"), default=created_ms))
@@ -235,8 +233,14 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
     tps_list = t_item.get("tps") or []
     just_armed_protection = False
 
-    # 1. 3차 목표가(TP3, +28%~+50%) 전량 익절 졸업 확인
-    if len(tps_list) >= 3 and to_float(tps_list[2]) > 0 and max_high >= to_float(tps_list[2]):
+    tp1_target_p = to_float(tps_list[0]) if len(tps_list) >= 1 else entry_ref * 1.09
+    tp2_target_p = to_float(tps_list[1]) if len(tps_list) >= 2 else entry_ref * 1.17
+    tp3_target_p = to_float(tps_list[2]) if len(tps_list) >= 3 else entry_ref * 1.29
+
+    tp1_gain_pct = max(8.5, (tp1_target_p - entry_ref) / entry_ref * 100.0)
+
+    # 1. 3차 목표가(TP3) 전량 익절 졸업 확인
+    if tp3_target_p > 0 and max_high >= tp3_target_p:
         was_tp3_alerted = bool(t_item.get("tp3_alerted") or t_item.get("tp3_completed") or t_item.get("closed_alerted"))
         t_item["be_armed"] = True
         t_item["tp1_hit"] = True
@@ -251,19 +255,20 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
             messages.append(
                 f"🎯 [3차 최종 목표가(TP3) 전량 익절 졸업] ${base_coin} ({symbol})\n"
                 f"• 진입 기준가: {fmt_price(entry_ref)} → 도달 최고가: {fmt_price(max_high)} (+{max_fav_pct:.1f}%)\n"
-                f"• 3단계 피보나치 목표가를 모두 달성하여 추적을 성공적으로 종료합니다."
+                f"• 동적 3차 목표가({fmt_price(tp3_target_p)})를 달성하여 추적을 성공적으로 종료합니다."
             )
         return {"messages": messages, "sl_record": None}
 
-    # 2. 2차 목표가(TP2, +18%↑) 달성 확인 및 익절 보호선 상향(+10.0% 보장)
-    if len(tps_list) >= 2 and to_float(tps_list[1]) > 0 and max_high >= to_float(tps_list[1]):
+    # 2. 2차 목표가(TP2) 달성 확인 -> 수익 보호선을 1차 TP(+9%) 가격으로 상향 고정
+    if tp2_target_p > 0 and max_high >= tp2_target_p:
         was_tp2_alerted = bool(t_item.get("tp2_alerted") or t_item.get("tp2_hit"))
         t_item["be_armed"] = True
         t_item["tp1_hit"] = True
         t_item["tp2_hit"] = True
         t_item["tp1_alerted"] = True
         t_item["tp2_alerted"] = True
-        new_stop = max(stop_p, entry_ref * 1.100)
+        lock_tp2_pct = round(max(8.5, tp1_gain_pct), 1)
+        new_stop = max(stop_p, entry_ref * (1.0 + lock_tp2_pct / 100.0))
         t_item["stop_price"] = new_stop
         stop_p = new_stop
         if not was_tp2_alerted:
@@ -271,16 +276,16 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
             messages.append(
                 f"✅ [2차 목표가(TP2) 돌파] ${base_coin} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav_pct:.1f}%)\n"
-                f"• 분할 익절 권장 및 수익 보호선을 {fmt_price(stop_p)} (+10.0%) 위로 상향 고정합니다."
+                f"• 2차 분할 익절(30%) 권장 및 남은 물량 보호선을 1차 익절가({fmt_price(stop_p)}, +{lock_tp2_pct:.1f}%) 위로 고정합니다."
             )
 
-    # 3. 1차 목표가(TP1, +10%↑) 달성 확인 및 익절 보호선 상향(+5.0% 보장)
-    elif len(tps_list) >= 1 and to_float(tps_list[0]) > 0 and max_high >= to_float(tps_list[0]):
+    # 3. 1차 목표가(TP1) 달성 확인 -> 40% 익절 확정 후 남은 물량은 1차 조정(MA10/MA20/S&R 지지)을 버티도록 본전(+0.6%)에 보호선 유지 ($ARIA +30.9% 홀딩 공식)
+    elif tp1_target_p > 0 and max_high >= tp1_target_p:
         was_tp1_alerted = bool(t_item.get("tp1_alerted") or t_item.get("tp1_hit"))
         t_item["be_armed"] = True
         t_item["tp1_hit"] = True
         t_item["tp1_alerted"] = True
-        new_stop = max(stop_p, entry_ref * 1.050)
+        new_stop = max(stop_p, entry_ref * 1.006)
         t_item["stop_price"] = new_stop
         stop_p = new_stop
         if not was_tp1_alerted:
@@ -288,7 +293,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
             messages.append(
                 f"✅ [1차 목표가(TP1) 달성] ${base_coin} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav_pct:.1f}%)\n"
-                f"• 1차 분할 익절 권장 및 손절선을 수익 보존선({fmt_price(stop_p)}, +5.0%)으로 상향합니다."
+                f"• 1차 분할 익절(40%) 확정! 남은 물량은 첫 조정 눌림을 견디고 2·3차 대시세를 먹기 위해 본전 보호선({fmt_price(stop_p)}, +0.6%)으로 홀딩합니다."
             )
 
     # 4. 초기 손절폭(-6%, 1R)과 동일한 +6.0% 도달 시 본전 방어(Breakeven) 스탑 자동 활성화
@@ -344,7 +349,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
                 "entry_price": entry_ref,
                 "stop_price": init_stop_p,
                 "sl_trigger_price": trigger_price,
-                "sl_pct": to_float(t_item.get("sl_pct", DEFAULT_FIXED_SL_PCT)),
+                "sl_pct": DEFAULT_FIXED_SL_PCT,
                 "created_at": created_at,
                 "sl_at": now_ts,
                 "hold_minutes": hold_min,
@@ -363,7 +368,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
 
         messages.append(
             f"⚠️ [손절 기준가 이탈] ${base_coin} ({symbol})\n"
-            f"• 이탈 확인가: {fmt_price(trigger_price)} USDT (고정 손절선 {fmt_price(init_stop_p)}, -{be_trigger:g}% 1분봉 이탈 확인)\n"
+            f"• 이탈 확인가: {fmt_price(trigger_price)} USDT (고정 손절선 {fmt_price(init_stop_p)}, -{DEFAULT_FIXED_SL_PCT}% 1분봉 이탈 확인)\n"
             f"• 진입 후 최고 상승폭: +{max_fav_pct:.1f}% (보유 {hold_min}분)\n"
             f"• 리스크 관리 원칙 준수를 권장합니다. (일일 리포트 오답 노트에 자동 기록됨)"
         )
@@ -387,7 +392,7 @@ def _send_signal_notifications_safe(res, now_str):
         x_msg = build_x_post_message(res)
     except Exception:
         tps = res.get("tps", [0, 0, 0])
-        tp_pcts = res.get("tp_pcts", [10.0, 18.0, 28.0])
+        tp_pcts = res.get("tp_pcts", [9.0, 17.0, 29.0])
         x_msg = (
             f"${res.get('base_coin', '')} ({res.get('symbol', '')})\n\n"
             f"- 진입 구간: {fmt_price(res.get('entry_low', 0))} ~ {fmt_price(res.get('entry_high', 0))} USDT\n\n"
@@ -446,7 +451,11 @@ def main():
         created_at = int(t_item.get("created_at", 0))
         age_sec = now_ts - created_at
 
+        # RWA 및 무거운 메이저 코인($RENDER, $JUP 등) 추적 목록에서 즉시 제거
         if is_tradfi_ticker(base_c) or base_c in rwa_blocked_bases:
+            del tracked[sym]
+            continue
+        if hasattr(cfg, "is_heavy_major_coin") and cfg.is_heavy_major_coin(base_c):
             del tracked[sym]
             continue
 
