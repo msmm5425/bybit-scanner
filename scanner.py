@@ -180,6 +180,12 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
     if stop_p <= 0 or entry_ref <= 0:
         return None
 
+    # 종목별 초기 손절폭(sl_pct)과 1:1(1R)로 본전 방어 발동 기준 설정 (-3%면 +3%, -4%면 +4%, -5%면 +5%)
+    item_sl_pct = to_float(t_item.get("sl_pct"), 0.0)
+    if item_sl_pct <= 0 and init_stop_p > 0:
+        item_sl_pct = round(abs(entry_ref - init_stop_p) / entry_ref * 100.0, 1)
+    be_trigger = float(np.clip(item_sl_pct, 2.0, 5.0)) if item_sl_pct > 0 else getattr(cfg, "BREAKEVEN_TRIGGER_PCT", 3.5)
+
     prev_max_high = to_float(t_item.get("max_high_price"), default=entry_ref)
     prev_peak_ts_ms = int(to_float(t_item.get("peak_ts_ms"), default=created_ms))
 
@@ -285,8 +291,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
                 f"• 1차 분할 익절 권장 및 손절선을 수익 보존선({fmt_price(stop_p)}, +4.0%)으로 상향합니다."
             )
 
-    # 4. +4.5% 도달 시 본전 방어(Breakeven) 스탑 자동 활성화
-    be_trigger = getattr(cfg, "BREAKEVEN_TRIGGER_PCT", 4.5)
+    # 4. 종목별 초기 손절폭(sl_pct, 1R) 도달 시 본전 방어(Breakeven) 스탑 자동 활성화
     if max_fav_pct >= be_trigger and not t_item.get("be_armed") and not t_item.get("tp1_hit"):
         t_item["be_armed"] = True
         be_stop = max(stop_p, entry_ref * 1.003)
@@ -294,8 +299,8 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts):
         stop_p = be_stop
         just_armed_protection = True
         messages.append(
-            f"🛡️ [본전 방어(Breakeven) 자동 발동] ${base_coin} ({symbol})\n"
-            f"• 진입 후 최고 +{max_fav_pct:.1f}% 수익권 도달 확인 ({fmt_price(max_high)} USDT)\n"
+            f"🛡️ [본전 방어(Breakeven·1R) 자동 발동] ${base_coin} ({symbol})\n"
+            f"• 초기 손절폭(-{be_trigger:g}%) 대비 1:1 수익권 도달 확인 (최고 +{max_fav_pct:.1f}%, {fmt_price(max_high)} USDT)\n"
             f"• 차익 매물 반락에 대비해 손절선을 진입가 위({fmt_price(stop_p)} USDT)로 상향 고정합니다."
         )
 
@@ -408,7 +413,6 @@ def main():
     candidates, pure_crypto_bases, rwa_blocked_bases = get_scanner_candidates()
     sent_count = 0
 
-    # 1. signal_episodes 및 tracked의 모든 포착 시각을 alert_history에 강제 복원 (쿨타임 누락 방지)
     for ep_item in signal_episodes.values():
         if isinstance(ep_item, dict):
             s = ep_item.get("symbol", "")
@@ -465,7 +469,6 @@ def main():
         if not is_sl_done and not is_tp3_done:
             active_check_syms.append(sym)
 
-    # 2. 기존 추적 종목 1분봉 병렬 감시 -> 디스크 선(先)저장 후 알림 발송
     pending_1m_messages = []
     if active_check_syms:
         with ThreadPoolExecutor(max_workers=8) as ex:
@@ -507,7 +510,6 @@ def main():
         save_state(state)
         return
 
-    # 3. 신규 후보군 필터링 (1종목 1진입 엄격 적용: 이미 추적 중인 종목의 Track A->B 중복 승격 알림 완전 제거)
     to_analyze = []
     for coin in candidates:
         sym = coin["symbol"]
@@ -520,7 +522,6 @@ def main():
         last_alert_ts = int(alert_history.get(sym, 0))
         prev_t = tracked.get(sym)
 
-        # 현재 순항 중(익절/손절 미종결)인 종목은 이유 불문 재스캔 및 중복 알림 절대 금지
         if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed"):
             continue
 
@@ -545,7 +546,6 @@ def main():
 
     results.sort(key=lambda x: x["score"], reverse=True)
 
-    # 4. 1회 스캔당 최고점 상위 MAX_NEW_ALERTS_PER_SCAN(3개)까지만 발송
     new_entry_sent = 0
     for res in results:
         if new_entry_sent >= MAX_NEW_ALERTS_PER_SCAN:
@@ -607,7 +607,6 @@ def main():
         alert_history[symbol] = now_ts
         sync_episode_ledger(signal_episodes, symbol, tracked[symbol])
 
-        # 발송 직전 상태 파일 즉시 저장
         state["tracked"] = tracked
         state["alert_history"] = alert_history
         state["sl_history"] = sl_history
