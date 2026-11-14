@@ -1838,14 +1838,18 @@
       "max_favorable_pct": 4.25,
       "history_backfilled": true,
       "be_armed": false,
-      "tp1_hit": false,
-      "tp2_hit": false,
-      "tp1_alerted": false,
-      "tp2_alerted": false,
-      "tp3_alerted": false,
+      "tp1_hit": true,
+      "tp2_hit": true,
+      "tp1_alerted": true,
+      "tp2_alerted": true,
+      "tp3_alerted": true,
       "breakout_alerted": false,
-      "sl_alerted": false,
-      "tp3_completed": false
+      "sl_alerted": true,
+      "tp3_completed": true,
+      "closed_alerted": true,
+      "sl_at": 1794620930,
+      "sl_trigger_price": 0.2804,
+      "hold_minutes": 891
     },
     "OPUSDT": {
       "created_at": 1794567420,
@@ -4744,6 +4748,37 @@
         "OI 실수급 유입(OI 12.4M·비중 110%)",
         "청정 펀딩 수급(+0.0100%)"
       ]
+    },
+    "STXUSDT_1794567420": {
+      "symbol": "STXUSDT",
+      "track_type": "TRACK_A",
+      "score": 96,
+      "entry_price": 0.2892,
+      "stop_price": 0.280524,
+      "sl_trigger_price": 0.2804,
+      "sl_pct": 3.0,
+      "created_at": 1794567420,
+      "sl_at": 1794620930,
+      "hold_minutes": 891,
+      "max_high_price": 0.3015,
+      "max_favorable_pct": 4.25,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 0.6,
+      "rsi6_15m": 67.1,
+      "kdj_j_15m": 57.5,
+      "oi_m": 3.7200351842400017,
+      "turnover_m": 1.71770641398,
+      "funding_pct": 0.01,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(0%)",
+        "완전 정배열(5>20>50>112) 지지",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(4.2%)+OBV/CVD 선행매집",
+        "이평리본 초밀집 확산(1.4%)",
+        "발화전 거래량 극건조 포켓(1%)",
+        "OI 실수급 유입(OI 3.7M·비중 217%)",
+        "청정 펀딩 수급(+0.0100%)"
+      ]
     }
   },
   "signal_episodes": {
@@ -6257,15 +6292,15 @@
       "max_high_price": 0.3015,
       "max_favorable_pct": 4.25,
       "be_armed": false,
-      "tp1_hit": false,
-      "tp2_hit": false,
-      "tp1_alerted": false,
-      "tp2_alerted": false,
-      "tp3_alerted": false,
-      "tp3_completed": false,
-      "sl_alerted": false,
-      "closed_alerted": false,
-      "sl_at": 0
+      "tp1_hit": true,
+      "tp2_hit": true,
+      "tp1_alerted": true,
+      "tp2_alerted": true,
+      "tp3_alerted": true,
+      "tp3_completed": true,
+      "sl_alerted": true,
+      "closed_alerted": true,
+      "sl_at": 1794620930
     },
     "OPUSDT_1794567420": {
       "symbol": "OPUSDT",
