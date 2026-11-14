@@ -1,3 +1,5 @@
+import os
+import json
 import time
 import inspect
 import requests
@@ -8,10 +10,56 @@ import config as cfg
 import api as api_mod
 
 _BTC_REGIME_CACHE = {"ts": 0, "is_dumping": False, "drop_pct": 0.0}
+_DYNAMIC_TP_CACHE = {"ts": 0, "data": {}}
+
+
+def get_dynamic_tp_params():
+    """
+    binance_analyzer.py가 Top 5 + 오답노트의 1·2·3차 조정/고점 로데이터에서 학습한
+    [최소 보장 %, Fib 배수, MA20 과열 이격도 %]를 실시간 로드
+    """
+    now = time.time()
+    if now - _DYNAMIC_TP_CACHE["ts"] < 60 and _DYNAMIC_TP_CACHE["data"]:
+        return _DYNAMIC_TP_CACHE["data"]
+
+    params = {
+        "tp1_min_pct": cfg.to_float(getattr(cfg, "TP1_MIN_PCT", 11.0), 11.0),
+        "tp2_min_pct": cfg.to_float(getattr(cfg, "TP2_MIN_PCT", 20.0), 20.0),
+        "tp3_min_pct": cfg.to_float(getattr(cfg, "TP3_MIN_PCT", 35.0), 35.0),
+        "tp3_max_cap_pct": cfg.to_float(getattr(cfg, "TP3_MAX_CAP_PCT", 52.0), 52.0),
+        "tp1_fib_mult": cfg.to_float(getattr(cfg, "TP1_FIB_MULT", 2.13), 2.13),
+        "tp2_fib_mult": cfg.to_float(getattr(cfg, "TP2_FIB_MULT", 3.20), 3.20),
+        "tp3_fib_mult": cfg.to_float(getattr(cfg, "TP3_FIB_MULT", 4.20), 4.20),
+        "tp1_ma20_ext_pct": 5.5,
+        "tp2_ma20_ext_pct": 11.0,
+        "tp3_ma20_ext_pct": 18.0,
+    }
+
+    hist_file = getattr(cfg, "HISTORY_FILE", "analyzer_history.json")
+    if os.path.exists(hist_file):
+        try:
+            with open(hist_file, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict) and isinstance(raw.get("dynamic_tp_tuning"), dict):
+                dt = raw["dynamic_tp_tuning"]
+                params["tp1_min_pct"] = float(np.clip(cfg.to_float(dt.get("tp1_min_pct"), params["tp1_min_pct"]), 10.0, 16.0))
+                params["tp2_min_pct"] = float(np.clip(cfg.to_float(dt.get("tp2_min_pct"), params["tp2_min_pct"]), 18.0, 30.0))
+                params["tp3_min_pct"] = float(np.clip(cfg.to_float(dt.get("tp3_min_pct"), params["tp3_min_pct"]), 28.0, 50.0))
+                params["tp1_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp1_fib_mult"), params["tp1_fib_mult"]), 1.80, 2.60))
+                params["tp2_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp2_fib_mult"), params["tp2_fib_mult"]), 2.75, 3.80))
+                params["tp3_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp3_fib_mult"), params["tp3_fib_mult"]), 3.60, 4.80))
+                params["tp1_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp1_ma20_ext_pct"), 5.5), 3.0, 10.0))
+                params["tp2_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp2_ma20_ext_pct"), 11.0), 6.0, 18.0))
+                params["tp3_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp3_ma20_ext_pct"), 18.0), 11.0, 28.0))
+        except Exception:
+            pass
+
+    _DYNAMIC_TP_CACHE["ts"] = now
+    _DYNAMIC_TP_CACHE["data"] = params
+    return params
 
 
 class SafeAlertDict(dict):
-    """notifier.py에서 어떤 키 별칭(last_price, price 등)으로 조회하든 KeyError가 발생하지 않도록 보장"""
     def __getitem__(self, key):
         if key in self.keys():
             return super().__getitem__(key)
@@ -254,7 +302,7 @@ def analyze_symbol(coin):
     if close <= 0:
         return None
 
-    # 1. 설거지 및 역V자 급락 사전 차단 (최근 12시간)
+    # 1. 설거지 및 역V자 급락 사전 차단
     recent_12h = df_5m.iloc[-144:]
     high_12h = to_float(recent_12h["high"].max(), close)
     low_12h = to_float(recent_12h["low"].min(), close)
@@ -269,7 +317,7 @@ def analyze_symbol(coin):
         if retracement_ratio >= cfg.MAX_RETRACEMENT_RATIO:
             return None
 
-    # 2. 멀티프레임 과열 차단 (15m RSI6, KDJ J, BB 이격, 1H RSI6)
+    # 2. 멀티프레임 과열 차단
     rsi6_15m = to_float(calc_rsi(df_15m["close"], 6).iloc[-1], 50.0)
     kdj_j_15m = to_float(calc_kdj_j(df_15m, 9).iloc[-1], 50.0)
     rsi6_1h = to_float(calc_rsi(df_1h["close"], 6).iloc[-1], 50.0)
@@ -562,29 +610,52 @@ def analyze_symbol(coin):
     entry_low = close * 0.9975
     entry_high = close * 1.0010
 
-    # [핵심 수정]: 급등 전 아랫꼬리 휩소 방어를 위해 -6% 고정 손절 일괄 적용
+    # 1) 고정 손절 -6%
     sl_pct_int = int(getattr(cfg, "FIXED_SL_PCT", 6))
     stop_price = close * (1.0 - sl_pct_int / 100.0)
     sl_note = f"급등전 휩소·스탑헌팅 방어 고정손절(-{sl_pct_int}%)"
 
-    # [단기 10~50% 수익 목표 반영]: 최소 보장 하한(+10% / +18% / +28%)과 실전 피보나치 파동 확장 중 큰 값 적용
-    tp1_min_ratio = 1.0 + getattr(cfg, "TP1_MIN_PCT", 10.0) / 100.0
-    tp2_min_ratio = 1.0 + getattr(cfg, "TP2_MIN_PCT", 18.0) / 100.0
-    tp3_min_ratio = 1.0 + getattr(cfg, "TP3_MIN_PCT", 28.0) / 100.0
+    # 2) Top 5 + 오답노트 로데이터 학습 기반 1·2·3차 익절(TP1~TP3) 산출
+    # (피보나치 파동 목표가와 15m/1H MA20 이격도 저항 목표가를 결합하여 정밀 산출)
+    tp_params = get_dynamic_tp_params()
+    tp1_min_ratio = 1.0 + tp_params["tp1_min_pct"] / 100.0
+    tp2_min_ratio = 1.0 + tp_params["tp2_min_pct"] / 100.0
+    tp3_min_ratio = 1.0 + tp_params["tp3_min_pct"] / 100.0
+    tp3_cap_ratio = 1.0 + tp_params["tp3_max_cap_pct"] / 100.0
+
+    fib1 = tp_params["tp1_fib_mult"]
+    fib2 = tp_params["tp2_fib_mult"]
+    fib3 = tp_params["tp3_fib_mult"]
+
+    ext1_ratio = 1.0 + tp_params["tp1_ma20_ext_pct"] / 100.0
+    ext2_ratio = 1.0 + tp_params["tp2_ma20_ext_pct"] / 100.0
+    ext3_ratio = 1.0 + tp_params["tp3_ma20_ext_pct"] / 100.0
 
     wave_height = max(swing_high_line - support_line, close * 0.045)
-    tp1 = max(close * tp1_min_ratio, support_line + wave_height * 2.13)
-    tp2 = max(close * tp2_min_ratio, support_line + wave_height * 3.06)
-    tp3 = max(close * tp3_min_ratio, support_line + wave_height * 3.86)
+    fib_tp1 = support_line + wave_height * fib1
+    fib_tp2 = support_line + wave_height * fib2
+    fib_tp3 = support_line + wave_height * fib3
+
+    ma_env_tp1 = max(bb_mid_15m, ma20_1h) * ext1_ratio
+    ma_env_tp2 = max(bb_mid_15m, ma20_1h) * ext2_ratio
+    ma_env_tp3 = max(bb_mid_15m, ma20_1h) * ext3_ratio
+
+    blended_w1 = (fib_tp1 * 0.65) + (ma_env_tp1 * 0.35)
+    blended_w2 = (fib_tp2 * 0.65) + (ma_env_tp2 * 0.35)
+    blended_w3 = (fib_tp3 * 0.70) + (ma_env_tp3 * 0.30)
+
+    tp1 = max(close * tp1_min_ratio, min(close * 1.18, blended_w1))
+    tp2 = max(close * tp2_min_ratio, tp1 * 1.06, min(close * 1.32, blended_w2))
+    tp3 = max(close * tp3_min_ratio, tp2 * 1.08, min(close * tp3_cap_ratio, blended_w3))
 
     tp1_pct = round((tp1 - close) / close * 100.0, 1)
     tp2_pct = round((tp2 - close) / close * 100.0, 1)
     tp3_pct = round((tp3 - close) / close * 100.0, 1)
 
     tp_labels = [
-        "Fib 2.13(1차단기)",
-        "1H Fib 3.06(중기저항)",
-        "1H Fib 3.86(대시세목표)"
+        f"1차첫조정(Fib {fib1:.2f}·MA이격)",
+        f"2차중간고점(Fib {fib2:.2f}·MA이격)",
+        f"3차최종고점(Fib {fib3:.2f}·대시세)"
     ]
 
     return SafeAlertDict({
