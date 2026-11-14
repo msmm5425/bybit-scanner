@@ -194,21 +194,33 @@ def calc_obv_and_cvd(df):
 
 
 def get_btc_market_regime():
+    """오답노트 유형1(BTC 도미노 급락 -1.68%~-2.18%) 방어: 15분봉 순단 투매 + 1시간봉 계단식 하락 동시 감지"""
     now = time.time()
     if now - _BTC_REGIME_CACHE["ts"] < 60:
         return _BTC_REGIME_CACHE["is_dumping"], _BTC_REGIME_CACHE["drop_pct"]
 
-    df_btc = fetch_klines("BTCUSDT", "15", limit=35)
+    df_btc = fetch_klines("BTCUSDT", "15", limit=40)
     is_dumping = False
     drop_pct = 0.0
-    if not df_btc.empty and len(df_btc) >= 10:
+    if not df_btc.empty and len(df_btc) >= 16:
         c_now = cfg.to_float(df_btc["close"].iloc[-1])
         h_recent3 = cfg.to_float(df_btc["high"].iloc[-3:].max(), c_now)
+        h_recent12 = cfg.to_float(df_btc["high"].iloc[-12:].max(), c_now)  # 최근 3시간 고점
         ma20_btc = cfg.to_float(df_btc["close"].rolling(20, min_periods=5).mean().iloc[-1], c_now)
         rsi_btc = cfg.to_float(calc_rsi(df_btc["close"], 6).iloc[-1], 50.0)
-        drop_pct = (c_now - h_recent3) / max(h_recent3, 1e-8) * 100.0
-        drop_threshold = getattr(cfg, "BTC_DUMP_DROP_15M_PCT", -0.70)
-        if drop_pct <= drop_threshold or (c_now < ma20_btc * 0.992 and rsi_btc < 32.0):
+
+        drop_15m_pct = (c_now - h_recent3) / max(h_recent3, 1e-8) * 100.0
+        drop_3h_pct = (c_now - h_recent12) / max(h_recent12, 1e-8) * 100.0
+        drop_pct = min(drop_15m_pct, drop_3h_pct)
+
+        thr_15m = getattr(cfg, "BTC_DUMP_DROP_15M_PCT", -0.70)
+        thr_1h = getattr(cfg, "BTC_DUMP_DROP_1H_PCT", -1.20)
+
+        if (
+            drop_15m_pct <= thr_15m
+            or (drop_3h_pct <= thr_1h and c_now < ma20_btc)
+            or (c_now < ma20_btc * 0.992 and rsi_btc < 34.0)
+        ):
             is_dumping = True
 
     _BTC_REGIME_CACHE["ts"] = now
@@ -294,7 +306,12 @@ def analyze_symbol(coin):
     if bb_mid_ext_pct > allowed_bb_ext:
         return None
 
-    # 4. 1H 상위프레임 구조적 지지 확인
+    if "change_24h" in coin:
+        change_24h = to_float(coin.get("change_24h"))
+    else:
+        change_24h = to_float(coin.get("price24hPcnt")) * 100.0
+
+    # 4. 1H 상위프레임 구조적 지지 및 BTC 급락장 디커플링(상대강도 RS) 검증
     ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
     ema20_1h = to_float(df_1h["close"].ewm(span=20, adjust=False).mean().iloc[-1], close)
     htf_support_ok = (close >= ma20_1h * 0.992) or (close >= ema20_1h * 0.992)
@@ -303,8 +320,10 @@ def analyze_symbol(coin):
         return None
 
     btc_dumping, _ = get_btc_market_regime()
-    if btc_dumping and not htf_support_ok:
-        return None
+    if btc_dumping:
+        # BTC 급락장에서는 1H 지지 + 15m 중심선(bb_mid_15m) 지지 + 24h 양봉(+2%↑)인 독자 강세 종목만 허용
+        if not htf_support_ok or close < bb_mid_15m or change_24h < 2.0:
+            return None
 
     if close >= ma20_1h and rsi6_1h >= 55.0:
         htf_status = f"1H 상승우위(RSI6 {int(round(rsi6_1h))})"
@@ -374,11 +393,6 @@ def analyze_symbol(coin):
     else:
         funding_pct = to_float(coin.get("fundingRate")) * 100.0
 
-    if "change_24h" in coin:
-        change_24h = to_float(coin.get("change_24h"))
-    else:
-        change_24h = to_float(coin.get("price24hPcnt")) * 100.0
-
     oi_turnover_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0
 
     breakout_diff_pct = (close - prev_box_high) / max(prev_box_high, 1e-8) * 100.0
@@ -389,7 +403,7 @@ def analyze_symbol(coin):
     upper_wick_ratio = (high_p - max(open_p, close)) / curr_range
     curr_candle_gain_pct = (close - open_p) / max(open_p, 1e-8) * 100.0
 
-    # 1) 전고점 S/R Flip 칼지지
+    # 1) 전고점 S/R Flip 칼지지 ($UNITAS 오차 0.07%, $BERA 오차 1.03% 적중)
     cond_sr_flip_retest = (
         (not is_current_ignition)
         and (close >= prev_box_high * 0.996)
@@ -423,7 +437,7 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 4) 포켓 피벗(Pocket Pivot) 초동 양봉 직격
+    # 4) 포켓 피벗(Pocket Pivot) 초동 양봉 직격 ($UNITAS 1% 건조 후 10.2배, $BERA 0% 건조 후 4.4배)
     cond_pocket_pivot = (
         is_current_ignition
         and (close > open_p)
