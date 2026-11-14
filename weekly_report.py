@@ -50,7 +50,6 @@ if not TELEGRAM_CHAT_ID:
         or ""
     ).strip()
 
-# 동일 심볼 캔들 중복 호출 방지용 메모리 캐시
 _KLINE_CACHE = {}
 
 
@@ -128,7 +127,6 @@ def send_telegram_chunked(text):
 
 
 def fetch_klines_cached(symbol, interval="15", limit=500):
-    """동일 종목에 대해 여러 번 신호가 발생하더라도 거래소 API는 단 1회만 호출하도록 캐싱"""
     cache_key = (symbol, str(interval), int(limit))
     if cache_key in _KLINE_CACHE:
         return _KLINE_CACHE[cache_key]
@@ -179,7 +177,6 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
     if c_at <= 0:
         return
 
-    # 30분 이내 동일 종목 스냅샷은 동일 에피소드로 병합하되, 다른 시간대 재진입은 독립 에피소드로 보존
     bucket = c_at // 1800
     ep_key = f"{sym}_{bucket}"
 
@@ -202,8 +199,8 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
             "track_type": raw_item.get("track_type", "TRACK_A"),
             "score": int(to_float(raw_item.get("score"), 85)),
             "entry_price": entry_p,
-            "stop_price": to_float(raw_item.get("initial_stop_price") or stop_p, entry_p * 0.96),
-            "sl_pct": to_float(raw_item.get("sl_pct"), 4.0),
+            "stop_price": to_float(raw_item.get("initial_stop_price") or stop_p, entry_p * 0.97),
+            "sl_pct": to_float(raw_item.get("sl_pct"), 3.0),
             "tps": raw_item.get("tps") or [entry_p * 1.08, entry_p * 1.15, entry_p * 1.22],
             "tp1_hit": bool(raw_item.get("tp1_hit", False)),
             "tp2_hit": bool(raw_item.get("tp2_hit", False)),
@@ -227,11 +224,6 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
 
 
 def collect_weekly_episodes(now_ts, days=7):
-    """
-    IDE 권고 반영: 수천 개의 커밋을 전수 조사하지 않고
-    1) 현재 bot_state.json의 signal_episodes / tracked / sl_history를 먼저 읽은 뒤,
-    2) Git 히스토리가 존재할 경우 최소 2시간 간격으로만 샘플링(최대 60개 이하)하여 2초 내 수집 완료
-    """
     cutoff_ts = now_ts - (days * 86400)
     episodes_map = {}
 
@@ -253,7 +245,6 @@ def collect_weekly_episodes(now_ts, days=7):
         except Exception as e:
             print(f"[현재 bot_state.json 로드 경고] {e}")
 
-    # Git 히스토리에서 2시간(7200초) 간격으로만 샘플링해 이전 누락분 보완 (최대 50회 미만)
     try:
         cmd = ["git", "log", f"--since={days + 1} days ago", "--format=%H %ct", "--", STATE_FILE]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
@@ -300,10 +291,6 @@ def collect_weekly_episodes(now_ts, days=7):
 
 
 def resolve_same_candle_tie_5m(symbol, candle_ts_ms, tp_price, sl_price):
-    """
-    IDE 권고 반영: 15분봉 단일 캔들 내에서 고가>=TP와 저가<=SL이 동시에 발생한 경우
-    해당 15분 구간의 5분봉 3개를 조회해 어느 가격이 먼저 도달했는지 정밀 판정
-    """
     df_5m = fetch_klines_cached(symbol, "5", limit=180)
     if df_5m is not None and not df_5m.empty and "timestamp" in df_5m.columns:
         sub = df_5m[(df_5m["timestamp"] >= candle_ts_ms) & (df_5m["timestamp"] < candle_ts_ms + 900000)]
@@ -314,19 +301,17 @@ def resolve_same_candle_tie_5m(symbol, candle_ts_ms, tp_price, sl_price):
                 return "SL_FIRST"
             if h >= tp_price and l > sl_price:
                 return "TP_FIRST"
-    # 5분봉에서도 동시 터치이거나 구할 수 없으면 보수적으로 손절(SL) 우선 판정
     return "SL_FIRST"
 
 
 def evaluate_episode_performance(ep, now_ts):
-    """
-    개별 신호(Episode) 단위로 손절 시점 이전까지만 고점을 추적하며,
-    단순 수익률과 실전 분할익절(40:30:30 + 본전방어) 수익률을 함께 계산합니다.
-    """
     sym = ep["symbol"]
     entry_p = to_float(ep["entry_price"])
-    init_stop_p = to_float(ep["stop_price"], entry_p * 0.96)
-    sl_pct = max(2.0, min(5.0, abs((entry_p - init_stop_p) / max(entry_p, 1e-8) * 100.0)))
+    init_stop_p = to_float(ep["stop_price"], entry_p * 0.97)
+    raw_sl_pct = to_float(ep.get("sl_pct"), 0.0)
+    if raw_sl_pct <= 0:
+        raw_sl_pct = abs((entry_p - init_stop_p) / max(entry_p, 1e-8) * 100.0)
+    sl_pct = float(np.clip(round(raw_sl_pct, 1), 2.0, 5.0))
     created_ms = int(ep["created_at"]) * 1000
 
     tps = ep.get("tps") or []
@@ -337,14 +322,15 @@ def evaluate_episode_performance(ep, now_ts):
     tp1_pct = (tp1_p - entry_p) / entry_p * 100.0
     tp2_pct = (tp2_p - entry_p) / entry_p * 100.0
     tp3_pct = (tp3_p - entry_p) / entry_p * 100.0
-    be_trigger_p = entry_p * (1.0 + getattr(cfg, "BREAKEVEN_TRIGGER_PCT", 4.5) / 100.0)
+
+    # 종목별 초기 손절폭(sl_pct, 1R)과 1:1 매칭되는 본전 방어 발동가
+    be_trigger_p = entry_p * (1.0 + sl_pct / 100.0)
 
     df_15m = fetch_klines_cached(sym, "15", limit=500)
     post_df = pd.DataFrame()
     if df_15m is not None and not df_15m.empty and "timestamp" in df_15m.columns:
         post_df = df_15m[df_15m["timestamp"] >= created_ms].copy()
 
-    # 캔들을 시간순으로 순회하며 실제 트레이딩과 동일하게 상태 전이 시뮬레이션 (손절 후 고점 착시 완전 배제)
     highest_before_exit = entry_p
     highest_after_sl = entry_p
     hit_tp1 = False
@@ -373,7 +359,6 @@ def evaluate_episode_performance(ep, now_ts):
             elif hit_be:
                 active_stop = max(active_stop, entry_p * 1.003)
 
-            # 동일 15분봉에서 목표가와 손절선을 동시에 건드린 경우 5분봉으로 선후관계 판별
             next_tp_target = tp3_p if hit_tp2 else (tp2_p if hit_tp1 else tp1_p)
             if l <= active_stop and h >= next_tp_target:
                 order = resolve_same_candle_tie_5m(sym, c_ts, next_tp_target, active_stop)
@@ -405,18 +390,16 @@ def evaluate_episode_performance(ep, now_ts):
             elif h >= be_trigger_p:
                 hit_be = True
     else:
-        # 캔들 미수집 시 스캐너가 실시간 기록한 상태값 사용
         hit_tp1 = ep.get("tp1_hit", False)
         hit_tp2 = ep.get("tp2_hit", False)
         hit_tp3 = ep.get("tp3_completed", False)
-        hit_be = ep.get("be_armed", False)
-        stopped_out = ep.get("sl_alerted", False) and not hit_tp1
+        hit_be = ep.get("be_armed", False) or (to_float(ep.get("max_favorable_pct", 0.0)) >= sl_pct)
+        stopped_out = ep.get("sl_alerted", False) and not hit_tp1 and not hit_be
         highest_before_exit = entry_p * (1.0 + to_float(ep.get("max_favorable_pct", 0.0)) / 100.0)
 
     valid_max_gain_pct = max(0.0, (highest_before_exit - entry_p) / entry_p * 100.0)
     post_sl_rebound_pct = max(0.0, (highest_after_sl - init_stop_p) / max(init_stop_p, 1e-8) * 100.0)
 
-    # 최종 상태 및 실전 분할익절(40% / 30% / 30%) 수익률 계산
     if hit_tp3:
         status = "TP3_WIN"
         badge = "🎯 3차졸업"
@@ -457,6 +440,7 @@ def evaluate_episode_performance(ep, now_ts):
         "track_type": ep["track_type"],
         "score": ep["score"],
         "entry_price": entry_p,
+        "sl_pct": sl_pct,
         "status": status,
         "badge": badge,
         "valid_max_gain_pct": round(valid_max_gain_pct, 1),
@@ -480,7 +464,6 @@ def main():
         send_telegram_chunked(msg)
         return
 
-    # 심볼별 15분봉 병렬 프리패칭 (중복 호출 제거 및 실행 시간 단축)
     unique_syms = list({ep["symbol"] for ep in episodes})
     with ThreadPoolExecutor(max_workers=8) as ex:
         futures = [ex.submit(fetch_klines_cached, s, "15", 500) for s in unique_syms]
@@ -505,7 +488,6 @@ def main():
     strict_win_rate = (win_cnt / decided_cnt * 100.0) if decided_cnt > 0 else 0.0
     defended_rate = ((win_cnt + be_cnt) / decided_cnt * 100.0) if decided_cnt > 0 else 0.0
 
-    # 트랙별(Track A 선취매 vs Track B 돌파) 성과 비교
     track_a = [x for x in evaluated if x["track_type"] == "TRACK_A" and x["status"] != "ACTIVE"]
     track_b = [x for x in evaluated if x["track_type"] == "TRACK_B" and x["status"] != "ACTIVE"]
     win_a = sum(1 for x in track_a if x["status"].endswith("WIN"))
@@ -513,7 +495,6 @@ def main():
     rate_a = (win_a / len(track_a) * 100.0) if track_a else 0.0
     rate_b = (win_b / len(track_b) * 100.0) if track_b else 0.0
 
-    # 수익률 집계 (단순 합산 vs 실전 분할익절 기대값 vs 타점당 계좌 10% 투입 시 실제 계좌 증감률)
     decided_items = [x for x in evaluated if x["status"] != "ACTIVE"]
     simple_sum_pct = sum(x["simple_pnl_pct"] for x in decided_items)
     split_sum_pct = sum(x["split_pnl_pct"] for x in decided_items)
@@ -525,11 +506,11 @@ def main():
 
     lines = [
         f"📅 [Bybit 스캐너 주간 실전 성과 리포트 ({start_date_str} ~ {end_date_str})]",
-        f"🕒 집계 시각: {now_str} (생존 편향 제거 · 전수 신호 독립 집계)\n",
+        f"🕒 집계 시각: {now_str} (생존 편향 제거 · 1R 본전방어 반영)\n",
         "1️⃣ [주간 전체 신호(Episode) 성적표]",
         f"• 총 발생 신호: {total_cnt}건 (종결 {decided_cnt}건 | 순항중 {len(act_list)}건)",
         f"• 익절 달성: {win_cnt}건 (🎯3차 {len(tp3_list)}건 | ✅2차 {len(tp2_list)}건 | ✅1차 {len(tp1_list)}건)",
-        f"• 본전 방어(🛡️+4.5% 도달 후 보호마감): {be_cnt}건 | 손절 이탈(❌): {sl_cnt}건",
+        f"• 본전 방어(🛡️1R 도달 후 보호마감): {be_cnt}건 | 손절 이탈(❌): {sl_cnt}건",
         f"• 순수 익절 승률: {strict_win_rate:.1f}% | 본전방어 포함 무패율: {defended_rate:.1f}%\n",
         "2️⃣ [실전 계좌 수익률 분석 (분할익절 40:30:30 반영)]",
         f"• 신호 1건당 평균 기대수익률(Expectancy): {avg_expectancy_pct:+.2f}%",
@@ -558,7 +539,7 @@ def main():
             dt_s = datetime.fromtimestamp(item["created_at"], tz=KST).strftime("%m/%d %H:%M")
             sh_note = f" (⚠️손절후 +{item['post_sl_rebound_pct']:.1f}% 반등)" if item["post_sl_rebound_pct"] >= 4.0 else ""
             lines.append(
-                f"  - ❌ ${item['base']} ({dt_s} | {item['track_type']}): 진입 후 유효최고 +{item['valid_max_gain_pct']:.1f}% → {item['split_pnl_pct']:+.1f}%{sh_note}"
+                f"  - ❌ ${item['base']} ({dt_s} | SL -{item['sl_pct']:g}%): 진입 후 유효최고 +{item['valid_max_gain_pct']:.1f}% → {item['split_pnl_pct']:+.1f}%{sh_note}"
             )
 
     elapsed = time.time() - start_t
