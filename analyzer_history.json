@@ -242,37 +242,37 @@
     },
     {
       "date_str": "2026-11-14",
-      "timestamp": 1794634712,
+      "timestamp": 1794642001,
       "coins": [
         {
           "symbol": "AKEUSDT",
-          "ign_price": 0.0040116,
-          "support_line": 0.0025714,
-          "swing_high_line": 0.0040846
+          "ign_price": 0.0065538,
+          "support_line": 0.00438,
+          "swing_high_line": 0.0067686
         },
         {
           "symbol": "SHELLUSDT",
-          "ign_price": 0.0196,
-          "support_line": 0.01881,
-          "swing_high_line": 0.01972
+          "ign_price": 0.01959,
+          "support_line": 0.01947,
+          "swing_high_line": 0.01959
         },
         {
           "symbol": "UNITASUSDT",
-          "ign_price": 0.133,
-          "support_line": 0.1317,
-          "swing_high_line": 0.1333
-        },
-        {
-          "symbol": "BERAUSDT",
-          "ign_price": 0.1019,
-          "support_line": 0.0972,
-          "swing_high_line": 0.1021
+          "ign_price": 0.1622,
+          "support_line": 0.1354,
+          "swing_high_line": 0.1631
         },
         {
           "symbol": "UAIUSDT",
-          "ign_price": 0.03704,
-          "support_line": 0.03457,
-          "swing_high_line": 0.03708
+          "ign_price": 0.03931,
+          "support_line": 0.03666,
+          "swing_high_line": 0.03976
+        },
+        {
+          "symbol": "BERAUSDT",
+          "ign_price": 0.1055,
+          "support_line": 0.1001,
+          "swing_high_line": 0.1055
         }
       ]
     }
