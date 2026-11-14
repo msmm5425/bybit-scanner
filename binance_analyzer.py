@@ -16,6 +16,7 @@ try:
     BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
     is_tradfi_ticker = getattr(cfg, "is_tradfi_ticker", lambda x: False)
     NON_CRYPTO_META_KEYWORDS = getattr(cfg, "NON_CRYPTO_META_KEYWORDS", ())
+    FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 except Exception as e:
     print(f"[설정 로드 경고] config.py 기본값 대체: {e}")
     cfg = None
@@ -26,6 +27,7 @@ except Exception as e:
     BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0"}
     is_tradfi_ticker = lambda x: False
     NON_CRYPTO_META_KEYWORDS = ()
+    FIXED_SL_PCT = 6
 
 try:
     import api as api_mod
@@ -166,7 +168,6 @@ def fetch_klines(symbol, interval="5", limit=300):
             clean_base = clean_base[len(prefix):]
             break
 
-    # 1순위: Gate.io 선물 직통 API
     gate_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h", 240: "4h"}.get(iv_min, "5m")
     for contract in (f"{base}_USDT", f"{clean_base}_USDT"):
         try:
@@ -183,7 +184,6 @@ def fetch_klines(symbol, interval="5", limit=300):
         except requests.RequestException:
             pass
 
-    # 2순위: Bitget 선물 직통 API
     bg_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1H", 240: "4H"}.get(iv_min, "5m")
     for bg_sym in (symbol, f"{clean_base}USDT"):
         try:
@@ -200,7 +200,6 @@ def fetch_klines(symbol, interval="5", limit=300):
         except requests.RequestException:
             pass
 
-    # 3순위: Bybit 공식 글로벌 미러
     bybit_params = {"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)}
     for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com"):
         try:
@@ -212,7 +211,6 @@ def fetch_klines(symbol, interval="5", limit=300):
         except requests.RequestException:
             pass
 
-    # 4순위: MEXC 선물 직통 API
     mexc_iv = {1: "Min1", 5: "Min5", 15: "Min15", 60: "Min60"}.get(iv_min, "Min5")
     for m_sym in (f"{base}_USDT", f"{clean_base}_USDT"):
         try:
@@ -239,7 +237,6 @@ def fetch_klines(symbol, interval="5", limit=300):
         except requests.RequestException:
             pass
 
-    # 5순위: Binance Data Vision
     bn_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h"}.get(iv_min, "5m")
     for bn_sym in (symbol, f"{clean_base}USDT"):
         try:
@@ -259,7 +256,6 @@ def fetch_klines(symbol, interval="5", limit=300):
         except requests.RequestException:
             pass
 
-    print(f"[캔들 수집 실패] {symbol} (interval={interval}m): 모든 직통 거래소 엔드포인트 응답 없음")
     return pd.DataFrame()
 
 
@@ -522,7 +518,6 @@ def reverse_engineer_top_coin(coin, now_ts):
     try:
         df_5m = fetch_klines(symbol, "5", limit=300)
         if df_5m is None or df_5m.empty or len(df_5m) < 25:
-            print(f"[분석 제외] {symbol}: 5분봉 데이터 부족 ({0 if df_5m is None else len(df_5m)}개)")
             return None
 
         df_1h = fetch_klines(symbol, "60", limit=75)
@@ -748,7 +743,7 @@ def reverse_engineer_top_coin(coin, now_ts):
 
 
 # =====================================================================
-# [2. 내 스캐너 알림 종목 오답 노트 (종목별 초기 SL과 1:1(1R) 본전 방어 기준 고정)]
+# [2. 내 스캐너 알림 종목 오답 노트 (-6% 고정 손절 & 1R(+6%) 본전 방어 기준)]
 # =====================================================================
 def analyze_scanner_sl_postmortem(now_ts):
     state = load_json_file(STATE_FILE, {"tracked": {}, "sl_history": {}})
@@ -785,10 +780,10 @@ def analyze_scanner_sl_postmortem(now_ts):
         raw_sl_pct = to_float(t_item.get("sl_pct"), 0.0)
         if raw_sl_pct <= 0 and entry_p > 0 and stop_p_val > 0:
             raw_sl_pct = round(abs(entry_p - stop_p_val) / entry_p * 100.0, 1)
-        item_sl_pct = float(np.clip(raw_sl_pct if raw_sl_pct > 0 else 3.0, 2.0, 5.0))
+        item_sl_pct = float(np.clip(raw_sl_pct if raw_sl_pct > 0 else float(FIXED_SL_PCT), 2.0, 8.0))
 
         tps_list = t_item.get("tps") or []
-        tp1_val = to_float(tps_list[0]) if len(tps_list) >= 1 else entry_p * 1.078
+        tp1_val = to_float(tps_list[0]) if len(tps_list) >= 1 else entry_p * 1.100
 
         if not t_item.get("tp1_hit") and entry_p > 0:
             df_15m_chk = fetch_klines(sym, "15", limit=200)
@@ -798,12 +793,12 @@ def analyze_scanner_sl_postmortem(now_ts):
                     max_h_15m = to_float(win_15m["high"].max(), entry_p)
                     fav_pct = round((max_h_15m - entry_p) / entry_p * 100.0, 2)
                     t_item["max_favorable_pct"] = max(to_float(t_item.get("max_favorable_pct")), max(0.0, fav_pct))
-                    if max_h_15m >= min(tp1_val, entry_p * 1.080):
+                    if max_h_15m >= tp1_val:
                         t_item["tp1_hit"] = True
                     elif fav_pct >= item_sl_pct:
                         t_item["be_armed"] = True
 
-        if t_item.get("tp1_hit") or t_item.get("tp2_hit") or (t_item.get("tp3_completed") and to_float(t_item.get("max_favorable_pct")) >= 7.5):
+        if t_item.get("tp1_hit") or t_item.get("tp2_hit") or (t_item.get("tp3_completed") and to_float(t_item.get("max_favorable_pct")) >= 8.0):
             tp_win_count += 1
         elif t_item.get("be_armed") and t_item.get("tp3_completed"):
             be_protect_count += 1
@@ -859,7 +854,7 @@ def analyze_scanner_sl_postmortem(now_ts):
     )
 
     if not recent_sl_list:
-        lines.append("• ✅ 손절(SL) 발생 0건: 현재 유동 손절선(-3%~-5%) 및 1R 본전 방어가 완벽히 작동하고 있습니다.")
+        lines.append(f"• ✅ 손절(SL) 발생 0건: 현재 -{FIXED_SL_PCT}% 고정 손절 및 1R(+{FIXED_SL_PCT}%) 본전 방어가 완벽히 작동하고 있습니다.")
         return "\n".join(lines), []
 
     df_btc_15m = fetch_klines("BTCUSDT", "15", limit=200)
@@ -881,7 +876,7 @@ def analyze_scanner_sl_postmortem(now_ts):
         raw_sl = to_float(sl_item.get("sl_pct"), 0.0)
         if raw_sl <= 0 and entry_p > 0 and stop_p > 0:
             raw_sl = round(abs(entry_p - stop_p) / entry_p * 100.0, 1)
-        sl_pct = float(np.clip(raw_sl if raw_sl > 0 else 3.0, 2.0, 5.0))
+        sl_pct = float(np.clip(raw_sl if raw_sl > 0 else float(FIXED_SL_PCT), 2.0, 8.0))
 
         created_at = int(sl_item.get("created_at", now_ts - 3600))
         sl_at = int(sl_item.get("sl_at", 0))
@@ -929,18 +924,17 @@ def analyze_scanner_sl_postmortem(now_ts):
                 b_low = to_float(btc_win["low"].min(), 1.0)
                 btc_drop_pct = (b_low - b_high) / max(b_high, 1e-8) * 100.0
 
-        # 종목별 1R(sl_pct) 도달 여부를 최우선 확인하여 1R 본전 방어 대상인지 명확히 진단
         if max_fav >= sl_pct:
             cause_tag = f"유형3 [1R(+{sl_pct:g}%) 수익 도달(최고 +{max_fav:.1f}%) 후 반락]"
-            cause_detail = f"초기 SL(-{sl_pct:g}%) 대비 1:1 수익권에 도달했으나 반락 (신규 1R 본전방어 적용 시 손절 원천 차단)"
+            cause_detail = f"손절폭(-{sl_pct:g}%) 대비 1:1 수익권에 도달했으나 반락 (1R 본전방어 적용 시 손절 원천 차단)"
             cause_counter["PROFIT_GIVEBACK"] += 1
         elif btc_drop_pct <= -0.80:
             cause_tag = f"유형1 [BTC 도미노 급락({btc_drop_pct:.2f}%)]"
             cause_detail = "개별 타점 결함이 아닌 비트코인 순간 투매에 의한 시장 연동 하락"
             cause_counter["BTC_DUMP"] += 1
-        elif rebound_after_sl_pct >= 3.5:
+        elif rebound_after_sl_pct >= 4.0:
             cause_tag = f"유형2 [스탑헌팅 후 +{rebound_after_sl_pct:.1f}% V자 재상승]"
-            cause_detail = "방향성은 적중했으나 손절선 ATR 버퍼가 좁아 아랫꼬리에 털린 후 반등"
+            cause_detail = f"아랫꼬리 털기 후 급반등 (신규 -{FIXED_SL_PCT}% 고정 손절 적용 시 휩소 방어 가능)"
             cause_counter["STOP_HUNT_REBOUND"] += 1
         elif hold_min <= 45 and max_fav < 1.2:
             cause_tag = f"유형4 [돌파 직후 윗꼬리 휩소(Fakeout·{hold_min}분 만에 이탈)]"
@@ -959,15 +953,15 @@ def analyze_scanner_sl_postmortem(now_ts):
 
     if cause_counter["BTC_DUMP"] > 0:
         prescription_notes.append(
-            "• [BTC 급락 방어]: BTC 15m(-0.7%↓) 및 1H(-1.2%↓) 투매 시 컷오프 85점→90점 상향 & 상대강도(24h +2%↑) 디커플링 필터 적용"
+            "• [BTC 급락 방어]: BTC 15m(-0.7%↓) 및 1H(-1.2%↓) 투매 시 컷오프 85점→90점 상향 & 상대강도(24h +2%↑) 디커플링 필터 유지"
         )
     if cause_counter["STOP_HUNT_REBOUND"] > 0:
         prescription_notes.append(
-            "• [스탑헌팅 방어]: 손절 후 V자 반등 종목 포착 — ATR 버퍼 1.45배 및 스탑헌팅 후 진입가 탈환(88점↑) 시 4h 재진입 활성화"
+            f"• [스탑헌팅 방어]: 급등 전 아랫꼬리 휩소 견디기 위해 FIXED_SL_PCT = {FIXED_SL_PCT}% 고정 손절 및 4h V자 재진입 유지"
         )
     if cause_counter["PROFIT_GIVEBACK"] > 0:
         prescription_notes.append(
-            "• [1R 본전 방어 고정]: 종목별 초기 SL(-3%~-5%)과 1:1(1R, +3%~+5%) 수익 도달 시 즉시 손절선을 진입가 위(+0.3%)로 상향 고정"
+            f"• [1R 본전 방어 고정]: 고정 SL(-{FIXED_SL_PCT}%)과 1:1(1R, +{FIXED_SL_PCT}%) 수익 도달 시 즉시 손절선을 진입가 위(+0.4%)로 상향 고정"
         )
     if cause_counter["FAKEOUT_WHIPSAW"] > 0:
         prescription_notes.append(
@@ -986,7 +980,7 @@ def analyze_scanner_sl_postmortem(now_ts):
 
 
 # =====================================================================
-# [3. 48시간 사후검증 (200시간 캔들 조회 및 표준 익절 기준 정밀 판정)]
+# [3. 48시간 사후검증 (단기 10~50% 목표가 기준 정밀 판정)]
 # =====================================================================
 def _extract_flat_cohorts(obj):
     results = []
@@ -1078,11 +1072,11 @@ def evaluate_48h_history(history_list, now_ts):
         max_h = to_float(post_1h["high"].max() if not post_1h.empty else df_1h["high"].max(), ign_p)
         max_gain_pct = max(0.0, (max_h - ign_p) / ign_p * 100.0)
 
-        if max_gain_pct >= 20.0:
+        if max_gain_pct >= 28.0:
             badge = "🎯 [3차 TP 전량익절 졸업]"
-        elif max_gain_pct >= 14.0:
+        elif max_gain_pct >= 18.0:
             badge = "✅ [2차 TP 돌파]"
-        elif max_gain_pct >= 8.0:
+        elif max_gain_pct >= 10.0:
             badge = "✅ [1차 TP 달성]"
         else:
             badge = "⏳ [보합/눌림 진행]"
@@ -1196,12 +1190,11 @@ def main():
     rec_vol_min = round(max(2.6, min(4.0, float(np.percentile([x["ign_vol_mult"] for x in analyzed_top5], 15)) * 0.85)), 1)
     rec_box_max = round(max(5.5, min(9.5, float(np.median([x["pre_box_pct"] for x in analyzed_top5])) * 1.6)), 1)
     rec_dryup = round(max(0.18, min(0.35, float(np.median([x["dryup_ratio"] for x in analyzed_top5])) + 0.05)), 2)
-    rec_sl_pct = int(np.clip(round(float(np.median([x["mae_pct"] for x in analyzed_top5])) + 1.0), 3, 5))
     avg_hours = round(float(np.mean([x["hours_to_peak"] for x in analyzed_top5])), 1)
     med_pump = float(np.median([x["pump_from_ign_pct"] for x in analyzed_top5]))
-    tp1_rec = int(max(8, round(med_pump * 0.45)))
-    tp2_rec = int(max(14, round(med_pump * 0.75)))
-    tp3_rec = int(max(20, round(med_pump * 1.10)))
+    tp1_rec = int(max(10, round(med_pump * 0.45)))
+    tp2_rec = int(max(18, round(med_pump * 0.75)))
+    tp3_rec = int(max(28, round(med_pump * 1.10)))
 
     msg_lines.extend(
         [
@@ -1236,8 +1229,8 @@ def main():
 
     msg_lines.extend(
         [
-            "\n[5. 48시간 사후검증 기반 유동적 손절(SL) & 3단계 익절(TP) 공식 튜닝안]",
-            f"• 실전 검증 유동 손절폭(SL): -{rec_sl_pct}% (발화 후 고점 전 최대 흔들기 기준 -3%~-5% 유동 적용 & 1R 본전방어 연동)",
+            "\n[5. 48시간 사후검증 기반 고정 손절(-6%) & 3단계 익절(TP) 공식 튜닝안]",
+            f"• 실전 고정 손절폭(SL): -{FIXED_SL_PCT}% (급등 전 휩소 방어 고정 & 1R +{FIXED_SL_PCT}% 본전방어 연동)",
             f"• 48h 실전 3단계 익절(TP) 중앙값 (고점 도달 평균 {avg_hours}시간 소요):",
             f"  - 1차 TP(첫 저항눌림): +{tp1_rec}% (실전 파동 Fib 2.13배 구간)",
             f"  - 2차 TP(중기 저항대): +{tp2_rec}% (실전 파동 Fib 3.06배 구간)",
