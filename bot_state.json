@@ -1445,9 +1445,9 @@
         "OI 실수급 유입(OI 2.4M·비중 118%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.028623,
-      "peak_ts_ms": 1794620331000,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 0.028708,
+      "peak_ts_ms": 1794620520000,
+      "max_favorable_pct": 0.3,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -2721,7 +2721,7 @@
         "청정 펀딩 수급(+0.0050%)"
       ],
       "max_high_price": 0.04014,
-      "peak_ts_ms": 1794618840000,
+      "peak_ts_ms": 1794619140000,
       "max_favorable_pct": 0.25,
       "history_backfilled": true,
       "be_armed": false,
@@ -7842,8 +7842,8 @@
         0.032773335,
         0.03463383
       ],
-      "max_high_price": 0.028623,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 0.028708,
+      "max_favorable_pct": 0.3,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
