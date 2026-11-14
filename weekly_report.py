@@ -17,6 +17,7 @@ try:
     KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
     BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
     is_tradfi_ticker = getattr(cfg, "is_tradfi_ticker", lambda x: False)
+    FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 except Exception:
     cfg = None
     TELEGRAM_BOT_TOKEN = ""
@@ -25,6 +26,7 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0"}
     is_tradfi_ticker = lambda x: False
+    FIXED_SL_PCT = 6
 
 try:
     import api as api_mod
@@ -190,6 +192,7 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
     if entry_p <= 0:
         return
 
+    default_stop = entry_p * (1.0 - FIXED_SL_PCT / 100.0)
     existing = episodes_map.get(ep_key)
     if not existing:
         episodes_map[ep_key] = {
@@ -199,9 +202,9 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
             "track_type": raw_item.get("track_type", "TRACK_A"),
             "score": int(to_float(raw_item.get("score"), 85)),
             "entry_price": entry_p,
-            "stop_price": to_float(raw_item.get("initial_stop_price") or stop_p, entry_p * 0.97),
-            "sl_pct": to_float(raw_item.get("sl_pct"), 3.0),
-            "tps": raw_item.get("tps") or [entry_p * 1.08, entry_p * 1.15, entry_p * 1.22],
+            "stop_price": to_float(raw_item.get("initial_stop_price") or stop_p, default_stop),
+            "sl_pct": to_float(raw_item.get("sl_pct"), float(FIXED_SL_PCT)),
+            "tps": raw_item.get("tps") or [entry_p * 1.10, entry_p * 1.18, entry_p * 1.28],
             "tp1_hit": bool(raw_item.get("tp1_hit", False)),
             "tp2_hit": bool(raw_item.get("tp2_hit", False)),
             "tp3_completed": bool(raw_item.get("tp3_completed", False)),
@@ -307,23 +310,23 @@ def resolve_same_candle_tie_5m(symbol, candle_ts_ms, tp_price, sl_price):
 def evaluate_episode_performance(ep, now_ts):
     sym = ep["symbol"]
     entry_p = to_float(ep["entry_price"])
-    init_stop_p = to_float(ep["stop_price"], entry_p * 0.97)
+    init_stop_p = to_float(ep["stop_price"], entry_p * (1.0 - FIXED_SL_PCT / 100.0))
     raw_sl_pct = to_float(ep.get("sl_pct"), 0.0)
     if raw_sl_pct <= 0:
         raw_sl_pct = abs((entry_p - init_stop_p) / max(entry_p, 1e-8) * 100.0)
-    sl_pct = float(np.clip(round(raw_sl_pct, 1), 2.0, 5.0))
+    sl_pct = float(np.clip(round(raw_sl_pct, 1), 2.0, 8.0))
     created_ms = int(ep["created_at"]) * 1000
 
     tps = ep.get("tps") or []
-    tp1_p = to_float(tps[0], entry_p * 1.08) if len(tps) >= 1 else entry_p * 1.08
-    tp2_p = to_float(tps[1], entry_p * 1.15) if len(tps) >= 2 else entry_p * 1.15
-    tp3_p = to_float(tps[2], entry_p * 1.22) if len(tps) >= 3 else entry_p * 1.22
+    tp1_p = to_float(tps[0], entry_p * 1.10) if len(tps) >= 1 else entry_p * 1.10
+    tp2_p = to_float(tps[1], entry_p * 1.18) if len(tps) >= 2 else entry_p * 1.18
+    tp3_p = to_float(tps[2], entry_p * 1.28) if len(tps) >= 3 else entry_p * 1.28
 
     tp1_pct = (tp1_p - entry_p) / entry_p * 100.0
     tp2_pct = (tp2_p - entry_p) / entry_p * 100.0
     tp3_pct = (tp3_p - entry_p) / entry_p * 100.0
 
-    # 종목별 초기 손절폭(sl_pct, 1R)과 1:1 매칭되는 본전 방어 발동가
+    # 종목별 설정된 손절폭(sl_pct, 신규 -6% 고정)과 1:1 매칭되는 본전 방어 발동가
     be_trigger_p = entry_p * (1.0 + sl_pct / 100.0)
 
     df_15m = fetch_klines_cached(sym, "15", limit=500)
@@ -353,11 +356,11 @@ def evaluate_episode_performance(ep, now_ts):
 
             active_stop = init_stop_p
             if hit_tp2:
-                active_stop = max(active_stop, entry_p * 1.08)
+                active_stop = max(active_stop, entry_p * 1.10)
             elif hit_tp1:
-                active_stop = max(active_stop, entry_p * 1.04)
+                active_stop = max(active_stop, entry_p * 1.05)
             elif hit_be:
-                active_stop = max(active_stop, entry_p * 1.003)
+                active_stop = max(active_stop, entry_p * 1.004)
 
             next_tp_target = tp3_p if hit_tp2 else (tp2_p if hit_tp1 else tp1_p)
             if l <= active_stop and h >= next_tp_target:
@@ -408,18 +411,18 @@ def evaluate_episode_performance(ep, now_ts):
     elif hit_tp2:
         status = "TP2_WIN"
         badge = "✅ 2차달성"
-        split_pnl_pct = (tp1_pct * 0.40) + (tp2_pct * 0.30) + (8.0 * 0.30)
+        split_pnl_pct = (tp1_pct * 0.40) + (tp2_pct * 0.30) + (10.0 * 0.30)
         simple_pnl_pct = tp2_pct
     elif hit_tp1:
         status = "TP1_WIN"
         badge = "✅ 1차달성"
-        split_pnl_pct = (tp1_pct * 0.40) + (4.0 * 0.60)
+        split_pnl_pct = (tp1_pct * 0.40) + (5.0 * 0.60)
         simple_pnl_pct = tp1_pct
     elif be_closed:
         status = "BE_PROTECT"
-        badge = "🛡️ 본전보호(+0.3%)"
-        split_pnl_pct = 0.3
-        simple_pnl_pct = 0.3
+        badge = "🛡️ 본전보호(+0.4%)"
+        split_pnl_pct = 0.4
+        simple_pnl_pct = 0.4
     elif stopped_out:
         status = "SL_LOSS"
         badge = "❌ 손절이탈"
@@ -506,7 +509,7 @@ def main():
 
     lines = [
         f"📅 [Bybit 스캐너 주간 실전 성과 리포트 ({start_date_str} ~ {end_date_str})]",
-        f"🕒 집계 시각: {now_str} (생존 편향 제거 · 1R 본전방어 반영)\n",
+        f"🕒 집계 시각: {now_str} (-{FIXED_SL_PCT}% 고정SL · 1R 본전방어 반영)\n",
         "1️⃣ [주간 전체 신호(Episode) 성적표]",
         f"• 총 발생 신호: {total_cnt}건 (종결 {decided_cnt}건 | 순항중 {len(act_list)}건)",
         f"• 익절 달성: {win_cnt}건 (🎯3차 {len(tp3_list)}건 | ✅2차 {len(tp2_list)}건 | ✅1차 {len(tp1_list)}건)",
