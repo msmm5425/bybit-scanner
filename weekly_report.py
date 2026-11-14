@@ -18,6 +18,7 @@ try:
     KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
     BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
     is_tradfi_ticker = getattr(cfg, "is_tradfi_ticker", lambda x: False)
+    is_heavy_major_coin = getattr(cfg, "is_heavy_major_coin", lambda x: False)
     FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 except Exception:
     cfg = None
@@ -28,6 +29,7 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0"}
     is_tradfi_ticker = lambda x: False
+    is_heavy_major_coin = lambda x: False
     FIXED_SL_PCT = 6
 
 try:
@@ -207,6 +209,11 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
 
     positions = list(sub.index)
     n_bars = len(positions)
+    final_idx = positions[-1]
+    final_high = max(to_float(df.loc[final_idx, "high"], entry_price), entry_price * 1.005)
+    total_pump_pct = max(0.5, (final_high - entry_price) / max(entry_price, 1e-8) * 100.0)
+
+    min_w1_gain_thr = max(5.5, min(14.0, total_pump_pct * 0.22)) if total_pump_pct >= 15.0 else max(3.0, total_pump_pct * 0.30)
 
     swing_peaks = []
     running_max_h = entry_price
@@ -220,7 +227,7 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
             running_max_idx = curr_idx
 
         gain_so_far = (running_max_h - entry_price) / max(entry_price, 1e-8) * 100.0
-        if gain_so_far < 2.0:
+        if gain_so_far < min_w1_gain_thr:
             continue
 
         lookahead_indices = positions[k + 1: min(len(positions), k + 5)]
@@ -232,8 +239,11 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
         next_idx = positions[k + 1]
         is_red_turn = to_float(df.loc[next_idx, "close"]) < to_float(df.loc[next_idx, "open"])
 
-        if pullback_pct >= 1.2 or (is_red_turn and pullback_pct >= 0.7):
-            if not swing_peaks or swing_peaks[-1]["idx"] != running_max_idx:
+        if pullback_pct >= 1.2 or (is_red_turn and pullback_pct >= 0.8):
+            if not swing_peaks or (
+                swing_peaks[-1]["idx"] != running_max_idx
+                and running_max_h > swing_peaks[-1]["high"] * 1.02
+            ):
                 trough_idx = min(lookahead_indices, key=lambda x: to_float(df.loc[x, "low"], running_max_h))
                 trough_low = to_float(df.loc[trough_idx, "low"], running_max_h)
                 ma5_t = to_float(df.loc[trough_idx, "ma5"], trough_low)
@@ -247,7 +257,7 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
                 elif trough_low >= ma20_t * 0.993:
                     hold_tag = "MA20"
                 else:
-                    hold_tag = "S/R지지"
+                    hold_tag = "박스상단S/R"
 
                 swing_peaks.append({
                     "idx": running_max_idx,
@@ -256,25 +266,34 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
                     "hold_tag": hold_tag,
                 })
 
-    final_idx = positions[-1]
     if len(swing_peaks) >= 2:
         w1_info = swing_peaks[0]
-        mid_candidates = [sp for sp in swing_peaks[1:] if sp["idx"] != final_idx]
-        w2_info = mid_candidates[-1] if mid_candidates else swing_peaks[-1]
+        mid_candidates = [
+            sp for sp in swing_peaks[1:]
+            if sp["idx"] != final_idx and sp["high"] < final_high * 0.985
+        ]
+        if mid_candidates:
+            target_w2_price = entry_price + (final_high - entry_price) * 0.62
+            w2_info = min(mid_candidates, key=lambda x: abs(x["high"] - target_w2_price))
+        else:
+            w2_info = swing_peaks[1]
     elif len(swing_peaks) == 1:
         w1_info = swing_peaks[0]
-        mid_pos = positions[min(n_bars - 1, max(0, (positions.index(w1_info["idx"]) + n_bars - 1) // 2))]
+        w1_pos_in_sub = positions.index(w1_info["idx"]) if w1_info["idx"] in positions else 0
+        mid_pos = positions[min(n_bars - 1, max(w1_pos_in_sub + 1, (w1_pos_in_sub + n_bars - 1) // 2))]
         w2_info = {
             "idx": mid_pos,
-            "high": max(to_float(df.loc[mid_pos, "high"]), (w1_info["high"] + to_float(df.loc[final_idx, "high"])) * 0.5),
+            "high": max(to_float(df.loc[mid_pos, "high"]), w1_info["high"] + (final_high - w1_info["high"]) * 0.55),
             "pullback_pct": 1.5,
             "hold_tag": "MA10",
         }
     else:
         idx1 = positions[max(0, n_bars // 3)]
         idx2 = positions[max(0, (n_bars * 2) // 3)]
-        w1_info = {"idx": idx1, "high": to_float(df.loc[idx1, "high"], entry_price * 1.08), "pullback_pct": 1.2, "hold_tag": "MA5"}
-        w2_info = {"idx": idx2, "high": to_float(df.loc[idx2, "high"], entry_price * 1.15), "pullback_pct": 1.8, "hold_tag": "MA10"}
+        h1_est = max(to_float(df.loc[idx1, "high"]), entry_price + (final_high - entry_price) * 0.35)
+        h2_est = max(to_float(df.loc[idx2, "high"]), entry_price + (final_high - entry_price) * 0.68)
+        w1_info = {"idx": idx1, "high": h1_est, "pullback_pct": 1.2, "hold_tag": "MA5"}
+        w2_info = {"idx": idx2, "high": h2_est, "pullback_pct": 1.8, "hold_tag": "MA10"}
 
     def _build_metrics(idx_val, high_override, pb_pct=0.0, hold_str=""):
         row = df.loc[idx_val]
@@ -287,7 +306,7 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
         vol_m = to_float(row.get("vol_mult"), 2.0)
 
         gain_pct = max(0.2, (h_p - entry_price) / max(entry_price, 1e-8) * 100.0)
-        fib_mult = max(1.0, (h_p - support_line) / max(wave_h, 1e-8))
+        fib_mult = max(1.05, min(8.50, (h_p - support_line) / max(wave_h, 1e-8)))
         ma20_ext_pct = max(0.1, (h_p - ma20_v) / max(ma20_v, 1e-8) * 100.0)
 
         if abs(h_p - ma112_v) / max(ma112_v, 1e-8) <= 0.015:
@@ -311,8 +330,8 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
         }
 
     w1 = _build_metrics(w1_info["idx"], w1_info["high"], w1_info["pullback_pct"], w1_info["hold_tag"])
-    w2 = _build_metrics(w2_info["idx"], max(w2_info["high"], w1["price"] * 1.01), w2_info["pullback_pct"], w2_info["hold_tag"])
-    w3 = _build_metrics(final_idx, max(to_float(df.loc[final_idx, "high"]), w2["price"] * 1.01), 0.0, "클라이맥스")
+    w2 = _build_metrics(w2_info["idx"], max(w2_info["high"], w1["price"] * 1.02), w2_info["pullback_pct"], w2_info["hold_tag"])
+    w3 = _build_metrics(final_idx, max(final_high, w2["price"] * 1.02), 0.0, "클라이맥스")
 
     return {"w1": w1, "w2": w2, "w3": w3}
 
@@ -321,7 +340,7 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
     if not isinstance(raw_item, dict):
         return
     base = sym[:-4].upper() if sym.endswith("USDT") else sym.upper()
-    if is_tradfi_ticker(base):
+    if not base.isascii() or is_tradfi_ticker(base) or is_heavy_major_coin(base):
         return
 
     c_at = int(to_float(raw_item.get("created_at"), 0))
@@ -341,7 +360,8 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
     if entry_p <= 0:
         return
 
-    default_stop = entry_p * (1.0 - FIXED_SL_PCT / 100.0)
+    # 주간 시뮬레이션도 신규 원칙(-6% 고정 손절 및 +9% / +17% / +29% 목표가)으로 통일 검증
+    fixed_stop_p = entry_p * (1.0 - FIXED_SL_PCT / 100.0)
     existing = episodes_map.get(ep_key)
     if not existing:
         episodes_map[ep_key] = {
@@ -352,9 +372,9 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
             "score": int(to_float(raw_item.get("score"), 85)),
             "entry_price": entry_p,
             "swing_high_line": to_float(raw_item.get("swing_high_line"), entry_p * 1.02),
-            "stop_price": to_float(raw_item.get("initial_stop_price") or stop_p, default_stop),
-            "sl_pct": to_float(raw_item.get("sl_pct"), float(FIXED_SL_PCT)),
-            "tps": raw_item.get("tps") or [entry_p * 1.11, entry_p * 1.20, entry_p * 1.35],
+            "stop_price": fixed_stop_p,
+            "sl_pct": float(FIXED_SL_PCT),
+            "tps": [entry_p * 1.09, entry_p * 1.17, entry_p * 1.29],
             "tp1_hit": bool(raw_item.get("tp1_hit", False)),
             "tp2_hit": bool(raw_item.get("tp2_hit", False)),
             "tp3_completed": bool(raw_item.get("tp3_completed", False)),
@@ -460,22 +480,17 @@ def resolve_same_candle_tie_5m(symbol, candle_ts_ms, tp_price, sl_price):
 def evaluate_episode_performance(ep, now_ts):
     sym = ep["symbol"]
     entry_p = to_float(ep["entry_price"])
-    init_stop_p = to_float(ep["stop_price"], entry_p * (1.0 - FIXED_SL_PCT / 100.0))
-    raw_sl_pct = to_float(ep.get("sl_pct"), 0.0)
-    if raw_sl_pct <= 0:
-        raw_sl_pct = abs((entry_p - init_stop_p) / max(entry_p, 1e-8) * 100.0)
-    sl_pct = float(np.clip(round(raw_sl_pct, 1), 2.0, 8.0))
+    sl_pct = float(FIXED_SL_PCT)
+    init_stop_p = entry_p * (1.0 - sl_pct / 100.0)
     created_ms = int(ep["created_at"]) * 1000
 
-    tps = ep.get("tps") or []
-    tp1_p = to_float(tps[0], entry_p * 1.11) if len(tps) >= 1 else entry_p * 1.11
-    tp2_p = to_float(tps[1], entry_p * 1.20) if len(tps) >= 2 else entry_p * 1.20
-    tp3_p = to_float(tps[2], entry_p * 1.35) if len(tps) >= 3 else entry_p * 1.35
+    tp1_pct = to_float(getattr(cfg, "TP1_MIN_PCT", 9.0), 9.0)
+    tp2_pct = to_float(getattr(cfg, "TP2_MIN_PCT", 17.0), 17.0)
+    tp3_pct = to_float(getattr(cfg, "TP3_MIN_PCT", 29.0), 29.0)
 
-    tp1_pct = (tp1_p - entry_p) / entry_p * 100.0
-    tp2_pct = (tp2_p - entry_p) / entry_p * 100.0
-    tp3_pct = (tp3_p - entry_p) / entry_p * 100.0
-
+    tp1_p = entry_p * (1.0 + tp1_pct / 100.0)
+    tp2_p = entry_p * (1.0 + tp2_pct / 100.0)
+    tp3_p = entry_p * (1.0 + tp3_pct / 100.0)
     be_trigger_p = entry_p * (1.0 + sl_pct / 100.0)
 
     df_15m = fetch_klines_cached(sym, "15", limit=500)
@@ -512,9 +527,11 @@ def evaluate_episode_performance(ep, now_ts):
 
             active_stop = init_stop_p
             if hit_tp2:
-                active_stop = max(active_stop, entry_p * (1.0 + max(10.0, tp1_pct * 0.95) / 100.0))
+                # 2차 TP 달성 시에는 1차 TP(+9%)로 보호선 고정
+                active_stop = max(active_stop, entry_p * (1.0 + tp1_pct / 100.0))
             elif hit_tp1:
-                active_stop = max(active_stop, entry_p * (1.0 + max(5.0, tp1_pct * 0.55) / 100.0))
+                # 1차 TP 달성 시에는 40% 익절 후 남은 60%가 1차 조정 눌림을 견디도록 +0.6% 본전 보호선 유지 ($ARIA +30.9% 홀딩 공식)
+                active_stop = max(active_stop, entry_p * 1.006)
             elif hit_be:
                 active_stop = max(active_stop, entry_p * 1.004)
 
@@ -553,21 +570,21 @@ def evaluate_episode_performance(ep, now_ts):
             elif h >= be_trigger_p:
                 hit_be = True
 
-        sup_p = entry_p * 0.965
-        w_h = max(to_float(ep.get("swing_high_line"), entry_p * 1.02) - sup_p, entry_p * 0.045)
+        sup_p = entry_p * 0.960
+        w_h = max(to_float(ep.get("swing_high_line"), entry_p * 1.02) - sup_p, entry_p * 0.050)
         waves = extract_three_wave_structure(df_15m, ign_pos, max(ign_pos, peak_pos_before_exit), entry_p, sup_p, w_h)
     else:
-        hit_tp1 = ep.get("tp1_hit", False)
-        hit_tp2 = ep.get("tp2_hit", False)
-        hit_tp3 = ep.get("tp3_completed", False)
-        hit_be = ep.get("be_armed", False) or (to_float(ep.get("max_favorable_pct", 0.0)) >= sl_pct)
-        stopped_out = ep.get("sl_alerted", False) and not hit_tp1 and not hit_be
-        highest_before_exit = entry_p * (1.0 + to_float(ep.get("max_favorable_pct", 0.0)) / 100.0)
         fav_g = max(0.5, to_float(ep.get("max_favorable_pct", 0.0)))
+        hit_tp3 = fav_g >= tp3_pct
+        hit_tp2 = fav_g >= tp2_pct
+        hit_tp1 = fav_g >= tp1_pct
+        hit_be = fav_g >= sl_pct
+        stopped_out = ep.get("sl_alerted", False) and not hit_tp1 and not hit_be
+        highest_before_exit = entry_p * (1.0 + fav_g / 100.0)
         waves = {
-            "w1": {"price": highest_before_exit, "gain_pct": fav_g, "fib_mult": 1.8, "rsi6": 68.0, "kdj_j": 75.0, "ma20_ext_pct": 3.5, "vol_mult": 2.5, "pullback_pct": 1.5, "hold_tag": "MA20", "resist_tag": "MA20+3.5%이격"},
-            "w2": {"price": highest_before_exit, "gain_pct": fav_g, "fib_mult": 2.8, "rsi6": 74.0, "kdj_j": 82.0, "ma20_ext_pct": 7.5, "vol_mult": 3.0, "pullback_pct": 1.8, "hold_tag": "MA10", "resist_tag": "MA50저항"},
-            "w3": {"price": highest_before_exit, "gain_pct": fav_g, "fib_mult": 3.8, "rsi6": 80.0, "kdj_j": 88.0, "ma20_ext_pct": 12.5, "vol_mult": 4.0, "pullback_pct": 0.0, "hold_tag": "클라이맥스", "resist_tag": "클라이맥스"},
+            "w1": {"price": highest_before_exit, "gain_pct": fav_g, "fib_mult": 1.85, "rsi6": 70.0, "kdj_j": 78.0, "ma20_ext_pct": 4.5, "vol_mult": 2.5, "pullback_pct": 1.5, "hold_tag": "MA10", "resist_tag": "MA20+4.5%이격"},
+            "w2": {"price": highest_before_exit, "gain_pct": fav_g, "fib_mult": 2.75, "rsi6": 76.0, "kdj_j": 84.0, "ma20_ext_pct": 7.7, "vol_mult": 3.0, "pullback_pct": 1.8, "hold_tag": "MA10", "resist_tag": "MA50저항"},
+            "w3": {"price": highest_before_exit, "gain_pct": fav_g, "fib_mult": 4.04, "rsi6": 84.0, "kdj_j": 90.0, "ma20_ext_pct": 12.5, "vol_mult": 4.0, "pullback_pct": 0.0, "hold_tag": "클라이맥스", "resist_tag": "클라이맥스"},
         }
 
     valid_max_gain_pct = max(0.0, (highest_before_exit - entry_p) / entry_p * 100.0)
@@ -581,12 +598,12 @@ def evaluate_episode_performance(ep, now_ts):
     elif hit_tp2:
         status = "TP2_WIN"
         badge = "✅ 2차달성"
-        split_pnl_pct = (tp1_pct * 0.40) + (tp2_pct * 0.30) + (max(10.0, tp1_pct * 0.95) * 0.30)
+        split_pnl_pct = (tp1_pct * 0.40) + (tp2_pct * 0.30) + (tp1_pct * 0.30)
         simple_pnl_pct = tp2_pct
     elif hit_tp1:
         status = "TP1_WIN"
         badge = "✅ 1차달성"
-        split_pnl_pct = (tp1_pct * 0.40) + (max(5.0, tp1_pct * 0.55) * 0.60)
+        split_pnl_pct = (tp1_pct * 0.40) + (0.6 * 0.60)
         simple_pnl_pct = tp1_pct
     elif be_closed:
         status = "BE_PROTECT"
@@ -679,29 +696,28 @@ def main():
     top_winners = sorted(evaluated, key=lambda x: x["valid_max_gain_pct"], reverse=True)[:5]
     stop_hunted = [x for x in sl_list if x["post_sl_rebound_pct"] >= 4.0]
 
-    # 주간 전체 상승 파동 종목들의 1차·2차·3차 고점 로데이터 집계
-    w1_Pool = [x["waves"]["w1"] for x in evaluated if x["valid_max_gain_pct"] >= 4.0]
-    w2_Pool = [x["waves"]["w2"] for x in evaluated if x["valid_max_gain_pct"] >= 10.0]
-    w3_Pool = [x["waves"]["w3"] for x in evaluated if x["valid_max_gain_pct"] >= 16.0]
+    w1_Pool = [x["waves"]["w1"] for x in evaluated if x["valid_max_gain_pct"] >= 6.0]
+    w2_Pool = [x["waves"]["w2"] for x in evaluated if x["valid_max_gain_pct"] >= 12.0]
+    w3_Pool = [x["waves"]["w3"] for x in evaluated if x["valid_max_gain_pct"] >= 18.0]
 
-    wk_w1_pct = round(float(np.median([w["gain_pct"] for w in w1_Pool])) if w1_Pool else 11.0, 1)
-    wk_w1_fib = round(float(np.median([w["fib_mult"] for w in w1_Pool])) if w1_Pool else 2.13, 2)
+    wk_w1_pct = round(float(np.median([w["gain_pct"] for w in w1_Pool])) if w1_Pool else 9.0, 1)
+    wk_w1_fib = round(float(np.median([w["fib_mult"] for w in w1_Pool])) if w1_Pool else 1.85, 2)
     wk_w1_ext = round(float(np.median([w["ma20_ext_pct"] for w in w1_Pool])) if w1_Pool else 4.5, 1)
-    wk_w1_rsi = round(float(np.median([w["rsi6"] for w in w1_Pool])) if w1_Pool else 73.0, 0)
+    wk_w1_rsi = round(float(np.median([w["rsi6"] for w in w1_Pool])) if w1_Pool else 72.0, 0)
 
-    wk_w2_pct = round(float(np.median([w["gain_pct"] for w in w2_Pool])) if w2_Pool else 20.0, 1)
-    wk_w2_fib = round(float(np.median([w["fib_mult"] for w in w2_Pool])) if w2_Pool else 3.15, 2)
-    wk_w2_ext = round(float(np.median([w["ma20_ext_pct"] for w in w2_Pool])) if w2_Pool else 8.5, 1)
+    wk_w2_pct = round(float(np.median([w["gain_pct"] for w in w2_Pool])) if w2_Pool else 17.0, 1)
+    wk_w2_fib = round(float(np.median([w["fib_mult"] for w in w2_Pool])) if w2_Pool else 2.75, 2)
+    wk_w2_ext = round(float(np.median([w["ma20_ext_pct"] for w in w2_Pool])) if w2_Pool else 7.7, 1)
     wk_w2_rsi = round(float(np.median([w["rsi6"] for w in w2_Pool])) if w2_Pool else 78.0, 0)
 
-    wk_w3_pct = round(float(np.median([w["gain_pct"] for w in w3_Pool])) if w3_Pool else 35.0, 1)
-    wk_w3_fib = round(float(np.median([w["fib_mult"] for w in w3_Pool])) if w3_Pool else 4.20, 2)
-    wk_w3_ext = round(float(np.median([w["ma20_ext_pct"] for w in w3_Pool])) if w3_Pool else 14.5, 1)
+    wk_w3_pct = round(float(np.median([w["gain_pct"] for w in w3_Pool])) if w3_Pool else 29.0, 1)
+    wk_w3_fib = round(float(np.median([w["fib_mult"] for w in w3_Pool])) if w3_Pool else 4.04, 2)
+    wk_w3_ext = round(float(np.median([w["ma20_ext_pct"] for w in w3_Pool])) if w3_Pool else 12.5, 1)
     wk_w3_rsi = round(float(np.median([w["rsi6"] for w in w3_Pool])) if w3_Pool else 84.0, 0)
 
     lines = [
         f"📅 [Bybit 스캐너 주간 실전 성과 & 1·2·3차 파동 심층 리포트 ({start_date_str} ~ {end_date_str})]",
-        f"🕒 집계 시각: {now_str} (-{FIXED_SL_PCT}% 고정SL · 1R 본전방어 · 3파동 로데이터 분석)\n",
+        f"🕒 집계 시각: {now_str} (-{FIXED_SL_PCT}% 고정SL · 1R 본전방어 · 무거운 메이저 배제 기준)\n",
         "1️⃣ [주간 전체 신호(Episode) 성적표]",
         f"• 총 발생 신호: {total_cnt}건 (종결 {decided_cnt}건 | 순항중 {len(act_list)}건)",
         f"• 익절 달성: {win_cnt}건 (🎯3차 {len(tp3_list)}건 | ✅2차 {len(tp2_list)}건 | ✅1차 {len(tp1_list)}건)",
@@ -724,12 +740,12 @@ def main():
             f"  {idx}) ${item['base']} ({dt_s} 포착 | {item['score']}점) → 유효최고 +{item['valid_max_gain_pct']:.1f}% {item['badge']} (실현 {item['split_pnl_pct']:+.1f}%)"
         )
         lines.append(
-            f"     - [파동궤적]: 1차첫조정 +{w1['gain_pct']:.1f}%(Fib {w1['fib_mult']:.2f}·MA20+{w1['ma20_ext_pct']:.1f}%·{w1['hold_tag']}지지) "
+            f"     - [파동궤적]: 1차첫조정 +{w1['gain_pct']:.1f}%(Fib {w1['fib_mult']:.2f}·MA20+{w1['ma20_ext_pct']:.1f}%·{w1['hold_tag']} 지지) "
             f"→ 2차중간고점 +{w2['gain_pct']:.1f}%(Fib {w2['fib_mult']:.2f}·MA20+{w2['ma20_ext_pct']:.1f}%) "
             f"→ 3차최종 +{w3['gain_pct']:.1f}%(Fib {w3['fib_mult']:.2f}·RSI {w3['rsi6']:.0f})"
         )
 
-    lines.append("\n5️⃣ [주간 오답 노트: 손절(SL) 복기 및 반락 전 첫 저항 로데이터 진단]")
+    lines.append(f"\n5️⃣ [주간 오답 노트: -{FIXED_SL_PCT}% 고정SL 기준 손절 복기 및 저항 로데이터 진단]")
     if not sl_list:
         lines.append("• 최근 7일간 손절 마감된 종목이 없습니다.")
     else:
@@ -745,8 +761,8 @@ def main():
                 f"(Fib {w1['fib_mult']:.2f}배·{w1['resist_tag']}·RSI {w1['rsi6']:.0f} 저항) → {item['split_pnl_pct']:+.1f}%{sh_note}"
             )
 
-    rec_tp1 = int(np.clip(round(wk_w1_pct), 10, 16))
-    rec_tp2 = int(np.clip(round(max(rec_tp1 + 7, wk_w2_pct)), 18, 28))
+    rec_tp1 = int(np.clip(round(wk_w1_pct), 9, 14))
+    rec_tp2 = int(np.clip(round(max(rec_tp1 + 7, wk_w2_pct)), 16, 26))
     rec_tp3 = int(np.clip(round(max(rec_tp2 + 10, wk_w3_pct)), 28, 50))
 
     lines.extend(
