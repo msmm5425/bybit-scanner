@@ -442,41 +442,6 @@
       "sl_trigger_price": 0.06363,
       "hold_minutes": 117
     },
-    "AVAXUSDT": {
-      "created_at": 1794253504,
-      "track_type": "TRACK_B",
-      "swing_high_line": 8.634604999999999,
-      "entry_low": 8.464464999999999,
-      "entry_high": 8.532521,
-      "stop_price": 7.988583419999999,
-      "sl_pct": 6,
-      "tps": [
-        9.503729576992761,
-        10.34271780358627,
-        11.116028844
-      ],
-      "tp_pcts": [
-        11.8,
-        21.7,
-        30.8
-      ],
-      "breakout_alerted": true,
-      "sl_alerted": true,
-      "tp3_completed": true,
-      "max_high_price": 8.734,
-      "max_favorable_pct": 2.77,
-      "history_backfilled": true,
-      "peak_ts_ms": 1794253504000,
-      "closed_alerted": true,
-      "sl_at": 1794641928,
-      "sl_trigger_price": 7.964,
-      "hold_minutes": 6473,
-      "tp1_hit": true,
-      "tp2_hit": true,
-      "tp1_alerted": true,
-      "tp2_alerted": true,
-      "tp3_alerted": true
-    },
     "LITUSDT": {
       "created_at": 1794572158,
       "track_type": "TRACK_A",
@@ -623,9 +588,9 @@
         "OI 실수급 유입(OI 3.0M·비중 28%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.33147,
-      "peak_ts_ms": 1794629280000,
-      "max_favorable_pct": 3.74,
+      "max_high_price": 0.3318,
+      "peak_ts_ms": 1794642000000,
+      "max_favorable_pct": 3.85,
       "history_backfilled": true,
       "be_armed": true,
       "tp1_hit": false,
@@ -8632,8 +8597,8 @@
         0.36583895000000005,
         0.3866071
       ],
-      "max_high_price": 0.33147,
-      "max_favorable_pct": 3.74,
+      "max_high_price": 0.3318,
+      "max_favorable_pct": 3.85,
       "be_armed": true,
       "tp1_hit": false,
       "tp2_hit": false,
