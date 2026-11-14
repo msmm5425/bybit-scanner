@@ -242,13 +242,13 @@
     },
     {
       "date_str": "2026-11-14",
-      "timestamp": 1794646402,
+      "timestamp": 1794647812,
       "coins": [
         {
           "symbol": "AKEUSDT",
-          "ign_price": 0.0065538,
-          "support_line": 0.00438,
-          "swing_high_line": 0.0067686
+          "ign_price": 0.0066935,
+          "support_line": 0.0044534,
+          "swing_high_line": 0.00678
         },
         {
           "symbol": "SHELLUSDT",
@@ -259,44 +259,44 @@
         {
           "symbol": "UNITASUSDT",
           "ign_price": 0.1622,
-          "support_line": 0.1354,
+          "support_line": 0.1388,
           "swing_high_line": 0.1631
+        },
+        {
+          "symbol": "SOPHUSDT",
+          "ign_price": 0.001705,
+          "support_line": 0.001534,
+          "swing_high_line": 0.001726
         },
         {
           "symbol": "PIEVERSEUSDT",
           "ign_price": 1.6567,
           "support_line": 1.6049,
           "swing_high_line": 1.6634
-        },
-        {
-          "symbol": "NIGHTUSDT",
-          "ign_price": 0.04463,
-          "support_line": 0.04288,
-          "swing_high_line": 0.04464
         }
       ]
     }
   ],
   "dynamic_tp_tuning": {
-    "tp1_min_pct": 10.0,
-    "tp2_min_pct": 18.0,
+    "tp1_min_pct": 9.0,
+    "tp2_min_pct": 16.0,
     "tp3_min_pct": 28.0,
-    "tp1_fib_mult": 1.85,
-    "tp2_fib_mult": 2.75,
-    "tp3_fib_mult": 4.04,
-    "tp1_ma20_ext_pct": 4.0,
-    "tp2_ma20_ext_pct": 7.2,
-    "tp3_ma20_ext_pct": 12.2,
-    "tp1_rsi6": 84.8,
-    "tp2_rsi6": 71.5,
+    "tp1_fib_mult": 1.65,
+    "tp2_fib_mult": 2.5,
+    "tp3_fib_mult": 3.5,
+    "tp1_ma20_ext_pct": 6.7,
+    "tp2_ma20_ext_pct": 9.7,
+    "tp3_ma20_ext_pct": 14.8,
+    "tp1_rsi6": 81.9,
+    "tp2_rsi6": 85.3,
     "tp3_rsi6": 89.5,
-    "top5_w1_med": 2.8,
+    "top5_w1_med": 13.7,
     "top5_w2_med": 21.2,
     "top5_w3_med": 27.7,
-    "pm_w1_med": 2.6,
-    "pm_w2_med": 10.4,
+    "pm_w1_med": 4.1,
+    "pm_w2_med": 8.9,
     "pm_w3_med": 28,
-    "pm_sample_cnt": 12
+    "pm_sample_cnt": 5
   },
-  "updated_at": "2026-11-14 17:53 KST"
+  "updated_at": "2026-11-14 18:16 KST"
 }
