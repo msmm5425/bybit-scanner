@@ -19,13 +19,23 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [스캐너 핵심 파라미터 및 재진입 쿨타임 설정]
+# [가벼운 코인 단기 10~50% 급등 포착 + -6% 고정 손절(휩소 방어) 세팅]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 평시 85점 이상 알림 발송
 BTC_DUMP_SCORE_THRESHOLD = 90          # BTC 급락 시 컷오프 90점으로 자동 상향
 BTC_DUMP_DROP_15M_PCT = -0.70          # BTC 15분봉 최근 3캔들 고점 대비 -0.70% 이하 시 위험장 판정
 BTC_DUMP_DROP_1H_PCT = -1.20           # BTC 1시간봉 최근 4캔들 고점 대비 -1.20% 이하 시 도미노 투매장 판정
-MAX_NEW_ALERTS_PER_SCAN = 3            # 1회 스캔(5분)당 최고점 상위 3종목만 발송 (텔레그램 도배/누락 방지)
+MAX_NEW_ALERTS_PER_SCAN = 3            # 1회 스캔(5분)당 최고점 상위 3종목만 발송
+
+# [고정 손절 -6% 및 1R(+6%) 본전 방어 설정]
+FIXED_SL_PCT = 6                       # 급등 전 아랫꼬리 휩소 방어를 위한 -6% 고정 손절
+BREAKEVEN_TRIGGER_PCT = 6.0            # 손절폭(-6%)과 1:1(1R)인 +6.0% 도달 시 본전(진입가 위) 방어 자동 가동
+SL_RECOVERY_COOLDOWN_SEC = 14400       # 스탑헌팅 손절 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
+
+# [단기 10~50% 수익 목표에 맞춘 3단계 TP 최소 보장 하한선]
+TP1_MIN_PCT = 10.0                     # 1차 목표가 최소 +10.0% 이상 (파동 Fib 2.13배와 비교해 큰 값 적용)
+TP2_MIN_PCT = 18.0                     # 2차 목표가 최소 +18.0% 이상 (파동 Fib 3.06배와 비교해 큰 값 적용)
+TP3_MIN_PCT = 28.0                     # 3차 목표가 최소 +28.0% 이상 (파동 Fib 3.86배로 +30~50%까지 자동 확장)
 
 PULLBACK_DRYUP_STRICT = 0.14           # 발화봉 대비 눌림 거래량 14% 이하 극건조
 PULLBACK_DRYUP_MAX = 0.28              # 발화봉 대비 눌림 거래량 상한 28%
@@ -42,12 +52,6 @@ EARLY_VOL_MULT_MIN = 2.6               # 초동 최소 거래량 배수 (2.6배)
 EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 돌파 대응 상한
 EARLY_BREAKOUT_MAX_PCT = 4.2           # 돌파 양봉 직후 공중 눌림(Bull Flag/FVG) 허용 상한 (4.2%)
 BULL_FLAG_MAX_RETRACE = 0.382          # 돌파 양봉 상단 38.2% 이내 공중 지지 기준
-
-SL_ATR_MULT_TRACK_B = 1.45             # 돌파 타점 ATR 손절 버퍼 1.45배
-SL_ATR_MULT_TRACK_A = 1.45             # 선취매 타점 ATR 손절 버퍼 1.45배
-BREAKEVEN_TRIGGER_PCT = 3.5            # 기본 본전 방어 기준 (종목별 sl_pct 미존재 시 폴백값)
-SL_RECOVERY_COOLDOWN_SEC = 14400       # 스탑헌팅 손절 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
-BE_PROTECT_COOLDOWN_SEC = 172800       # [신규] 본전/수익 보호선 안전마감(🔒) 후 48시간(172,800초) 동안 신규 알림 제한
 
 MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
 MAX_PRIOR_PUMP_PCT = 20.0              # 최근 12시간 내 이미 +20% 이상 폭등 이력 시 설거지 경계
@@ -68,6 +72,7 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
 }
 
+# 단기 10~50% 급등 탄력이 둔하고 BTC 하락에 연동되는 무거운 시총 코인 제외
 HEAVY_MAJOR_COINS = {
     "BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX", "LTC", "BCH",
     "DOT", "AVAX", "LINK", "XLM", "TON", "SHIB", "ETC", "XMR", "ZEC", "EOS",
