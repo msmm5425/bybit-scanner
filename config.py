@@ -19,34 +19,35 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 
 # =====================================================================
-# [2026-11-14 13:41 KST 리포트 권장값 + 81.8% 승률 고도화 세팅]
+# [스캐너 핵심 파라미터 및 재진입 쿨타임 설정]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 평시 85점 이상 알림 발송
-BTC_DUMP_SCORE_THRESHOLD = 90          # [오답노트 유형1 방어] BTC 급락 시 컷오프 90점으로 자동 상향
+BTC_DUMP_SCORE_THRESHOLD = 90          # BTC 급락 시 컷오프 90점으로 자동 상향
 BTC_DUMP_DROP_15M_PCT = -0.70          # BTC 15분봉 최근 3캔들 고점 대비 -0.70% 이하 시 위험장 판정
-BTC_DUMP_DROP_1H_PCT = -1.20           # [신규] BTC 1시간봉 최근 4캔들 고점 대비 -1.20% 이하 시 도미노 투매장 판정
+BTC_DUMP_DROP_1H_PCT = -1.20           # BTC 1시간봉 최근 4캔들 고점 대비 -1.20% 이하 시 도미노 투매장 판정
 MAX_NEW_ALERTS_PER_SCAN = 3            # 1회 스캔(5분)당 최고점 상위 3종목만 발송 (텔레그램 도배/누락 방지)
 
-PULLBACK_DRYUP_STRICT = 0.14           # 발화봉 대비 눌림 거래량 14% 이하 극건조 ($UNITAS 2%, $BERA 2%)
-PULLBACK_DRYUP_MAX = 0.28              # [13:41 튜닝] 0.19 -> 0.28 (리포트 권장 완화 반영하되 허수 돌파 방어선 유지)
+PULLBACK_DRYUP_STRICT = 0.14           # 발화봉 대비 눌림 거래량 14% 이하 극건조
+PULLBACK_DRYUP_MAX = 0.28              # 발화봉 대비 눌림 거래량 상한 28%
 SR_FLIP_DRYUP_RATIO_MAX = 0.25         # 돌파 후 S/R Flip 리테스트 거래량 상한
-SR_FLIP_TOLERANCE_PCT = 1.20           # 전고점 S/R Flip 칼지지 허용 오차 ($UNITAS 0.07%, $BERA 1.03% 적중)
+SR_FLIP_TOLERANCE_PCT = 1.20           # 전고점 S/R Flip 칼지지 허용 오차 (1.20% 이내)
 
-PRE_BOX_RANGE_MAX_PCT = 9.5            # [13:41 튜닝] 5.5 -> 9.5% (리포트 권장 9.5% 및 $UNITAS 6.8% 포착 반영)
-PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한 ($SOPH 12.6% 적중)
-PRE_BOX_TIGHT_PCT = 4.5                # 4.5% 이내 초응축 시 가산점 부여 ($SHELL 2.6%, $BERA 2.3%)
-EMA_RIBBON_MAX_SPREAD_PCT = 1.6        # Top 5 중 4종목(0.1%~1.0%) 적중한 이평선 리본 초밀집 기준
-PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20 ($SHELL 0%, $UNITAS 1%, $BERA 0%)
+PRE_BOX_RANGE_MAX_PCT = 9.5            # 직전 2시간 박스 변동폭 상한 (9.5%)
+PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한 (14.0%)
+PRE_BOX_TIGHT_PCT = 4.5                # 4.5% 이내 초응축 시 가산점 부여
+EMA_RIBBON_MAX_SPREAD_PCT = 1.6        # 이평선 리본 초밀집 기준 (1.6%)
+PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20 (35% 이하)
 
-EARLY_VOL_MULT_MIN = 2.6               # [13:41 튜닝] 리포트 권장값 2.6x 유지 ($AKE 3.2x, $BERA 4.4x, $UNITAS 10.2x)
+EARLY_VOL_MULT_MIN = 2.6               # 초동 최소 거래량 배수 (2.6배)
 EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 돌파 대응 상한
 EARLY_BREAKOUT_MAX_PCT = 4.2           # 돌파 양봉 직후 공중 눌림(Bull Flag/FVG) 허용 상한 (4.2%)
 BULL_FLAG_MAX_RETRACE = 0.382          # 돌파 양봉 상단 38.2% 이내 공중 지지 기준
 
 SL_ATR_MULT_TRACK_B = 1.45             # 돌파 타점 ATR 손절 버퍼 1.45배
 SL_ATR_MULT_TRACK_A = 1.45             # 선취매 타점 ATR 손절 버퍼 1.45배
-BREAKEVEN_TRIGGER_PCT = 3.5            # [13:41 오답노트 $ZRO(+3.5%)·$AAVE(+3.2%) 처방] +3.5%(1R) 도달 시 본전 방어 가동
+BREAKEVEN_TRIGGER_PCT = 3.5            # 기본 본전 방어 기준 (종목별 sl_pct 미존재 시 폴백값)
 SL_RECOVERY_COOLDOWN_SEC = 14400       # 스탑헌팅 손절 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
+BE_PROTECT_COOLDOWN_SEC = 172800       # [신규] 본전/수익 보호선 안전마감(🔒) 후 48시간(172,800초) 동안 신규 알림 제한
 
 MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 최근 12시간 고점 대비 -7.5% 이상 하락한 설거지 종목 즉시 차단
 MAX_PRIOR_PUMP_PCT = 20.0              # 최근 12시간 내 이미 +20% 이상 폭등 이력 시 설거지 경계
@@ -67,7 +68,6 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
 }
 
-# 단기 급등 탄력이 둔하고 BTC 하락에 1:1 연동되는 무거운 시총 코인 및 거래소 토큰 제외 ($LDO, $BGB 등 추가)
 HEAVY_MAJOR_COINS = {
     "BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX", "LTC", "BCH",
     "DOT", "AVAX", "LINK", "XLM", "TON", "SHIB", "ETC", "XMR", "ZEC", "EOS",
