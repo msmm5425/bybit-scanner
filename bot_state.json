@@ -348,9 +348,9 @@
         "OI 실수급 유입(OI 7.2M·비중 159%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.21348,
-      "peak_ts_ms": 1794737220000,
-      "max_favorable_pct": 1.54,
+      "max_high_price": 0.216,
+      "peak_ts_ms": 1794737700000,
+      "max_favorable_pct": 2.74,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -466,6 +466,58 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false
+    },
+    "USELESSUSDT": {
+      "created_at": 1794737968,
+      "track_type": "TRACK_A",
+      "score": 93,
+      "entry_price": 0.10284,
+      "swing_high_line": 0.10417,
+      "entry_low": 0.1025829,
+      "entry_high": 0.10294284,
+      "initial_stop_price": 0.0966696,
+      "stop_price": 0.0966696,
+      "sl_pct": 6,
+      "tps": [
+        0.1110672,
+        0.1244364,
+        0.13472040000000002
+      ],
+      "tp_pcts": [
+        8.0,
+        21.0,
+        31.0
+      ],
+      "vol_mult": 6.9,
+      "rsi6_15m": 56.5,
+      "kdj_j_15m": 82.6,
+      "oi_m": 1.86284967842,
+      "turnover_m": 2.18933943268,
+      "funding_pct": 0.005,
+      "reasons": [
+        "거래량 건조 선취매 포켓(16%)",
+        "완전 정배열(5>20>50>112) 지지",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(4.8%)+OBV/CVD 선행매집",
+        "이평리본 초밀집 확산(0.2%)",
+        "초동수급 폭발(6.9배)",
+        "OI 실수급 유입(OI 1.9M·비중 85%)",
+        "청정 펀딩 수급(+0.0050%)"
+      ],
+      "max_high_price": 0.10284,
+      "peak_ts_ms": 1794737968000,
+      "max_favorable_pct": 0.0,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false,
+      "closed_alerted": false
     }
   },
   "alert_history": {
@@ -477,7 +529,8 @@
     "VVVUSDT": 1794732102,
     "ARIAUSDT": 1794733602,
     "LITUSDT": 1794733901,
-    "ETHFIUSDT": 1794734501
+    "ETHFIUSDT": 1794734501,
+    "USELESSUSDT": 1794737968
   },
   "sl_history": {},
   "signal_episodes": {
@@ -657,8 +710,8 @@
         0.2438784,
         0.26069760000000003
       ],
-      "max_high_price": 0.21348,
-      "max_favorable_pct": 1.54,
+      "max_high_price": 0.216,
+      "max_favorable_pct": 2.74,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -713,6 +766,33 @@
       ],
       "max_high_price": 0.5081,
       "max_favorable_pct": 0.22,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "USELESSUSDT_1794737968": {
+      "symbol": "USELESSUSDT",
+      "created_at": 1794737968,
+      "track_type": "TRACK_A",
+      "score": 93,
+      "entry_price": 0.10284,
+      "initial_stop_price": 0.0966696,
+      "stop_price": 0.0966696,
+      "sl_pct": 6.0,
+      "tps": [
+        0.1110672,
+        0.1244364,
+        0.13472040000000002
+      ],
+      "max_high_price": 0.10284,
+      "max_favorable_pct": 0.0,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
