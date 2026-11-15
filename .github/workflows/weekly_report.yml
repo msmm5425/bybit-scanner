@@ -2,7 +2,8 @@ name: Weekly Performance Report
 
 on:
   schedule:
-    - cron: '0 0 * * 0'
+    # 매주 월요일 00:00 UTC (한국 시간 월요일 오전 09:00 KST)
+    - cron: '0 0 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -14,10 +15,10 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: 1. 저장소 코드 및 최근 히스토리 불러오기
+      - name: 1. 저장소 전체 히스토리 불러오기 (7일 로그 분석용)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 500
+          fetch-depth: 0
 
       - name: 2. 파이썬 설치
         uses: actions/setup-python@v5
@@ -30,7 +31,7 @@ jobs:
           pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install requests pandas numpy; fi
 
-      - name: 4. 위클리 리포트 실행 (weekly_report.py)
+      - name: 4. 주간 실전 성과 및 3파동 심층 리포트 전송
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
