@@ -442,7 +442,7 @@ def main():
     if not state.get("uai_chart_test_done"):
         print("[테스트] $UAI 예시 차트 + X 양식 1회 테스트 발송 실행 중...")
         if send_uai_sample_test():
-            state["uai_chart_test_done"] = True
+            state["uai_chart_test_v2"] = True
             save_state(state)
 
     tracked = state.get("tracked", {})
