@@ -140,8 +140,60 @@
         "OI 실수급 유입(OI 1.4M·비중 73%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.04832,
-      "peak_ts_ms": 1794723613000,
+      "max_high_price": 0.04872,
+      "peak_ts_ms": 1794723900000,
+      "max_favorable_pct": 0.83,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false,
+      "closed_alerted": false
+    },
+    "GRASSUSDT": {
+      "created_at": 1794723913,
+      "track_type": "TRACK_A",
+      "score": 99,
+      "entry_price": 0.4058,
+      "swing_high_line": 0.4108,
+      "entry_low": 0.4047855,
+      "entry_high": 0.40620579999999995,
+      "initial_stop_price": 0.38145199999999996,
+      "stop_price": 0.38145199999999996,
+      "sl_pct": 6,
+      "tps": [
+        0.44638000000000005,
+        0.503192,
+        0.600584
+      ],
+      "tp_pcts": [
+        10.0,
+        24.0,
+        48.0
+      ],
+      "vol_mult": 4.3,
+      "rsi6_15m": 54.7,
+      "kdj_j_15m": 26.5,
+      "oi_m": 4.6033252839,
+      "turnover_m": 1.63688255381,
+      "funding_pct": 0.005,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(0%)",
+        "유동성 스윕(Spring 아랫꼬리 1.8배) 반전",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(2.3%)+CVD 강세 다이버전스(저점 스윕 매수흡수)",
+        "이평리본 초밀집 확산(0.7%)",
+        "초동수급 폭발(4.3배)",
+        "OI 실수급 유입(OI 4.6M·비중 281%)",
+        "청정 펀딩 수급(+0.0050%)"
+      ],
+      "max_high_price": 0.4058,
+      "peak_ts_ms": 1794723913000,
       "max_favorable_pct": 0.0,
       "history_backfilled": true,
       "be_armed": false,
@@ -159,7 +211,8 @@
   "alert_history": {
     "APRUSDT": 1794722093,
     "NIGHTUSDT": 1794722093,
-    "MEGAUSDT": 1794723613
+    "MEGAUSDT": 1794723613,
+    "GRASSUSDT": 1794723913
   },
   "sl_history": {},
   "signal_episodes": {
@@ -231,7 +284,34 @@
         0.0599168,
         0.0715136
       ],
-      "max_high_price": 0.04832,
+      "max_high_price": 0.04872,
+      "max_favorable_pct": 0.83,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "GRASSUSDT_1794723913": {
+      "symbol": "GRASSUSDT",
+      "created_at": 1794723913,
+      "track_type": "TRACK_A",
+      "score": 99,
+      "entry_price": 0.4058,
+      "initial_stop_price": 0.38145199999999996,
+      "stop_price": 0.38145199999999996,
+      "sl_pct": 6.0,
+      "tps": [
+        0.44638000000000005,
+        0.503192,
+        0.600584
+      ],
+      "max_high_price": 0.4058,
       "max_favorable_pct": 0.0,
       "be_armed": false,
       "tp1_hit": false,
