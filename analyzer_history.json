@@ -278,7 +278,7 @@
     },
     {
       "date_str": "2026-11-15",
-      "timestamp": 1794717913,
+      "timestamp": 1794719607,
       "coins": [
         {
           "symbol": "EVAAUSDT",
@@ -287,28 +287,28 @@
           "swing_high_line": 1.1112
         },
         {
-          "symbol": "PIEVERSEUSDT",
-          "ign_price": 1.8225,
-          "support_line": 1.6681,
-          "swing_high_line": 1.8334
-        },
-        {
           "symbol": "SOPHUSDT",
           "ign_price": 0.001628,
           "support_line": 0.001584,
           "swing_high_line": 0.001631
         },
         {
-          "symbol": "SKYAIUSDT",
-          "ign_price": 0.03698,
-          "support_line": 0.03566,
-          "swing_high_line": 0.03702
+          "symbol": "PIEVERSEUSDT",
+          "ign_price": 1.8899,
+          "support_line": 1.6751,
+          "swing_high_line": 1.9061
         },
         {
-          "symbol": "VVVUSDT",
-          "ign_price": 18.252,
-          "support_line": 18.097,
-          "swing_high_line": 18.253
+          "symbol": "BLESSUSDT",
+          "ign_price": 0.008377,
+          "support_line": 0.008315,
+          "swing_high_line": 0.0084
+        },
+        {
+          "symbol": "SKYAIUSDT",
+          "ign_price": 0.03636,
+          "support_line": 0.03595,
+          "swing_high_line": 0.03636
         }
       ]
     }
@@ -317,22 +317,22 @@
     "tp1_min_pct": 9.0,
     "tp2_min_pct": 16.0,
     "tp3_min_pct": 28.0,
-    "tp1_fib_mult": 1.79,
-    "tp2_fib_mult": 2.56,
-    "tp3_fib_mult": 3.88,
-    "tp1_ma20_ext_pct": 7.5,
-    "tp2_ma20_ext_pct": 11.2,
-    "tp3_ma20_ext_pct": 15.7,
-    "tp1_rsi6": 94.0,
-    "tp2_rsi6": 86.1,
-    "tp3_rsi6": 71.3,
-    "top5_w1_med": 6.6,
-    "top5_w2_med": 9.8,
-    "top5_w3_med": 14.9,
-    "pm_w1_med": 5.9,
+    "tp1_fib_mult": 1.82,
+    "tp2_fib_mult": 3.21,
+    "tp3_fib_mult": 4.45,
+    "tp1_ma20_ext_pct": 7.0,
+    "tp2_ma20_ext_pct": 12.0,
+    "tp3_ma20_ext_pct": 16.5,
+    "tp1_rsi6": 88.6,
+    "tp2_rsi6": 95.5,
+    "tp3_rsi6": 68.9,
+    "top5_w1_med": 10.4,
+    "top5_w2_med": 18.6,
+    "top5_w3_med": 23.1,
+    "pm_w1_med": 5.0,
     "pm_w2_med": 11.8,
-    "pm_w3_med": 21.1,
-    "pm_sample_cnt": 6
+    "pm_w3_med": 20.1,
+    "pm_sample_cnt": 8
   },
-  "updated_at": "2026-11-15 13:45 KST"
+  "updated_at": "2026-11-15 14:13 KST"
 }
