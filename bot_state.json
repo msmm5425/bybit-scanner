@@ -258,6 +258,58 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false
+    },
+    "VVVUSDT": {
+      "created_at": 1794732102,
+      "track_type": "TRACK_A",
+      "score": 98,
+      "entry_price": 19.293,
+      "swing_high_line": 19.594,
+      "entry_low": 19.244767500000002,
+      "entry_high": 19.312292999999997,
+      "initial_stop_price": 18.13542,
+      "stop_price": 18.13542,
+      "sl_pct": 6,
+      "tps": [
+        20.83644,
+        22.379879999999996,
+        23.92332
+      ],
+      "tp_pcts": [
+        8.0,
+        16.0,
+        24.0
+      ],
+      "vol_mult": 2.7,
+      "rsi6_15m": 53.1,
+      "kdj_j_15m": 52.2,
+      "oi_m": 3.0559285526399997,
+      "turnover_m": 2.4111759102500003,
+      "funding_pct": 0.005,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(7%)",
+        "유동성 스윕(Spring 아랫꼬리 1.4배) 반전",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "초응축(3.2%)+OBV 선행매집",
+        "TTM 켈트너 스퀴즈 응축 돌파",
+        "초동수급 폭발(2.7배)",
+        "OI 실수급 유입(OI 3.1M·비중 127%)",
+        "청정 펀딩 수급(+0.0050%)"
+      ],
+      "max_high_price": 19.293,
+      "peak_ts_ms": 1794732102000,
+      "max_favorable_pct": 0.0,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false,
+      "closed_alerted": false
     }
   },
   "alert_history": {
@@ -265,7 +317,8 @@
     "NIGHTUSDT": 1794722093,
     "MEGAUSDT": 1794723613,
     "GRASSUSDT": 1794723913,
-    "BANANAS31USDT": 1794726571
+    "BANANAS31USDT": 1794726571,
+    "VVVUSDT": 1794732102
   },
   "sl_history": {},
   "signal_episodes": {
@@ -393,6 +446,33 @@
       ],
       "max_high_price": 0.004527,
       "max_favorable_pct": 1.64,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "VVVUSDT_1794732102": {
+      "symbol": "VVVUSDT",
+      "created_at": 1794732102,
+      "track_type": "TRACK_A",
+      "score": 98,
+      "entry_price": 19.293,
+      "initial_stop_price": 18.13542,
+      "stop_price": 18.13542,
+      "sl_pct": 6.0,
+      "tps": [
+        20.83644,
+        22.379879999999996,
+        23.92332
+      ],
+      "max_high_price": 19.293,
+      "max_favorable_pct": 0.0,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
