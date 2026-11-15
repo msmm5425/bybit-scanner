@@ -519,6 +519,15 @@ def reverse_engineer_top_coin(coin, now_ts):
         oi_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0 if turnover_m > 0 else 0.0
 
         alphas = []
+        # 고점 이후 피보나치 0.382~0.618 눌림목 반등(Track C 패턴) 출현 여부 역추적
+        if peak_pos < len(df_5m) - 3 and pump_from_ign_pct >= 30.0:
+            after_peak_df = df_5m.iloc[peak_pos:]
+            pb_low_after_peak = to_float(after_peak_df["low"].min(), peak_high)
+            fib_ret = (peak_high - pb_low_after_peak) / max(peak_high - ign_price, 1e-8)
+            curr_close = to_float(df_5m["close"].iloc[-1], pb_low_after_peak)
+            if 0.35 <= fib_ret <= 0.65 and curr_close >= pb_low_after_peak * 1.03:
+                alphas.append(f"대장주 피보나치 {int(round(fib_ret*100))}% 눌림목 지지 후 2파동 반등(Track C)")
+
         if is_bull_flag:
             alphas.append(f"High-Tight Bull Flag 공중눌림(돌파봉 상단 38.2% 사수·거래량 {int(round(dryup_ratio*100))}% 건조)")
         if is_pocket_pivot:
@@ -830,10 +839,16 @@ def analyze_scanner_coins_and_postmortem(now_ts):
     }
     prescription_notes = []
 
+    track_label_map = {
+        "TRACK_A": "Track A(선취매)",
+        "TRACK_B": "Track B(돌파)",
+        "TRACK_C": "Track C(대장주눌림)",
+    }
+
     for idx, sl_item in enumerate(recent_sl_list[:5], 1):
         sym = sl_item.get("symbol", "UNKNOWN")
         base = sym.replace("USDT", "")
-        t_type = "Track B(돌파)" if sl_item.get("track_type") == "TRACK_B" else "Track A(선취매)"
+        t_type = track_label_map.get(sl_item.get("track_type", "TRACK_A"), "Track A(선취매)")
         entry_p = to_float(sl_item.get("entry_price"))
         stop_p = to_float(sl_item.get("stop_price"))
         raw_sl = to_float(sl_item.get("sl_pct"), 0.0)
@@ -967,13 +982,6 @@ def analyze_scanner_coins_and_postmortem(now_ts):
 
 
 def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
-    """
-    [양극단 쏠림 방지 & 베타 초기 스무딩 튜닝 엔진]
-    1) Top 5 전체의 중앙값(50% 분위수)과 상위권(65% 분위수)을 6:4로 결합하여
-       1~2위 이상치(+84%)나 4~5위 약세치(+9%) 한쪽으로 튀는 현상을 원천 차단합니다.
-    2) 베타 초기화 직후 스캐너 표본이 부족할 때(5건 미만)는 실전 검증 앵커(+9% / +16% / +25%)와
-       가중 평균하여 첫날부터 안정적인 TP1~TP3를 유지합니다.
-    """
     t5_w1_gain = [x["waves"]["w1"]["gain_pct"] for x in analyzed_top5]
     t5_w1_fib = [x["waves"]["w1"]["fib_mult"] for x in analyzed_top5]
     t5_w1_ext = [x["waves"]["w1"]["ma20_ext_pct"] for x in analyzed_top5]
@@ -1028,7 +1036,6 @@ def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
             pm_v = float(np.median(pm_arr))
             return (t5_v * 0.40) + (pm_v * 0.30) + (anchor_v * 0.30)
         else:
-            # 베타 초기화 직후(스캐너 표본 0건): Top 5 대푯값(50%) + 실전 기준 앵커(50%) 결합
             return (t5_v * 0.50) + (anchor_v * 0.50)
 
     raw_tp1 = _blend_with_anchor(t5_g1, pm_w1_gain, 9.0)
