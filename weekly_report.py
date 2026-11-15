@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     import config as cfg
     STATE_FILE = getattr(cfg, "STATE_FILE", "bot_state.json")
+    HISTORY_FILE = getattr(cfg, "HISTORY_FILE", "analyzer_history.json")
     KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
     is_tradfi_ticker = getattr(cfg, "is_tradfi_ticker", lambda x: False)
     is_heavy_major_coin = getattr(cfg, "is_heavy_major_coin", lambda x: False)
@@ -17,6 +18,7 @@ try:
 except Exception:
     cfg = None
     STATE_FILE = "bot_state.json"
+    HISTORY_FILE = "analyzer_history.json"
     KST = timezone(timedelta(hours=9))
     is_tradfi_ticker = lambda x: False
     is_heavy_major_coin = lambda x: False
@@ -29,6 +31,25 @@ from wave_engine import (
     resolve_same_candle_tie_5m,
     extract_three_wave_structure,
 )
+
+
+def get_learned_tp_targets():
+    tp1 = to_float(getattr(cfg, "TP1_MIN_PCT", 8.5), 8.5)
+    tp2 = to_float(getattr(cfg, "TP2_MIN_PCT", 15.0), 15.0)
+    tp3 = to_float(getattr(cfg, "TP3_MIN_PCT", 22.0), 22.0)
+
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict) and isinstance(raw.get("dynamic_tp_tuning"), dict):
+                dt = raw["dynamic_tp_tuning"]
+                tp1 = float(np.clip(to_float(dt.get("tp1_min_pct"), tp1), 7.0, 14.0))
+                tp2 = float(np.clip(to_float(dt.get("tp2_min_pct"), tp2), 13.0, 24.0))
+                tp3 = float(np.clip(to_float(dt.get("tp3_min_pct"), tp3), 19.0, 48.0))
+        except Exception:
+            pass
+    return tp1, tp2, tp3
 
 
 def _merge_episode_dict(episodes_map, sym, raw_item):
@@ -68,7 +89,7 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
             "swing_high_line": to_float(raw_item.get("swing_high_line"), entry_p * 1.02),
             "stop_price": fixed_stop_p,
             "sl_pct": float(FIXED_SL_PCT),
-            "tps": [entry_p * 1.09, entry_p * 1.17, entry_p * 1.29],
+            "tps": raw_item.get("tps") or [],
             "tp1_hit": bool(raw_item.get("tp1_hit", False)),
             "tp2_hit": bool(raw_item.get("tp2_hit", False)),
             "tp3_completed": bool(raw_item.get("tp3_completed", False)),
@@ -157,16 +178,14 @@ def collect_weekly_episodes(now_ts, days=7):
     return valid_episodes
 
 
-def evaluate_episode_performance(ep, now_ts):
+def evaluate_episode_performance(ep, now_ts, learned_tps):
     sym = ep["symbol"]
     entry_p = to_float(ep["entry_price"])
     sl_pct = float(FIXED_SL_PCT)
     init_stop_p = entry_p * (1.0 - sl_pct / 100.0)
     created_ms = int(ep["created_at"]) * 1000
 
-    tp1_pct = to_float(getattr(cfg, "TP1_MIN_PCT", 9.0), 9.0)
-    tp2_pct = to_float(getattr(cfg, "TP2_MIN_PCT", 17.0), 17.0)
-    tp3_pct = to_float(getattr(cfg, "TP3_MIN_PCT", 29.0), 29.0)
+    tp1_pct, tp2_pct, tp3_pct = learned_tps
 
     tp1_p = entry_p * (1.0 + tp1_pct / 100.0)
     tp2_p = entry_p * (1.0 + tp2_pct / 100.0)
@@ -186,6 +205,7 @@ def evaluate_episode_performance(ep, now_ts):
     hit_be = False
     stopped_out = False
     be_closed = False
+    trailing_exit_price = entry_p
 
     ign_pos = 0
     peak_pos_before_exit = 0
@@ -207,9 +227,14 @@ def evaluate_episode_performance(ep, now_ts):
 
             active_stop = init_stop_p
             if hit_tp2:
-                active_stop = max(active_stop, entry_p * (1.0 + tp1_pct / 100.0))
+                # 2차 TP 돌파 후 3차 파동 진행 중: 2차 TP의 85% 수익선 또는 최고가 대비 -3.5% 트레일링 스탑 적용!
+                active_stop = max(active_stop, entry_p * (1.0 + (tp2_pct * 0.85) / 100.0), highest_before_exit * 0.965)
             elif hit_tp1:
-                active_stop = max(active_stop, entry_p * 1.006)
+                # 1차 TP 달성 후 2차 TP의 75% 지점 이상 진입 시에는 1차 TP 수익을 잠금, 그 전에는 1차 조정 버티기(+0.6%)
+                if highest_before_exit >= entry_p * (1.0 + (tp2_pct * 0.75) / 100.0):
+                    active_stop = max(active_stop, entry_p * (1.0 + (tp1_pct * 0.80) / 100.0))
+                else:
+                    active_stop = max(active_stop, entry_p * 1.006)
             elif hit_be:
                 active_stop = max(active_stop, entry_p * 1.004)
 
@@ -218,6 +243,7 @@ def evaluate_episode_performance(ep, now_ts):
                 order = resolve_same_candle_tie_5m(sym, c_ts, next_tp_target, active_stop)
                 if order == "SL_FIRST":
                     exit_ts_ms = c_ts
+                    trailing_exit_price = active_stop
                     if hit_tp1 or hit_be:
                         be_closed = True
                     else:
@@ -227,6 +253,7 @@ def evaluate_episode_performance(ep, now_ts):
 
             if l <= active_stop:
                 exit_ts_ms = c_ts
+                trailing_exit_price = active_stop
                 if hit_tp1 or hit_be:
                     be_closed = True
                 else:
@@ -249,7 +276,7 @@ def evaluate_episode_performance(ep, now_ts):
                 hit_be = True
 
         sup_p = entry_p * 0.960
-        w_h = max(to_float(ep.get("swing_high_line"), entry_p * 1.02) - sup_p, entry_p * 0.050)
+        w_h = max(to_float(ep.get("swing_high_line"), entry_p * 1.02) - sup_p, entry_p * 0.055)
         waves = extract_three_wave_structure(df_15m, ign_pos, max(ign_pos, peak_pos_before_exit), entry_p, sup_p, w_h)
     else:
         fav_g = max(0.5, to_float(ep.get("max_favorable_pct", 0.0)))
@@ -259,30 +286,34 @@ def evaluate_episode_performance(ep, now_ts):
         hit_be = fav_g >= sl_pct
         stopped_out = ep.get("sl_alerted", False) and not hit_tp1 and not hit_be
         highest_before_exit = entry_p * (1.0 + fav_g / 100.0)
+        trailing_exit_price = highest_before_exit * 0.965 if hit_tp2 else entry_p * 1.006
+        w1_g = round(fav_g * 0.36, 1)
+        w2_g = round(fav_g * 0.68, 1)
         waves = {
-            "w1": {"price": highest_before_exit, "gain_pct": fav_g, "fib_mult": 1.85, "rsi6": 70.0, "kdj_j": 78.0, "ma20_ext_pct": 4.5, "vol_mult": 2.5, "pullback_pct": 1.5, "hold_tag": "MA10", "resist_tag": "MA20+4.5%이격"},
-            "w2": {"price": highest_before_exit, "gain_pct": fav_g, "fib_mult": 2.75, "rsi6": 76.0, "kdj_j": 84.0, "ma20_ext_pct": 7.7, "vol_mult": 3.0, "pullback_pct": 1.8, "hold_tag": "MA10", "resist_tag": "MA50저항"},
-            "w3": {"price": highest_before_exit, "gain_pct": fav_g, "fib_mult": 4.04, "rsi6": 84.0, "kdj_j": 90.0, "ma20_ext_pct": 12.5, "vol_mult": 4.0, "pullback_pct": 0.0, "hold_tag": "클라이맥스", "resist_tag": "클라이맥스"},
+            "w1": {"price": entry_p * (1.0 + w1_g / 100.0), "gain_pct": w1_g, "fib_mult": 1.75, "rsi6": 72.0, "kdj_j": 78.0, "ma20_ext_pct": 4.5, "vol_mult": 2.5, "pullback_pct": 1.5, "hold_tag": "MA10", "resist_tag": "MA20+4.5%이격"},
+            "w2": {"price": entry_p * (1.0 + w2_g / 100.0), "gain_pct": w2_g, "fib_mult": 2.75, "rsi6": 78.0, "kdj_j": 84.0, "ma20_ext_pct": 8.0, "vol_mult": 3.0, "pullback_pct": 1.8, "hold_tag": "MA10", "resist_tag": "MA50저항"},
+            "w3": {"price": highest_before_exit, "gain_pct": round(fav_g, 1), "fib_mult": 3.85, "rsi6": 85.0, "kdj_j": 90.0, "ma20_ext_pct": 13.0, "vol_mult": 4.0, "pullback_pct": 0.0, "hold_tag": "클라이맥스", "resist_tag": "클라이맥스"},
         }
 
     valid_max_gain_pct = max(0.0, (highest_before_exit - entry_p) / entry_p * 100.0)
     post_sl_rebound_pct = max(0.0, (highest_after_sl - init_stop_p) / max(init_stop_p, 1e-8) * 100.0)
+    trail_rem_pct = max(0.6, (trailing_exit_price - entry_p) / entry_p * 100.0)
 
     if hit_tp3:
         status = "TP3_WIN"
         badge = "🎯 3차졸업"
         split_pnl_pct = (tp1_pct * 0.40) + (tp2_pct * 0.30) + (tp3_pct * 0.30)
-        simple_pnl_pct = tp3_pct
+        simple_pnl_pct = valid_max_gain_pct
     elif hit_tp2:
         status = "TP2_WIN"
-        badge = "✅ 2차달성"
-        split_pnl_pct = (tp1_pct * 0.40) + (tp2_pct * 0.30) + (tp1_pct * 0.30)
-        simple_pnl_pct = tp2_pct
+        badge = "✅ 2차+트레일링"
+        split_pnl_pct = (tp1_pct * 0.40) + (tp2_pct * 0.30) + (max(tp2_pct * 0.85, trail_rem_pct) * 0.30)
+        simple_pnl_pct = valid_max_gain_pct
     elif hit_tp1:
         status = "TP1_WIN"
         badge = "✅ 1차달성"
-        split_pnl_pct = (tp1_pct * 0.40) + (0.6 * 0.60)
-        simple_pnl_pct = tp1_pct
+        split_pnl_pct = (tp1_pct * 0.40) + (trail_rem_pct * 0.60)
+        simple_pnl_pct = valid_max_gain_pct
     elif be_closed:
         status = "BE_PROTECT"
         badge = "🛡️ 본전보호(+0.4%)"
@@ -328,6 +359,7 @@ def main():
     start_date_str = (now_dt - timedelta(days=7)).strftime("%m/%d")
     end_date_str = now_dt.strftime("%m/%d")
 
+    learned_tps = get_learned_tp_targets()
     episodes = collect_weekly_episodes(now_ts, days=7)
     if not episodes:
         msg = f"📊 [주간 성과 리포트 ({start_date_str}~{end_date_str})]\n• 최근 7일간 기록된 알림 에피소드가 없습니다."
@@ -340,7 +372,7 @@ def main():
         for _ in as_completed(futures):
             pass
 
-    evaluated = [evaluate_episode_performance(ep, now_ts) for ep in episodes]
+    evaluated = [evaluate_episode_performance(ep, now_ts, learned_tps) for ep in episodes]
 
     total_cnt = len(evaluated)
     tp3_list = [x for x in evaluated if x["status"] == "TP3_WIN"]
@@ -375,33 +407,33 @@ def main():
     stop_hunted = [x for x in sl_list if x["post_sl_rebound_pct"] >= 4.0]
 
     w1_Pool = [x["waves"]["w1"] for x in evaluated if x["valid_max_gain_pct"] >= 6.0]
-    w2_Pool = [x["waves"]["w2"] for x in evaluated if x["valid_max_gain_pct"] >= 12.0]
-    w3_Pool = [x["waves"]["w3"] for x in evaluated if x["valid_max_gain_pct"] >= 18.0]
+    w2_Pool = [x["waves"]["w2"] for x in evaluated if x["valid_max_gain_pct"] >= 11.0]
+    w3_Pool = [x["waves"]["w3"] for x in evaluated if x["valid_max_gain_pct"] >= 15.0]
 
-    wk_w1_pct = round(float(np.median([w["gain_pct"] for w in w1_Pool])) if w1_Pool else 9.0, 1)
-    wk_w1_fib = round(float(np.median([w["fib_mult"] for w in w1_Pool])) if w1_Pool else 1.85, 2)
+    wk_w1_pct = round(float(np.median([w["gain_pct"] for w in w1_Pool])) if w1_Pool else learned_tps[0], 1)
+    wk_w1_fib = round(float(np.median([w["fib_mult"] for w in w1_Pool])) if w1_Pool else 1.75, 2)
     wk_w1_ext = round(float(np.median([w["ma20_ext_pct"] for w in w1_Pool])) if w1_Pool else 4.5, 1)
     wk_w1_rsi = round(float(np.median([w["rsi6"] for w in w1_Pool])) if w1_Pool else 72.0, 0)
 
-    wk_w2_pct = round(float(np.median([w["gain_pct"] for w in w2_Pool])) if w2_Pool else 17.0, 1)
+    wk_w2_pct = round(float(np.median([w["gain_pct"] for w in w2_Pool])) if w2_Pool else learned_tps[1], 1)
     wk_w2_fib = round(float(np.median([w["fib_mult"] for w in w2_Pool])) if w2_Pool else 2.75, 2)
-    wk_w2_ext = round(float(np.median([w["ma20_ext_pct"] for w in w2_Pool])) if w2_Pool else 7.7, 1)
-    wk_w2_rsi = round(float(np.median([w["rsi6"] for w in w2_Pool])) if w2_Pool else 78.0, 0)
+    wk_w2_ext = round(float(np.median([w["ma20_ext_pct"] for w in w2_Pool])) if w2_Pool else 8.0, 1)
+    wk_w2_rsi = round(float(np.median([w["rsi6"] for w in w2_Pool])) if w2_Pool else 80.0, 0)
 
-    wk_w3_pct = round(float(np.median([w["gain_pct"] for w in w3_Pool])) if w3_Pool else 29.0, 1)
-    wk_w3_fib = round(float(np.median([w["fib_mult"] for w in w3_Pool])) if w3_Pool else 4.04, 2)
-    wk_w3_ext = round(float(np.median([w["ma20_ext_pct"] for w in w3_Pool])) if w3_Pool else 12.5, 1)
-    wk_w3_rsi = round(float(np.median([w["rsi6"] for w in w3_Pool])) if w3_Pool else 84.0, 0)
+    wk_w3_pct = round(float(np.median([w["gain_pct"] for w in w3_Pool])) if w3_Pool else learned_tps[2], 1)
+    wk_w3_fib = round(float(np.median([w["fib_mult"] for w in w3_Pool])) if w3_Pool else 3.85, 2)
+    wk_w3_ext = round(float(np.median([w["ma20_ext_pct"] for w in w3_Pool])) if w3_Pool else 13.5, 1)
+    wk_w3_rsi = round(float(np.median([w["rsi6"] for w in w3_Pool])) if w3_Pool else 85.0, 0)
 
     lines = [
         f"📅 [Bybit 스캐너 주간 실전 성과 & 1·2·3차 파동 심층 리포트 ({start_date_str} ~ {end_date_str})]",
-        f"🕒 집계 시각: {now_str} (-{FIXED_SL_PCT}% 고정SL · 1R 본전방어 · 무거운 메이저 배제 기준)\n",
+        f"🕒 집계 시각: {now_str} (-{FIXED_SL_PCT}% 고정SL · 동적TP +{learned_tps[0]:g}%/+{learned_tps[1]:g}%/+{learned_tps[2]:g}% · 3차트레일링 반영)\n",
         "1️⃣ [주간 전체 신호(Episode) 성적표]",
         f"• 총 발생 신호: {total_cnt}건 (종결 {decided_cnt}건 | 순항중 {len(act_list)}건)",
         f"• 익절 달성: {win_cnt}건 (🎯3차 {len(tp3_list)}건 | ✅2차 {len(tp2_list)}건 | ✅1차 {len(tp1_list)}건)",
         f"• 본전 방어(🛡️1R 도달 후 보호마감): {be_cnt}건 | 손절 이탈(❌): {sl_cnt}건",
         f"• 순수 익절 승률: {strict_win_rate:.1f}% | 본전방어 포함 무패율: {defended_rate:.1f}%\n",
-        "2️⃣ [실전 계좌 수익률 분석 (분할익절 40:30:30 반영)]",
+        "2️⃣ [실전 계좌 수익률 분석 (분할익절 40:30:30 & 3차 트레일링 반영)]",
         f"• 신호 1건당 평균 기대수익률(Expectancy): {avg_expectancy_pct:+.2f}%",
         f"• 실전 계좌 수익률 (타점당 시드 10% 투입 기준): {account_growth_10pct_pos:+.2f}%",
         f"• 단순 산술 누적 수익률 (분할익절 기준): {split_sum_pct:+.1f}% (단순 고점 합산 {simple_sum_pct:+.1f}%)\n",
@@ -439,9 +471,9 @@ def main():
                 f"(Fib {w1['fib_mult']:.2f}배·{w1['resist_tag']}·RSI {w1['rsi6']:.0f} 저항) → {item['split_pnl_pct']:+.1f}%{sh_note}"
             )
 
-    rec_tp1 = int(np.clip(round(wk_w1_pct), 9, 14))
-    rec_tp2 = int(np.clip(round(max(rec_tp1 + 7, wk_w2_pct)), 16, 26))
-    rec_tp3 = int(np.clip(round(max(rec_tp2 + 10, wk_w3_pct)), 28, 50))
+    rec_tp1 = int(np.clip(round(wk_w1_pct), 7, 14))
+    rec_tp2 = int(np.clip(round(max(rec_tp1 + 5, wk_w2_pct)), 13, 24))
+    rec_tp3 = int(np.clip(round(max(rec_tp2 + 6, wk_w3_pct)), 19, 48))
 
     lines.extend(
         [
