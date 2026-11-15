@@ -684,7 +684,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
 
                     if fav_pct >= 5.0 and peak_pos_15 >= ign_pos_15 and not is_heavy_major_coin(base_c):
                         sup_p = entry_p * 0.960
-                        w_h = max(to_float(t_item.get("swing_high_line"), entry_p * 1.02) - sup_p, entry_p * 0.050)
+                        w_h = max(to_float(t_item.get("swing_high_line"), entry_p * 1.02) - sup_p, entry_p * 0.055)
                         w_res = extract_three_wave_structure(df_15m_chk, ign_pos_15, peak_pos_15, entry_p, sup_p, w_h)
                         t_item["wave_raw"] = w_res
 
@@ -696,7 +696,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                         scanner_wave_stats["w1_kdjs"].append(w_res["w1"]["kdj_j"])
                         scanner_wave_stats["w1_holds"].append(w_res["w1"]["hold_tag"])
 
-                        if fav_pct >= 10.0:
+                        if fav_pct >= 9.0:
                             scanner_wave_stats["w2_gains"].append(w_res["w2"]["gain_pct"])
                             scanner_wave_stats["w2_fibs"].append(w_res["w2"]["fib_mult"])
                             scanner_wave_stats["w2_ma20_exts"].append(w_res["w2"]["ma20_ext_pct"])
@@ -704,7 +704,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                             scanner_wave_stats["w2_rsis"].append(w_res["w2"]["rsi6"])
                             scanner_wave_stats["w2_kdjs"].append(w_res["w2"]["kdj_j"])
 
-                        if fav_pct >= 16.0:
+                        if fav_pct >= 13.0:
                             scanner_wave_stats["w3_gains"].append(w_res["w3"]["gain_pct"])
                             scanner_wave_stats["w3_fibs"].append(w_res["w3"]["fib_mult"])
                             scanner_wave_stats["w3_ma20_exts"].append(w_res["w3"]["ma20_ext_pct"])
@@ -721,7 +721,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                         })
 
         fav_now = to_float(t_item.get("max_favorable_pct"), 0.0)
-        if t_item.get("tp1_hit") or t_item.get("tp2_hit") or (t_item.get("tp3_completed") and fav_now >= 8.5):
+        if t_item.get("tp1_hit") or t_item.get("tp2_hit") or (t_item.get("tp3_completed") and fav_now >= 8.0):
             tp_win_count += 1
         elif t_item.get("be_armed") and t_item.get("tp3_completed"):
             be_protect_count += 1
@@ -770,18 +770,18 @@ def analyze_scanner_coins_and_postmortem(now_ts):
         w2_g = float(np.median(scanner_wave_stats["w2_gains"])) if scanner_wave_stats["w2_gains"] else w1_g * 1.65
         w2_f = float(np.median(scanner_wave_stats["w2_fibs"])) if scanner_wave_stats["w2_fibs"] else w1_f * 1.45
         w2_e20 = float(np.median(scanner_wave_stats["w2_ma20_exts"])) if scanner_wave_stats["w2_ma20_exts"] else w1_e20 * 1.6
-        w2_r = float(np.median(scanner_wave_stats["w2_rsis"])) if scanner_wave_stats["w2_rsis"] else 76.0
+        w2_r = float(np.median(scanner_wave_stats["w2_rsis"])) if scanner_wave_stats["w2_rsis"] else 78.0
 
         w3_g = float(np.median(scanner_wave_stats["w3_gains"])) if scanner_wave_stats["w3_gains"] else w2_g * 1.45
         w3_f = float(np.median(scanner_wave_stats["w3_fibs"])) if scanner_wave_stats["w3_fibs"] else w2_f * 1.30
         w3_e20 = float(np.median(scanner_wave_stats["w3_ma20_exts"])) if scanner_wave_stats["w3_ma20_exts"] else w2_e20 * 1.4
-        w3_r = float(np.median(scanner_wave_stats["w3_rsis"])) if scanner_wave_stats["w3_rsis"] else 82.0
+        w3_r = float(np.median(scanner_wave_stats["w3_rsis"])) if scanner_wave_stats["w3_rsis"] else 84.0
 
         other_lines.extend([
             f"• 분석 표본: 최근 48h 스캐너 포착 상승 파동 {len(samples)}종목 전수 역추적",
-            f"  - [1차: 첫 조정 형성 지점]: 평균 +{w1_g:.1f}% | Fib {w1_f:.2f}배 | 15m MA20이격 +{w1_e20:.1f}% | RSI6 {w1_r:.0f}·KDJ_J {w1_k:.0f}",
-            f"  - [2차: 최종고점 전 중간조정 고점]: 평균 +{w2_g:.1f}% | Fib {w2_f:.2f}배 | 15m MA20이격 +{w2_e20:.1f}% | RSI6 {w2_r:.0f}",
-            f"  - [3차: 최종 클라이맥스 고점]: 평균 +{w3_g:.1f}% | Fib {w3_f:.2f}배 | 15m MA20이격 +{w3_e20:.1f}% | RSI6 {w3_r:.0f}",
+            f"  - [1차: 첫 조정 형성 지점]: 중앙값 +{w1_g:.1f}% | Fib {w1_f:.2f}배 | 15m MA20이격 +{w1_e20:.1f}% | RSI6 {w1_r:.0f}·KDJ_J {w1_k:.0f}",
+            f"  - [2차: 최종고점 전 중간조정 고점]: 중앙값 +{w2_g:.1f}% | Fib {w2_f:.2f}배 | 15m MA20이격 +{w2_e20:.1f}% | RSI6 {w2_r:.0f}",
+            f"  - [3차: 최종 클라이맥스 고점]: 중앙값 +{w3_g:.1f}% | Fib {w3_f:.2f}배 | 15m MA20이격 +{w3_e20:.1f}% | RSI6 {w3_r:.0f}",
             "• [주요 포착 코인별 1·2·3차 파동 실측 로데이터 상위 3선]:",
         ])
         for s_item in samples[:3]:
@@ -885,7 +885,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                     ma112_pk = to_float(df_coin.loc[pk_idx, "ma112"], entry_p)
                     peak_ma20_ext_at_sl = round(max(0.1, (actual_high - ma20_pk) / max(ma20_pk, 1e-8) * 100.0), 1)
                     peak_rsi_at_sl = round(to_float(df_coin.loc[pk_idx, "rsi6"], 60.0), 1)
-                    peak_fib_at_sl = round(max(1.0, (actual_high - entry_p * 0.960) / (entry_p * 0.050)), 2)
+                    peak_fib_at_sl = round(max(1.0, (actual_high - entry_p * 0.960) / (entry_p * 0.055)), 2)
 
                     if abs(actual_high - ma112_pk) / max(ma112_pk, 1e-8) <= 0.015:
                         resist_ma_tag = "MA112 장기이평 저항"
@@ -967,6 +967,12 @@ def analyze_scanner_coins_and_postmortem(now_ts):
 
 
 def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
+    """
+    [핵심 개선: 3차 익절(TP3)의 +28% 하드코딩 하한 해제]
+    - Top 5 대장주와 내 스캐너 포착 코인의 3차 최종고점 중앙값을 50:50으로 정직하게 결합하여,
+      조정장(Top5 +23.1%, 스캐너 +20.1%)에서는 TP3가 +21%~+22%로 자동 하향 조율되고,
+      불장(Top5 +45%, 스캐너 +30%)에서는 +35%~+45%로 자동 확장되도록 개선
+    """
     t5_w1_gain = [x["waves"]["w1"]["gain_pct"] for x in analyzed_top5]
     t5_w1_fib = [x["waves"]["w1"]["fib_mult"] for x in analyzed_top5]
     t5_w1_ext = [x["waves"]["w1"]["ma20_ext_pct"] for x in analyzed_top5]
@@ -1001,22 +1007,26 @@ def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
             return (m_t5 * w_t5) + (m_pm * (1.0 - w_t5))
         return m_t5
 
-    tp1_pct = int(np.clip(round(_blend(t5_w1_gain, pm_w1_gain, w_t5=0.45, default_v=9.0)), 9, 14))
-    tp1_fib = round(float(np.clip(_blend(t5_w1_fib, pm_w1_fib, w_t5=0.45, default_v=1.85), 1.65, 2.45)), 2)
-    tp1_ext = round(float(np.clip(_blend(t5_w1_ext, pm_w1_ext, w_t5=0.45, default_v=4.5), 3.0, 9.0)), 1)
-    tp1_rsi = round(float(np.median(t5_w1_rsi + scanner_wave_stats.get("w1_rsis", []))) if t5_w1_rsi else 74.0, 1)
+    # 1차 익절(첫 조정 고점): 스캐너 코인 첫 조정(60%) + Top 5 첫 조정(40%) -> 7%~14% 허용
+    raw_tp1 = _blend(t5_w1_gain, pm_w1_gain, w_t5=0.40, default_v=8.5)
+    tp1_pct = int(np.clip(round(raw_tp1), 7, 14))
+    tp1_fib = round(float(np.clip(_blend(t5_w1_fib, pm_w1_fib, w_t5=0.40, default_v=1.75), 1.50, 2.35)), 2)
+    tp1_ext = round(float(np.clip(_blend(t5_w1_ext, pm_w1_ext, w_t5=0.40, default_v=5.0), 3.0, 9.0)), 1)
+    tp1_rsi = round(float(np.median(t5_w1_rsi + scanner_wave_stats.get("w1_rsis", []))) if t5_w1_rsi else 76.0, 1)
 
-    raw_tp2 = _blend(t5_w2_gain, pm_w2_gain, w_t5=0.55, default_v=17.0)
-    tp2_pct = int(np.clip(round(max(tp1_pct + 7, raw_tp2)), 16, 26))
-    tp2_fib = round(float(np.clip(max(tp1_fib + 0.70, _blend(t5_w2_fib, pm_w2_fib, w_t5=0.55, default_v=2.75)), 2.50, 3.60)), 2)
-    tp2_ext = round(float(np.clip(max(tp1_ext + 3.0, _blend(t5_w2_ext, pm_w2_ext, w_t5=0.55, default_v=7.7)), 6.0, 16.0)), 1)
-    tp2_rsi = round(float(np.median(t5_w2_rsi + scanner_wave_stats.get("w2_rsis", []))) if t5_w2_rsi else 79.0, 1)
+    # 2차 익절(최종고점 전 중간 조정 고점): 스캐너 코인 2차 고점(55%) + Top 5 2차 고점(45%) -> 13%~24% 허용
+    raw_tp2 = _blend(t5_w2_gain, pm_w2_gain, w_t5=0.45, default_v=15.0)
+    tp2_pct = int(np.clip(round(max(tp1_pct + 5, raw_tp2)), 13, 24))
+    tp2_fib = round(float(np.clip(max(tp1_fib + 0.65, _blend(t5_w2_fib, pm_w2_fib, w_t5=0.45, default_v=2.70)), 2.30, 3.50)), 2)
+    tp2_ext = round(float(np.clip(max(tp1_ext + 2.5, _blend(t5_w2_ext, pm_w2_ext, w_t5=0.45, default_v=8.5)), 6.0, 15.0)), 1)
+    tp2_rsi = round(float(np.median(t5_w2_rsi + scanner_wave_stats.get("w2_rsis", []))) if t5_w2_rsi else 82.0, 1)
 
-    raw_tp3 = _blend(t5_w3_gain, pm_w3_gain, w_t5=0.65, default_v=29.0)
-    tp3_pct = int(np.clip(round(max(tp2_pct + 10, raw_tp3)), 28, 50))
-    tp3_fib = round(float(np.clip(max(tp2_fib + 0.80, _blend(t5_w3_fib, pm_w3_fib, w_t5=0.65, default_v=4.04)), 3.50, 4.80)), 2)
-    tp3_ext = round(float(np.clip(max(tp2_ext + 4.5, _blend(t5_w3_ext, pm_w3_ext, w_t5=0.65, default_v=12.5)), 10.0, 26.0)), 1)
-    tp3_rsi = round(float(np.median(t5_w3_rsi + scanner_wave_stats.get("w3_rsis", []))) if t5_w3_rsi else 85.0, 1)
+    # 3차 익절(최종 클라이맥스 고점): Top 5 최종 고점(50%) + 스캐너 코인 최종 고점(50%) 결합 -> 19%~48% 유동 허용!
+    raw_tp3 = _blend(t5_w3_gain, pm_w3_gain, w_t5=0.50, default_v=22.0)
+    tp3_pct = int(np.clip(round(max(tp2_pct + 6, raw_tp3)), 19, 48))
+    tp3_fib = round(float(np.clip(max(tp2_fib + 0.70, _blend(t5_w3_fib, pm_w3_fib, w_t5=0.50, default_v=3.80)), 3.10, 4.80)), 2)
+    tp3_ext = round(float(np.clip(max(tp2_ext + 3.5, _blend(t5_w3_ext, pm_w3_ext, w_t5=0.50, default_v=13.5)), 9.5, 24.0)), 1)
+    tp3_rsi = round(float(np.median(t5_w3_rsi + scanner_wave_stats.get("w3_rsis", []))) if t5_w3_rsi else 86.0, 1)
 
     return {
         "tp1_min_pct": float(tp1_pct),
@@ -1031,9 +1041,9 @@ def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
         "tp1_rsi6": tp1_rsi,
         "tp2_rsi6": tp2_rsi,
         "tp3_rsi6": tp3_rsi,
-        "top5_w1_med": round(float(np.median(t5_w1_gain)) if t5_w1_gain else 9.0, 1),
-        "top5_w2_med": round(float(np.median(t5_w2_gain)) if t5_w2_gain else 18.0, 1),
-        "top5_w3_med": round(float(np.median(t5_w3_gain)) if t5_w3_gain else 29.0, 1),
+        "top5_w1_med": round(float(np.median(t5_w1_gain)) if t5_w1_gain else 8.0, 1),
+        "top5_w2_med": round(float(np.median(t5_w2_gain)) if t5_w2_gain else 15.0, 1),
+        "top5_w3_med": round(float(np.median(t5_w3_gain)) if t5_w3_gain else 22.0, 1),
         "pm_w1_med": round(float(np.median(pm_w1_gain)) if pm_w1_gain else tp1_pct, 1),
         "pm_w2_med": round(float(np.median(pm_w2_gain)) if pm_w2_gain else tp2_pct, 1),
         "pm_w3_med": round(float(np.median(pm_w3_gain)) if pm_w3_gain else tp3_pct, 1),
@@ -1113,9 +1123,9 @@ def evaluate_48h_history(history_list, now_ts, tp_tuning):
     snap_date = target_snap.get("date_str", "이전 포착분")
     lines[1] = f"⏱️ [48시간 경과 동일 상위종목({snap_date} 포착분) 실전 익절(TP1~TP3) 사후 검증]"
 
-    t1_thr = tp_tuning.get("tp1_min_pct", 9.0)
-    t2_thr = tp_tuning.get("tp2_min_pct", 17.0)
-    t3_thr = tp_tuning.get("tp3_min_pct", 29.0)
+    t1_thr = tp_tuning.get("tp1_min_pct", 8.0)
+    t2_thr = tp_tuning.get("tp2_min_pct", 15.0)
+    t3_thr = tp_tuning.get("tp3_min_pct", 22.0)
 
     added_rows = 0
     for item in target_snap.get("coins", []):
