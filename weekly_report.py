@@ -1,7 +1,6 @@
 import os
 import json
 import time
-import subprocess
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -32,6 +31,9 @@ from wave_engine import (
     extract_three_wave_structure,
 )
 
+# [베타버전 공식 시작 기준 시각: 2026-11-15 14:45 KST 이전의 구버전 기록은 영구 배제]
+BETA_START_TS = int(datetime(2026, 11, 15, 14, 45, tzinfo=KST).timestamp())
+
 
 def get_learned_tp_targets():
     tp1 = to_float(getattr(cfg, "TP1_MIN_PCT", 8.5), 8.5)
@@ -60,7 +62,7 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
         return
 
     c_at = int(to_float(raw_item.get("created_at"), 0))
-    if c_at <= 0:
+    if c_at < BETA_START_TS:
         return
 
     bucket = c_at // 1800
@@ -112,7 +114,7 @@ def _merge_episode_dict(episodes_map, sym, raw_item):
 
 
 def collect_weekly_episodes(now_ts, days=7):
-    cutoff_ts = now_ts - (days * 86400)
+    cutoff_ts = max(BETA_START_TS, now_ts - (days * 86400))
     episodes_map = {}
 
     if os.path.exists(STATE_FILE):
@@ -132,43 +134,6 @@ def collect_weekly_episodes(now_ts, days=7):
                         _merge_episode_dict(episodes_map, item["symbol"], item_copy)
         except Exception as e:
             print(f"[현재 bot_state.json 로드 경고] {e}")
-
-    try:
-        cmd = ["git", "log", f"--since={days + 1} days ago", "--format=%H %ct", "--", STATE_FILE]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if proc.returncode == 0 and proc.stdout.strip():
-            sampled_hashes = []
-            last_sampled_ts = 0
-            for line in proc.stdout.strip().split("\n"):
-                parts = line.strip().split()
-                if len(parts) != 2:
-                    continue
-                c_hash, c_ts = parts[0], int(parts[1])
-                if c_ts < cutoff_ts:
-                    continue
-                if last_sampled_ts == 0 or abs(last_sampled_ts - c_ts) >= 7200:
-                    sampled_hashes.append(c_hash)
-                    last_sampled_ts = c_ts
-                if len(sampled_hashes) >= 50:
-                    break
-
-            for h in sampled_hashes:
-                try:
-                    sh = subprocess.run(
-                        ["git", "show", f"{h}:{STATE_FILE}"],
-                        capture_output=True,
-                        text=True,
-                        timeout=3,
-                    )
-                    if sh.returncode == 0 and sh.stdout:
-                        st = json.loads(sh.stdout)
-                        if isinstance(st, dict):
-                            for sym, item in st.get("tracked", {}).items():
-                                _merge_episode_dict(episodes_map, sym, item)
-                except Exception:
-                    continue
-    except Exception as e:
-        print(f"[Git 샘플링 안내] {e}")
 
     valid_episodes = [
         ep for ep in episodes_map.values()
@@ -227,10 +192,8 @@ def evaluate_episode_performance(ep, now_ts, learned_tps):
 
             active_stop = init_stop_p
             if hit_tp2:
-                # 2차 TP 돌파 후 3차 파동 진행 중: 2차 TP의 85% 수익선 또는 최고가 대비 -3.5% 트레일링 스탑 적용!
                 active_stop = max(active_stop, entry_p * (1.0 + (tp2_pct * 0.85) / 100.0), highest_before_exit * 0.965)
             elif hit_tp1:
-                # 1차 TP 달성 후 2차 TP의 75% 지점 이상 진입 시에는 1차 TP 수익을 잠금, 그 전에는 1차 조정 버티기(+0.6%)
                 if highest_before_exit >= entry_p * (1.0 + (tp2_pct * 0.75) / 100.0):
                     active_stop = max(active_stop, entry_p * (1.0 + (tp1_pct * 0.80) / 100.0))
                 else:
@@ -356,13 +319,13 @@ def main():
     now_ts = int(time.time())
     now_dt = datetime.now(KST)
     now_str = now_dt.strftime("%Y-%m-%d %H:%M KST")
-    start_date_str = (now_dt - timedelta(days=7)).strftime("%m/%d")
-    end_date_str = now_dt.strftime("%m/%d")
+    start_date_str = datetime.fromtimestamp(BETA_START_TS, tz=KST).strftime("%m/%d %H:%M")
+    end_date_str = now_dt.strftime("%m/%d %H:%M")
 
     learned_tps = get_learned_tp_targets()
     episodes = collect_weekly_episodes(now_ts, days=7)
     if not episodes:
-        msg = f"📊 [주간 성과 리포트 ({start_date_str}~{end_date_str})]\n• 최근 7일간 기록된 알림 에피소드가 없습니다."
+        msg = f"📊 [베타버전 주간 성과 리포트 ({start_date_str} ~ {end_date_str})]\n• 베타 초기화 이후 기록된 신규 알림 에피소드가 아직 없습니다."
         send_telegram_chunked(msg)
         return
 
@@ -426,7 +389,7 @@ def main():
     wk_w3_rsi = round(float(np.median([w["rsi6"] for w in w3_Pool])) if w3_Pool else 85.0, 0)
 
     lines = [
-        f"📅 [Bybit 스캐너 주간 실전 성과 & 1·2·3차 파동 심층 리포트 ({start_date_str} ~ {end_date_str})]",
+        f"📅 [Bybit 스캐너 베타 주간 성과 & 1·2·3차 파동 심층 리포트 ({start_date_str} ~ {end_date_str})]",
         f"🕒 집계 시각: {now_str} (-{FIXED_SL_PCT}% 고정SL · 동적TP +{learned_tps[0]:g}%/+{learned_tps[1]:g}%/+{learned_tps[2]:g}% · 3차트레일링 반영)\n",
         "1️⃣ [주간 전체 신호(Episode) 성적표]",
         f"• 총 발생 신호: {total_cnt}건 (종결 {decided_cnt}건 | 순항중 {len(act_list)}건)",
@@ -457,7 +420,7 @@ def main():
 
     lines.append(f"\n5️⃣ [주간 오답 노트: -{FIXED_SL_PCT}% 고정SL 기준 손절 복기 및 저항 로데이터 진단]")
     if not sl_list:
-        lines.append("• 최근 7일간 손절 마감된 종목이 없습니다.")
+        lines.append("• 베타 시작 이후 손절 마감된 종목이 없습니다.")
     else:
         lines.append(
             f"• 총 손절 {sl_cnt}건 중 아랫꼬리 스탑헌팅 후 재상승(+4%↑) 사례: {len(stop_hunted)}건"
@@ -488,7 +451,7 @@ def main():
     elapsed = time.time() - start_t
     lines.append(f"\n⏱️ 리포트 생성 소요 시간: {elapsed:.1f}초")
     send_telegram_chunked("\n".join(lines))
-    print(f"[{now_str}] 주간 성과 및 3파동 로데이터 리포트 전송 완료 ({elapsed:.1f}초 소요)")
+    print(f"[{now_str}] 베타 주간 성과 및 3파동 로데이터 리포트 전송 완료 ({elapsed:.1f}초 소요)")
 
 
 if __name__ == "__main__":
