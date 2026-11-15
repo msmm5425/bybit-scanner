@@ -682,7 +682,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                     elif fav_pct >= item_sl_pct:
                         t_item["be_armed"] = True
 
-                    if fav_pct >= 6.0 and peak_pos_15 >= ign_pos_15 and not is_heavy_major_coin(base_c):
+                    if fav_pct >= 5.0 and peak_pos_15 >= ign_pos_15 and not is_heavy_major_coin(base_c):
                         sup_p = entry_p * 0.960
                         w_h = max(to_float(t_item.get("swing_high_line"), entry_p * 1.02) - sup_p, entry_p * 0.055)
                         w_res = extract_three_wave_structure(df_15m_chk, ign_pos_15, peak_pos_15, entry_p, sup_p, w_h)
@@ -696,7 +696,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                         scanner_wave_stats["w1_kdjs"].append(w_res["w1"]["kdj_j"])
                         scanner_wave_stats["w1_holds"].append(w_res["w1"]["hold_tag"])
 
-                        if fav_pct >= 11.0:
+                        if fav_pct >= 10.0:
                             scanner_wave_stats["w2_gains"].append(w_res["w2"]["gain_pct"])
                             scanner_wave_stats["w2_fibs"].append(w_res["w2"]["fib_mult"])
                             scanner_wave_stats["w2_ma20_exts"].append(w_res["w2"]["ma20_ext_pct"])
@@ -704,7 +704,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                             scanner_wave_stats["w2_rsis"].append(w_res["w2"]["rsi6"])
                             scanner_wave_stats["w2_kdjs"].append(w_res["w2"]["kdj_j"])
 
-                        if fav_pct >= 15.0:
+                        if fav_pct >= 14.0:
                             scanner_wave_stats["w3_gains"].append(w_res["w3"]["gain_pct"])
                             scanner_wave_stats["w3_fibs"].append(w_res["w3"]["fib_mult"])
                             scanner_wave_stats["w3_ma20_exts"].append(w_res["w3"]["ma20_ext_pct"])
@@ -968,28 +968,45 @@ def analyze_scanner_coins_and_postmortem(now_ts):
 
 def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
     """
-    [하락장 노이즈 방어 및 -6% SL 손익비 보호 튜닝 엔진]
-    - Top 5 중 총 상승폭이 +14% 미만인 소폭 반등 코인($MEGA +7.3%, $PIEVERSE +9.2%)이
-      2·3차 대시세 목표가를 바닥으로 끌어내리지 않도록, 실제 파동(+14% 이상)이 나온 종목들을 우선 학습합니다.
-    - 고정 손절(-6%) 및 1R(+6%) 본전 방어와의 간격을 확보하기 위해 TP1 최소 +9%, TP2 최소 +16%, TP3 최소 +23% 보장.
+    [양극단 쏠림 방지 & 베타 초기 스무딩 튜닝 엔진]
+    1) Top 5 전체의 중앙값(50% 분위수)과 상위권(65% 분위수)을 6:4로 결합하여
+       1~2위 이상치(+84%)나 4~5위 약세치(+9%) 한쪽으로 튀는 현상을 원천 차단합니다.
+    2) 베타 초기화 직후 스캐너 표본이 부족할 때(5건 미만)는 실전 검증 앵커(+9% / +16% / +25%)와
+       가중 평균하여 첫날부터 안정적인 TP1~TP3를 유지합니다.
     """
-    valid_w1_coins = [x for x in analyzed_top5 if x["pump_from_ign_pct"] >= 10.0] or analyzed_top5
-    valid_w23_coins = [x for x in analyzed_top5 if x["pump_from_ign_pct"] >= 14.0] or analyzed_top5[:2]
+    t5_w1_gain = [x["waves"]["w1"]["gain_pct"] for x in analyzed_top5]
+    t5_w1_fib = [x["waves"]["w1"]["fib_mult"] for x in analyzed_top5]
+    t5_w1_ext = [x["waves"]["w1"]["ma20_ext_pct"] for x in analyzed_top5]
+    t5_w1_rsi = [x["waves"]["w1"]["rsi6"] for x in analyzed_top5]
 
-    t5_w1_gain = [x["waves"]["w1"]["gain_pct"] for x in valid_w1_coins]
-    t5_w1_fib = [x["waves"]["w1"]["fib_mult"] for x in valid_w1_coins]
-    t5_w1_ext = [x["waves"]["w1"]["ma20_ext_pct"] for x in valid_w1_coins]
-    t5_w1_rsi = [x["waves"]["w1"]["rsi6"] for x in valid_w1_coins]
+    t5_w2_gain = [x["waves"]["w2"]["gain_pct"] for x in analyzed_top5]
+    t5_w2_fib = [x["waves"]["w2"]["fib_mult"] for x in analyzed_top5]
+    t5_w2_ext = [x["waves"]["w2"]["ma20_ext_pct"] for x in analyzed_top5]
+    t5_w2_rsi = [x["waves"]["w2"]["rsi6"] for x in analyzed_top5]
 
-    t5_w2_gain = [x["waves"]["w2"]["gain_pct"] for x in valid_w23_coins]
-    t5_w2_fib = [x["waves"]["w2"]["fib_mult"] for x in valid_w23_coins]
-    t5_w2_ext = [x["waves"]["w2"]["ma20_ext_pct"] for x in valid_w23_coins]
-    t5_w2_rsi = [x["waves"]["w2"]["rsi6"] for x in valid_w23_coins]
+    t5_w3_gain = [x["waves"]["w3"]["gain_pct"] for x in analyzed_top5]
+    t5_w3_fib = [x["waves"]["w3"]["fib_mult"] for x in analyzed_top5]
+    t5_w3_ext = [x["waves"]["w3"]["ma20_ext_pct"] for x in analyzed_top5]
+    t5_w3_rsi = [x["waves"]["w3"]["rsi6"] for x in analyzed_top5]
 
-    t5_w3_gain = [x["waves"]["w3"]["gain_pct"] for x in valid_w23_coins]
-    t5_w3_fib = [x["waves"]["w3"]["fib_mult"] for x in valid_w23_coins]
-    t5_w3_ext = [x["waves"]["w3"]["ma20_ext_pct"] for x in valid_w23_coins]
-    t5_w3_rsi = [x["waves"]["w3"]["rsi6"] for x in valid_w23_coins]
+    def _robust_top5_stat(arr, default_val):
+        if not arr:
+            return default_val
+        med = float(np.median(arr))
+        p65 = float(np.percentile(arr, 65))
+        return (med * 0.60) + (p65 * 0.40)
+
+    t5_g1 = _robust_top5_stat(t5_w1_gain, 9.0)
+    t5_g2 = _robust_top5_stat(t5_w2_gain, 16.0)
+    t5_g3 = _robust_top5_stat(t5_w3_gain, 25.0)
+
+    t5_f1 = _robust_top5_stat(t5_w1_fib, 1.80)
+    t5_f2 = _robust_top5_stat(t5_w2_fib, 2.75)
+    t5_f3 = _robust_top5_stat(t5_w3_fib, 3.90)
+
+    t5_e1 = _robust_top5_stat(t5_w1_ext, 5.0)
+    t5_e2 = _robust_top5_stat(t5_w2_ext, 9.0)
+    t5_e3 = _robust_top5_stat(t5_w3_ext, 13.5)
 
     pm_w1_gain = scanner_wave_stats.get("w1_gains", [])
     pm_w1_fib = scanner_wave_stats.get("w1_fibs", [])
@@ -1003,33 +1020,34 @@ def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
     pm_w3_fib = scanner_wave_stats.get("w3_fibs", [])
     pm_w3_ext = scanner_wave_stats.get("w3_ma20_exts", [])
 
-    def _blend(t5_arr, pm_arr, w_t5=0.50, default_v=9.0):
-        m_t5 = float(np.median(t5_arr)) if t5_arr else default_v
-        if pm_arr:
-            m_pm = float(np.median(pm_arr))
-            return (m_t5 * w_t5) + (m_pm * (1.0 - w_t5))
-        return m_t5
+    def _blend_with_anchor(t5_v, pm_arr, anchor_v):
+        if len(pm_arr) >= 4:
+            pm_v = float(np.median(pm_arr))
+            return (t5_v * 0.45) + (pm_v * 0.55)
+        elif len(pm_arr) >= 1:
+            pm_v = float(np.median(pm_arr))
+            return (t5_v * 0.40) + (pm_v * 0.30) + (anchor_v * 0.30)
+        else:
+            # 베타 초기화 직후(스캐너 표본 0건): Top 5 대푯값(50%) + 실전 기준 앵커(50%) 결합
+            return (t5_v * 0.50) + (anchor_v * 0.50)
 
-    # 1차 익절(첫 조정 고점): 9% ~ 14% 범위 (1R +6% 본전방어 위에서 최소 +9% 수익 확보)
-    raw_tp1 = _blend(t5_w1_gain, pm_w1_gain, w_t5=0.45, default_v=9.5)
-    tp1_pct = int(np.clip(round(raw_tp1), 9, 14))
-    tp1_fib = round(float(np.clip(_blend(t5_w1_fib, pm_w1_fib, w_t5=0.45, default_v=1.80), 1.60, 2.35)), 2)
-    tp1_ext = round(float(np.clip(_blend(t5_w1_ext, pm_w1_ext, w_t5=0.45, default_v=5.5), 3.5, 9.5)), 1)
+    raw_tp1 = _blend_with_anchor(t5_g1, pm_w1_gain, 9.0)
+    tp1_pct = int(np.clip(round(raw_tp1), 8, 13))
+    tp1_fib = round(float(np.clip(_blend_with_anchor(t5_f1, pm_w1_fib, 1.80), 1.55, 2.25)), 2)
+    tp1_ext = round(float(np.clip(_blend_with_anchor(t5_e1, pm_w1_ext, 5.0), 3.5, 8.5)), 1)
     tp1_rsi = round(float(np.median(t5_w1_rsi + scanner_wave_stats.get("w1_rsis", []))) if t5_w1_rsi else 82.0, 1)
 
-    # 2차 익절(최종고점 전 중간 조정 고점): 16% ~ 26% 범위
-    raw_tp2 = _blend(t5_w2_gain, pm_w2_gain, w_t5=0.50, default_v=17.0)
-    tp2_pct = int(np.clip(round(max(tp1_pct + 6, raw_tp2)), 16, 26))
-    tp2_fib = round(float(np.clip(max(tp1_fib + 0.70, _blend(t5_w2_fib, pm_w2_fib, w_t5=0.50, default_v=2.85)), 2.40, 3.60)), 2)
-    tp2_ext = round(float(np.clip(max(tp1_ext + 3.0, _blend(t5_w2_ext, pm_w2_ext, w_t5=0.50, default_v=9.5)), 6.5, 16.0)), 1)
+    raw_tp2 = _blend_with_anchor(t5_g2, pm_w2_gain, 16.0)
+    tp2_pct = int(np.clip(round(max(tp1_pct + 6, raw_tp2)), 14, 22))
+    tp2_fib = round(float(np.clip(max(tp1_fib + 0.65, _blend_with_anchor(t5_f2, pm_w2_fib, 2.75)), 2.30, 3.40)), 2)
+    tp2_ext = round(float(np.clip(max(tp1_ext + 2.5, _blend_with_anchor(t5_e2, pm_w2_ext, 9.0)), 6.5, 14.5)), 1)
     tp2_rsi = round(float(np.median(t5_w2_rsi + scanner_wave_stats.get("w2_rsis", []))) if t5_w2_rsi else 86.0, 1)
 
-    # 3차 익절(최종 클라이맥스 고점): 23% ~ 48% 범위
-    raw_tp3 = _blend(t5_w3_gain, pm_w3_gain, w_t5=0.55, default_v=26.0)
-    tp3_pct = int(np.clip(round(max(tp2_pct + 7, raw_tp3)), 23, 48))
-    tp3_fib = round(float(np.clip(max(tp2_fib + 0.80, _blend(t5_w3_fib, pm_w3_fib, w_t5=0.55, default_v=4.10)), 3.30, 4.80)), 2)
-    tp3_ext = round(float(np.clip(max(tp2_ext + 4.0, _blend(t5_w3_ext, pm_w3_ext, w_t5=0.55, default_v=14.5)), 10.5, 24.0)), 1)
-    tp3_rsi = round(float(np.median(t5_w3_rsi + scanner_wave_stats.get("w3_rsis", []))) if t5_w3_rsi else 88.0, 1)
+    raw_tp3 = _blend_with_anchor(t5_g3, pm_w3_gain, 24.0)
+    tp3_pct = int(np.clip(round(max(tp2_pct + 7, raw_tp3)), 21, 36))
+    tp3_fib = round(float(np.clip(max(tp2_fib + 0.75, _blend_with_anchor(t5_f3, pm_w3_fib, 3.90)), 3.20, 4.50)), 2)
+    tp3_ext = round(float(np.clip(max(tp2_ext + 3.5, _blend_with_anchor(t5_e3, pm_w3_ext, 13.5)), 10.0, 21.0)), 1)
+    tp3_rsi = round(float(np.median(t5_w3_rsi + scanner_wave_stats.get("w3_rsis", []))) if t5_w3_rsi else 82.0, 1)
 
     return {
         "tp1_min_pct": float(tp1_pct),
@@ -1044,9 +1062,9 @@ def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
         "tp1_rsi6": tp1_rsi,
         "tp2_rsi6": tp2_rsi,
         "tp3_rsi6": tp3_rsi,
-        "top5_w1_med": round(float(np.median(t5_w1_gain)) if t5_w1_gain else 9.5, 1),
-        "top5_w2_med": round(float(np.median(t5_w2_gain)) if t5_w2_gain else 17.0, 1),
-        "top5_w3_med": round(float(np.median(t5_w3_gain)) if t5_w3_gain else 26.0, 1),
+        "top5_w1_med": round(t5_g1, 1),
+        "top5_w2_med": round(t5_g2, 1),
+        "top5_w3_med": round(t5_g3, 1),
         "pm_w1_med": round(float(np.median(pm_w1_gain)) if pm_w1_gain else tp1_pct, 1),
         "pm_w2_med": round(float(np.median(pm_w2_gain)) if pm_w2_gain else tp2_pct, 1),
         "pm_w3_med": round(float(np.median(pm_w3_gain)) if pm_w3_gain else tp3_pct, 1),
