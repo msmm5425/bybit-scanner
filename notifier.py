@@ -1,6 +1,8 @@
 import os
 import io
+import sys
 import time
+import subprocess
 import requests
 import numpy as np
 import pandas as pd
@@ -59,6 +61,62 @@ def fmt_price(price):
     if p >= 0.01:
         return f"{p:.5f}"
     return f"{p:.6f}"
+
+
+def _ensure_matplotlib():
+    """워크플로우에 matplotlib가 없더라도 런타임에 자동 설치하여 차트 생성 보장"""
+    try:
+        import matplotlib
+        return True
+    except ImportError:
+        try:
+            print("[알림] matplotlib 자동 설치 중...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "matplotlib"])
+            return True
+        except Exception as e:
+            print(f"[경고] matplotlib 자동 설치 실패: {e}")
+            return False
+
+
+def _build_sample_breakout_df(entry_price=0.03188):
+    """테스트 발송 또는 거래소 캔들 미조회 시 박스권 응축 -> 돌파 -> 눌림목 65캔들 샘플 생성"""
+    np.random.seed(42)
+    rows = []
+    base_p = entry_price * 0.968
+    curr = base_p
+
+    # 1~52번 캔들: 2시간 이상 타이트한 박스권 응축
+    for i in range(52):
+        wave = np.sin(i * 0.35) * (entry_price * 0.004)
+        noise = np.random.uniform(-0.0018, 0.0020) * entry_price
+        o = curr
+        c = base_p + wave + noise
+        h = max(o, c) + np.random.uniform(0.0005, 0.0022) * entry_price
+        l = min(o, c) - np.random.uniform(0.0005, 0.0022) * entry_price
+        rows.append({"open": o, "high": h, "low": l, "close": c})
+        curr = c
+
+    # 53~59번 캔들: 박스권 상단 초동 돌파 양봉 분출
+     break_steps = [0.975, 0.982, 0.991, 1.002, 1.012, 1.018, 1.010]
+    for ratio in break_steps:
+        o = curr
+        c = entry_price * ratio
+        h = max(o, c) + entry_price * 0.0035
+        l = min(o, c) - entry_price * 0.0020
+        rows.append({"open": o, "high": h, "low": l, "close": c})
+        curr = c
+
+    # 60~65번 캔들: 전고점 S/R Flip 및 MA20 지지 리테스트 후 재반등 타점(entry_price)
+    retest_steps = [1.004, 0.998, 0.995, 0.997, 0.999, 1.000]
+    for ratio in retest_steps:
+        o = curr
+        c = entry_price * ratio
+        h = max(o, c) + entry_price * 0.0022
+        l = min(o, c) - entry_price * 0.0025
+        rows.append({"open": o, "high": h, "low": l, "close": c})
+        curr = c
+
+    return pd.DataFrame(rows)
 
 
 def build_briefing_message(res, now_str):
@@ -144,14 +202,13 @@ def generate_signal_chart_bytes(res):
     포착 종목의 최근 5분봉 캔들과 MA20/MA50, 진입가·SL·1~3차 TP 수평선을 그린
     트레이딩뷰 다크모드 스타일 PNG 이미지를 메모리(BytesIO)로 생성합니다.
     """
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from matplotlib.patches import Rectangle
-    except Exception as e:
-        print(f"[차트 생성 스킵 - matplotlib 미설치] {e}")
+    if not _ensure_matplotlib():
         return None
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
 
     symbol = res.get("symbol", "")
     base = res.get("base_coin") or res.get("base") or symbol.replace("USDT", "")
@@ -162,31 +219,35 @@ def generate_signal_chart_bytes(res):
         return None
 
     df = pd.DataFrame()
-    if api_mod and hasattr(api_mod, "fetch_klines"):
-        try:
-            df = api_mod.fetch_klines(symbol, "5", limit=75)
-        except Exception:
-            df = pd.DataFrame()
+    if not res.get("_is_test_sample"):
+        if api_mod and hasattr(api_mod, "fetch_klines"):
+            try:
+                df = api_mod.fetch_klines(symbol, "5", limit=75)
+            except Exception:
+                df = pd.DataFrame()
 
-    if df is None or df.empty or len(df) < 20:
-        try:
-            r = requests.get(
-                "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
-                params={"contract": f"{base}_USDT", "interval": "5m", "limit": 75},
-                timeout=5,
-            )
-            if r.status_code == 200 and isinstance(r.json(), list) and r.json():
-                raw_df = pd.DataFrame(r.json()).rename(
-                    columns={"t": "timestamp", "o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"}
+        if df is None or df.empty or len(df) < 20:
+            try:
+                r = requests.get(
+                    "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
+                    params={"contract": f"{base}_USDT", "interval": "5m", "limit": 75},
+                    timeout=5,
                 )
-                for col in ("open", "high", "low", "close"):
-                    raw_df[col] = pd.to_numeric(raw_df[col], errors="coerce")
-                df = raw_df.dropna(subset=["close"]).reset_index(drop=True)
-        except Exception:
-            return None
+                if r.status_code == 200 and isinstance(r.json(), list) and r.json():
+                    raw_df = pd.DataFrame(r.json()).rename(
+                        columns={"t": "timestamp", "o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"}
+                    )
+                    for col in ("open", "high", "low", "close"):
+                        raw_df[col] = pd.to_numeric(raw_df[col], errors="coerce")
+                    df = raw_df.dropna(subset=["close"]).reset_index(drop=True)
+            except Exception:
+                pass
 
     if df is None or df.empty or len(df) < 20:
-        return None
+        if res.get("_is_test_sample"):
+            df = _build_sample_breakout_df(price)
+        else:
+            return None
 
     df = df.iloc[-65:].reset_index(drop=True)
     df["ma20"] = df["close"].rolling(20, min_periods=3).mean()
@@ -234,10 +295,9 @@ def generate_signal_chart_bytes(res):
         ax.plot(df.index, df["ma20"], color="#2962ff", linewidth=1.3, label="MA20", alpha=0.9, zorder=4)
         ax.plot(df.index, df["ma50"], color="#ff9800", linewidth=1.3, label="MA50", alpha=0.85, zorder=4)
 
-        x_right = n + 13
+        x_right = n + 14
         ax.set_xlim(-1.5, x_right)
 
-        # 진입 밴드 음영
         ax.axhspan(e_low, e_high, color="#3b82f6", alpha=0.18, zorder=1)
 
         level_specs = [
@@ -265,8 +325,8 @@ def generate_signal_chart_bytes(res):
                 zorder=6,
             )
 
-        y_min = min(to_float(df["low"].min(), sl_p), sl_p) * 0.985
-        y_max = max(to_float(df["high"].max(), tp3_p), tp3_p) * 1.020
+        y_min = min(to_float(df["low"].min(), sl_p), sl_p) * 0.975
+        y_max = max(to_float(df["high"].max(), tp3_p), tp3_p) * 1.030
         ax.set_ylim(y_min, y_max)
 
         ax.grid(True, linestyle=":", linewidth=0.6, color="#2a2e39", alpha=0.8)
@@ -333,3 +393,37 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text):
             print(f"[텔레그램 차트 사진 전송 재시도 {attempt + 1}/3] {e}")
         time.sleep(1.2)
     return False
+
+
+def send_uai_sample_test():
+    """$UAI 예시 데이터로 차트 이미지 + X 양식 캡션을 텔레그램 방에 즉시 테스트 발송"""
+    sample_res = {
+        "_is_test_sample": True,
+        "symbol": "UAIUSDT",
+        "base_coin": "UAI",
+        "base": "UAI",
+        "track_type": "TRACK_B",
+        "track_title": "🧪 [차트+X양식 테스트 발송]",
+        "score": 92,
+        "price": 0.03188,
+        "entry_low": 0.03181,
+        "entry_high": 0.03192,
+        "stop_price": 0.02998,
+        "sl_pct": 6,
+        "tps": [0.03444, 0.03859, 0.04178],
+        "tp_pcts": [8.0, 21.0, 31.0],
+    }
+    x_caption = build_x_post_message(sample_res)
+    chart_bytes = generate_signal_chart_bytes(sample_res)
+    if chart_bytes:
+        ok = send_telegram_photo_with_caption(chart_bytes, x_caption)
+        print(f"[$UAI 차트+X양식 테스트 발송 결과]: {'성공' if ok else '실패'}")
+        return ok
+    else:
+        ok = send_telegram_single(x_caption)
+        print(f"[$UAI 텍스트 폴백 발송 결과]: {'성공' if ok else '실패'}")
+        return ok
+
+
+if __name__ == "__main__":
+    send_uai_sample_test()
