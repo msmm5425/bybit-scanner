@@ -2,6 +2,8 @@ import os
 import io
 import sys
 import time
+import json
+import tempfile
 import subprocess
 import requests
 import numpy as np
@@ -42,6 +44,8 @@ if not TELEGRAM_CHAT_ID:
         or ""
     ).strip()
 
+_PLAYWRIGHT_READY = False
+
 
 def to_float(value, default=0.0):
     try:
@@ -71,31 +75,40 @@ def fmt_price(price):
 def fmt_vol(v):
     val = to_float(v, 0.0)
     if val >= 1e9:
-        return f"{val / 1e9:.1f}B"
+        return f"{val / 1e9:.2f}B"
     if val >= 1e6:
-        return f"{val / 1e6:.1f}M"
+        return f"{val / 1e6:.2f}M"
     if val >= 1e3:
         return f"{val / 1e3:.1f}K"
     return f"{val:.0f}"
 
 
-def _ensure_matplotlib():
+def _ensure_playwright():
+    """런타임에 playwright 및 chromium이 없으면 1회 자동 설치"""
+    global _PLAYWRIGHT_READY
+    if _PLAYWRIGHT_READY:
+        return True
     try:
-        import matplotlib
+        import playwright
+        _PLAYWRIGHT_READY = True
         return True
     except ImportError:
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "matplotlib"])
+            print("[알림] TradingView 엔진 렌더링용 Playwright 설치 중...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "playwright"])
+            subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+            _PLAYWRIGHT_READY = True
             return True
         except Exception as e:
-            print(f"[경고] matplotlib 자동 설치 실패: {e}")
+            print(f"[경고] Playwright 설치 실패 (폴백 차트 사용): {e}")
             return False
 
 
-def fetch_exact_bybit_klines(symbol, interval="15", limit=75):
+def fetch_exact_bybit_klines(symbol, interval="15", limit=85):
     """
-    [1순위] 게이트아이오/비트겟이 아닌 실제 Bybit V5 공식 미러 서버에서
-    바이비트 원본 캔들(OHLC)과 실제 바이비트 거래량(Volume)을 직접 가져옵니다.
+    [Bybit V5 공식 미러 1순위 직결]
+    게이트아이오 등 타 거래소가 아닌 실제 Bybit 선물 오더북의 15분봉(OHLC)과
+    실제 거래량(Volume)을 가져와 시간 오름차순(과거->현재)으로 정확히 정렬합니다.
     """
     bybit_params = {
         "category": "linear",
@@ -125,22 +138,36 @@ def fetch_exact_bybit_klines(symbol, interval="15", limit=75):
                     df = pd.DataFrame(rows, columns=cols)
                     for c in ("timestamp", "open", "high", "low", "close", "volume"):
                         df[c] = pd.to_numeric(df[c], errors="coerce")
+                    if df["timestamp"].max() < 1e11:
+                        df["timestamp"] = df["timestamp"] * 1000.0
+                    # Bybit 원본은 최신봉이 맨 앞(역순)이므로 반드시 시간 오름차순 정렬!
                     df = df.dropna(subset=["timestamp", "close"]).sort_values("timestamp", ascending=True).reset_index(drop=True)
                     if len(df) >= 20:
                         return df
         except Exception:
             continue
 
-    # 모든 바이비트 미러가 응답하지 않을 때만 api_mod 폴백 사용
-    if api_mod and hasattr(api_mod, "fetch_klines"):
-        try:
-            df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
-            if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= 20:
-                if "timestamp" in df.columns:
-                    df = df.sort_values("timestamp", ascending=True).reset_index(drop=True)
+    # 바이비트 미러 전체 응답 지연 시에만 Bitget 선물 폴백 (역순 정렬 보정 포함)
+    try:
+        r = requests.get(
+            "https://api.bitget.com/api/v2/mix/market/candles",
+            params={"symbol": symbol, "productType": "USDT-FUTURES", "granularity": "15m", "limit": str(limit)},
+            headers=BROWSER_HEADERS,
+            timeout=4,
+        )
+        if r.status_code == 200:
+            rows = r.json().get("data", [])
+            if isinstance(rows, list) and len(rows) >= 20:
+                cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(rows[0])]
+                df = pd.DataFrame(rows, columns=cols)
+                for c in ("timestamp", "open", "high", "low", "close", "volume"):
+                    df[c] = pd.to_numeric(df[c], errors="coerce")
+                if df["timestamp"].max() < 1e11:
+                    df["timestamp"] = df["timestamp"] * 1000.0
+                df = df.dropna(subset=["timestamp", "close"]).sort_values("timestamp", ascending=True).reset_index(drop=True)
                 return df
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     return pd.DataFrame()
 
@@ -223,276 +250,383 @@ def build_x_post_message(res):
     )
 
 
-def generate_signal_chart_bytes(res):
+def _render_tradingview_lightweight_chart(df, res):
     """
-    [Bybit V5 실제 15분봉·거래량 100% 동기화 차트 생성기]
-    1) Bybit 공식 V5 미러 서버에서 실제 15분봉 캔들과 실제 거래량을 직결 조회
-    2) 비선형 스케일(FuncScale)로 캔들 영역 확대 & TP1~TP3 여백 압축
-    3) 상단 TP3 선과 이평선 범례가 겹치지 않도록 범례를 차트 프레임 상단 바깥으로 분리
+    [2번 방식: 트레이딩뷰 공식 Lightweight Charts 엔진 캡처]
+    - 실제 TradingView HTML5 Canvas 엔진으로 15분봉 캔들, MA7/20/50, 하단 거래량 히스토그램을 렌더링
+    - 캔들 구간은 화면의 66%를 큼직하게 차지하고 상단 TP1~TP3 여백만 압축하되,
+      우측 가격 축(Price Scale)에는 실제 가격이 정확히 찍히도록 커스텀 스케일러 적용
     """
-    if not _ensure_matplotlib():
+    if not _ensure_playwright():
         return None
-
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.patches import Rectangle
-    from matplotlib.gridspec import GridSpec
 
     symbol = res.get("symbol", "")
     base = res.get("base_coin") or res.get("base") or symbol.replace("USDT", "")
     score = res.get("score", 85)
     track_type = res.get("track_type", "TRACK_A")
+
+    latest_row = df.iloc[-1]
+    price = to_float(latest_row["close"], to_float(res.get("price")))
+    open_last = to_float(latest_row["open"], price)
+    high_last = to_float(latest_row["high"], price)
+    low_last = to_float(latest_row["low"], price)
+    vol_last = to_float(latest_row["volume"], 0.0)
+
+    orig_entry = to_float(res.get("price"), price)
+    ratio_adj = price / orig_entry if orig_entry > 0 else 1.0
+
+    sl_pct = int(round(to_float(res.get("sl_pct"), FIXED_SL_PCT)))
+    sl_p = to_float(res.get("stop_price"), price * (1.0 - sl_pct / 100.0)) * ratio_adj
+    tps = res.get("tps") or [price * 1.08, price * 1.16, price * 1.24]
+    tp_pcts = res.get("tp_pcts") or [8.0, 16.0, 24.0]
+
+    tp1_p = to_float(tps[0]) * ratio_adj
+    tp2_p = to_float(tps[1]) * ratio_adj
+    tp3_p = to_float(tps[2]) * ratio_adj
+    p1 = int(round(to_float(tp_pcts[0], 8.0)))
+    p2 = int(round(to_float(tp_pcts[1], 16.0)))
+    p3 = int(round(to_float(tp_pcts[2], 24.0)))
+
+    # 비선형 스케일 파라미터 계산 (캔들 영역 확대 + TP1~TP3 사이 여백 압축)
+    c_low_min = min(to_float(df["low"].min(), sl_p), sl_p)
+    c_high_max = max(to_float(df["high"].max(), price), price * 1.015)
+    y_piv = min(tp1_p * 0.985, c_high_max * 1.010)
+    candle_span = max(y_piv - c_low_min, price * 0.035)
+    tp_span = max(tp3_p - y_piv, price * 0.05)
+    comp_ratio = float(np.clip((candle_span * 0.46) / tp_span, 0.15, 0.70))
+
+    def _fwd(val):
+        v = to_float(val, price)
+        return v if v <= y_piv else y_piv + (v - y_piv) * comp_ratio
+
+    candles_js = []
+    vol_js = []
+    ma7_js = []
+    ma20_js = []
+    ma50_js = []
+
+    for _, row in df.iterrows():
+        # KST(UTC+9) 시간축 표시를 위해 타임스탬프(초)에 +9시간 오프셋 부여
+        ts_sec = int(to_float(row["timestamp"]) // 1000) + (9 * 3600)
+        o_v = to_float(row["open"])
+        h_v = to_float(row["high"])
+        l_v = to_float(row["low"])
+        c_v = to_float(row["close"])
+        v_v = to_float(row["volume"])
+
+        candles_js.append({
+            "time": ts_sec,
+            "open": _fwd(o_v),
+            "high": _fwd(h_v),
+            "low": _fwd(l_v),
+            "close": _fwd(c_v),
+        })
+        vol_js.append({
+            "time": ts_sec,
+            "value": v_v,
+            "color": "rgba(38, 166, 154, 0.52)" if c_v >= o_v else "rgba(239, 83, 80, 0.52)",
+        })
+        if pd.notna(row.get("ma7")):
+            ma7_js.append({"time": ts_sec, "value": _fwd(row["ma7"])})
+        if pd.notna(row.get("ma20")):
+            ma20_js.append({"time": ts_sec, "value": _fwd(row["ma20"])})
+        if pd.notna(row.get("ma50")):
+            ma50_js.append({"time": ts_sec, "value": _fwd(row["ma50"])})
+
+    # 우측 타점 프로젝션 여백 확보용 미래 빈 타임스탬프 6개 추가
+    last_ts_sec = candles_js[-1]["time"]
+    whitespace_js = [{"time": last_ts_sec + (i * 900)} for i in range(1, 7)]
+
+    last_kst_dt = datetime.fromtimestamp(to_float(latest_row["timestamp"]) / 1000.0, tz=KST)
+    kst_str = last_kst_dt.strftime("%Y-%m-%d %H:%M KST")
+
+    track_badge = {
+        "TRACK_A": "TRACK A · Pullback",
+        "TRACK_B": "TRACK B · Breakout",
+        "TRACK_C": "TRACK C · Leader Fib 0.5",
+    }.get(track_type, track_type)
+
+    ma7_curr = fmt_price(df["ma7"].iloc[-1])
+    ma20_curr = fmt_price(df["ma20"].iloc[-1])
+    ma50_curr = fmt_price(df["ma50"].iloc[-1])
+
+    decimals = 6 if price < 0.01 else (5 if price < 1 else (4 if price < 10 else (3 if price < 1000 else 2)))
+    min_move = 10 ** (-decimals)
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    background-color: #131722;
+    font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif;
+    color: #d1d4dc;
+    width: 1120px;
+    height: 680px;
+    overflow: hidden;
+  }}
+  .tv-wrap {{
+    position: relative;
+    width: 1120px;
+    height: 680px;
+    background: #131722;
+    border: 1px solid #2a2e39;
+    display: flex;
+    flex-direction: column;
+  }}
+  .tv-topbar {{
+    height: 44px;
+    background: #181c27;
+    border-bottom: 1px solid #2a2e39;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    z-index: 20;
+  }}
+  .tv-left {{ display: flex; align-items: center; gap: 12px; }}
+  .tv-symbol {{ font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: 0.3px; }}
+  .tv-tf-badge {{
+    background: #2a2e39; color: #d1d4dc; font-size: 12px; font-weight: 700;
+    padding: 3px 8px; border-radius: 4px;
+  }}
+  .tv-exchange {{ color: #787b86; font-size: 12.5px; font-weight: 600; }}
+  .tv-ohlc {{ display: flex; gap: 10px; font-size: 12.5px; font-weight: 600; margin-left: 8px; }}
+  .tv-ohlc span b {{ color: #787b86; font-weight: 500; margin-right: 2px; }}
+  .tv-val-up {{ color: #26a69a; }}
+  .tv-right {{ display: flex; align-items: center; gap: 10px; }}
+  .tv-score-pill {{
+    background: linear-gradient(90deg, #2962ff, #1e4bd8);
+    color: #ffffff; font-size: 12.5px; font-weight: 700;
+    padding: 4px 11px; border-radius: 5px;
+  }}
+  .tv-time {{ color: #9598a1; font-size: 12px; font-weight: 600; }}
+  #chart-box {{ position: relative; flex: 1; width: 100%; height: 636px; }}
+  .tv-ma-legend {{
+    position: absolute; top: 10px; left: 14px; z-index: 15;
+    display: flex; gap: 14px; font-size: 12px; font-weight: 700;
+    background: rgba(19, 23, 34, 0.82); padding: 5px 10px;
+    border-radius: 4px; border: 1px solid #2a2e39;
+  }}
+  .ma7 {{ color: #00e5ff; }}
+  .ma20 {{ color: #2962ff; }}
+  .ma50 {{ color: #ff9800; }}
+  .vol-lbl {{ color: #b2b5be; }}
+  .tv-watermark {{
+    position: absolute; top: 44%; left: 45%; transform: translate(-50%, -50%);
+    font-size: 46px; font-weight: 900; color: rgba(255, 255, 255, 0.035);
+    text-align: center; pointer-events: none; z-index: 1; line-height: 1.15;
+  }}
+</style>
+</head>
+<body>
+<div class="tv-wrap">
+  <div class="tv-topbar">
+    <div class="tv-left">
+      <span class="tv-symbol">${base}USDT.P</span>
+      <span class="tv-tf-badge">15m</span>
+      <span class="tv-exchange">BYBIT PERPETUAL</span>
+      <div class="tv-ohlc">
+        <span><b>O</b><span class="tv-val-up">{fmt_price(open_last)}</span></span>
+        <span><b>H</b><span class="tv-val-up">{fmt_price(high_last)}</span></span>
+        <span><b>L</b><span class="tv-val-up">{fmt_price(low_last)}</span></span>
+        <span><b>C</b><span class="tv-val-up">{fmt_price(price)}</span></span>
+        <span><b>Vol(15m)</b><span class="tv-val-up">{fmt_vol(vol_last)}</span></span>
+      </div>
+    </div>
+    <div class="tv-right">
+      <span class="tv-time">{kst_str}</span>
+      <span class="tv-score-pill">{track_badge} · {score}점</span>
+    </div>
+  </div>
+  <div id="chart-box">
+    <div class="tv-ma-legend">
+      <span class="ma7">● MA(7) {ma7_curr}</span>
+      <span class="ma20">● MA(20) {ma20_curr}</span>
+      <span class="ma50">● MA(50) {ma50_curr}</span>
+      <span class="vol-lbl">📊 Bybit Vol {fmt_vol(vol_last)}</span>
+    </div>
+    <div class="tv-watermark">{base}USDT<br>BYBIT · 15M</div>
+  </div>
+</div>
+<script>
+  const yPiv = {y_piv};
+  const compRatio = {comp_ratio};
+  const decimals = {decimals};
+
+  function invScale(y) {{
+    return (y <= yPiv) ? y : (yPiv + (y - yPiv) / Math.max(compRatio, 1e-6));
+  }}
+
+  function fmtReal(val) {{
+    const p = invScale(val);
+    if (p <= 0) return '0.0000';
+    if (p >= 1000) return p.toLocaleString('en-US', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+    return p.toFixed(decimals);
+  }}
+
+  const container = document.getElementById('chart-box');
+  const chart = LightweightCharts.createChart(container, {{
+    width: 1120,
+    height: 636,
+    layout: {{
+      background: {{ type: 'solid', color: '#131722' }},
+      textColor: '#d1d4dc',
+      fontSize: 12,
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, sans-serif",
+    }},
+    grid: {{
+      vertLines: {{ color: '#1e222d', style: LightweightCharts.LineStyle.Solid }},
+      horzLines: {{ color: '#1e222d', style: LightweightCharts.LineStyle.Solid }},
+    }},
+    rightPriceScale: {{
+      borderColor: '#2a2e39',
+      scaleMargins: {{ top: 0.07, bottom: 0.23 }},
+      entireTextOnly: true,
+    }},
+    timeScale: {{
+      borderColor: '#2a2e39',
+      timeVisible: true,
+      secondsVisible: false,
+      rightOffset: 6,
+      barSpacing: 15,
+    }},
+    localization: {{
+      priceFormatter: fmtReal,
+    }},
+  }});
+
+  const candleSeries = chart.addCandlestickSeries({{
+    upColor: '#26a69a',
+    downColor: '#ef5350',
+    borderUpColor: '#26a69a',
+    borderDownColor: '#ef5350',
+    wickUpColor: '#26a69a',
+    wickDownColor: '#ef5350',
+    priceFormat: {{ type: 'custom', minMove: {min_move}, formatter: fmtReal }},
+  }});
+
+  const candlesData = {json.dumps(candles_js)};
+  const whitespaceData = {json.dumps(whitespace_js)};
+  candleSeries.setData([...candlesData, ...whitespaceData]);
+
+  const ma7Series = chart.addLineSeries({{ color: '#00e5ff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false }});
+  ma7Series.setData({json.dumps(ma7_js)});
+
+  const ma20Series = chart.addLineSeries({{ color: '#2962ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: false }});
+  ma20Series.setData({json.dumps(ma20_js)});
+
+  const ma50Series = chart.addLineSeries({{ color: '#ff9800', lineWidth: 2, priceLineVisible: false, lastValueVisible: false }});
+  ma50Series.setData({json.dumps(ma50_js)});
+
+  const volSeries = chart.addHistogramSeries({{
+    priceFormat: {{ type: 'volume' }},
+    priceScaleId: 'vol_scale',
+     priceLineVisible: false,
+    lastValueVisible: false,
+  }});
+  chart.priceScale('vol_scale').applyOptions({{
+    scaleMargins: {{ top: 0.80, bottom: 0.01 }},
+  }});
+  volSeries.setData({json.dumps(vol_js)});
+
+  // TP3, TP2, TP1, ENTRY, SL 수평선 및 우측 TradingView 정품 가격표 태그 생성
+  const targets = [
+    {{ price: {_fwd(tp3_p)}, color: '#ffd166', title: '🎯 TP3 (+{p3}%)', style: LightweightCharts.LineStyle.Dashed, width: 2 }},
+    {{ price: {_fwd(tp2_p)}, color: '#06d6a0', title: '✅ TP2 (+{p2}%)', style: LightweightCharts.LineStyle.Dashed, width: 2 }},
+    {{ price: {_fwd(tp1_p)}, color: '#4cc9f0', title: '✅ TP1 (+{p1}%)', style: LightweightCharts.LineStyle.Dashed, width: 2 }},
+    {{ price: {_fwd(price)}, color: '#ffffff', title: '⚡ ENTRY', style: LightweightCharts.LineStyle.Solid, width: 2 }},
+    {{ price: {_fwd(sl_p)}, color: '#ef476f', title: '🛡️ SL (-{sl_pct}%)', style: LightweightCharts.LineStyle.Dashed, width: 2 }},
+  ];
+
+  targets.forEach(t => {{
+    candleSeries.createPriceLine({{
+      price: t.price,
+      color: t.color,
+      lineWidth: t.width,
+      lineStyle: t.style,
+      axisLabelVisible: true,
+      title: t.title,
+    }});
+  }});
+
+  // 모든 목표가(TP3 ~ SL)가 화면 안에 빠짐없이 들어오도록 보이지 않는 앵커 시리즈 설정
+  const boundsSeries = chart.addLineSeries({{
+    color: 'rgba(0,0,0,0)',
+    lineWidth: 1,
+    priceLineVisible: false,
+    lastValueVisible: false,
+  }});
+  boundsSeries.setData([
+    {{ time: candlesData[0].time, value: {_fwd(sl_p) - candle_span * 0.04} }},
+    {{ time: candlesData[candlesData.length - 1].time, value: {_fwd(tp3_p) + candle_span * 0.05} }},
+  ]);
+
+  chart.timeScale().fitContent();
+  window.__CHART_DONE = true;
+</script>
+</body>
+</html>"""
+
+    try:
+        from playwright.sync_api import sync_playwright
+        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as f:
+            f.write(html_content)
+            tmp_html_path = f.name
+
+        png_bytes = None
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+            )
+            page = browser.new_page(viewport={"width": 1120, "height": 680}, device_scale_factor=1.5)
+            page.goto(f"file://{tmp_html_path}", wait_until="networkidle", timeout=20000)
+            page.wait_for_function("window.__CHART_DONE === true", timeout=8000)
+            page.wait_for_timeout(250)
+            png_bytes = page.screenshot(type="png")
+            browser.close()
+
+        try:
+            os.remove(tmp_html_path)
+        except Exception:
+            pass
+        return png_bytes
+    except Exception as e:
+        print(f"[TradingView Lightweight Charts 캡처 오류 -> 폴백 전환] {e}")
+        return None
+
+
+def generate_signal_chart_bytes(res):
+    """
+    Bybit V5 실제 15분봉(최근 42캔들)과 실제 거래량을 조회한 뒤,
+    1순위로 TradingView 공식 Lightweight Charts 엔진 스크린샷을 생성합니다.
+    """
+    symbol = res.get("symbol", "")
     price = to_float(res.get("price"))
     if not symbol or price <= 0:
         return None
 
-    df = fetch_exact_bybit_klines(symbol, interval="15", limit=80)
+    df = fetch_exact_bybit_klines(symbol, interval="15", limit=85)
     if df is None or df.empty or len(df) < 20:
         return None
 
-    # 마지막 캔들의 현재가를 포착 시점 가격과 일치시켜 갭 오차 제거
     df = df.copy()
     df["ma7"] = df["close"].rolling(7, min_periods=2).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=3).mean()
     df["ma50"] = df["close"].rolling(50, min_periods=5).mean()
     df["vol_ma20"] = df["volume"].rolling(20, min_periods=3).mean()
 
-    # 최근 45개 15분봉(11시간 15분 흐름) 슬라이싱
-    df = df.iloc[-45:].reset_index(drop=True)
+    # 최근 42개 15분봉만 슬라이싱하여 캔들 1개당 폭을 큼직하게 확보
+    df = df.iloc[-42:].reset_index(drop=True)
 
-    # 실제 차트의 마지막 종가를 기준으로 진입가 동기화 (실제 차트와 100% 일치 보장)
-    latest_close = to_float(df["close"].iloc[-1], price)
-    if abs(latest_close - price) / max(price, 1e-8) <= 0.03:
-        price = latest_close
-
-    e_low = to_float(res.get("entry_low"), price * 0.9975)
-    e_high = to_float(res.get("entry_high"), price * 1.0010)
-    sl_p = to_float(res.get("stop_price"), price * 0.94)
-    sl_pct = int(round(to_float(res.get("sl_pct"), FIXED_SL_PCT)))
-    tps = res.get("tps") or [price * 1.08, price * 1.16, price * 1.24]
-    tp_pcts = res.get("tp_pcts") or [8.0, 16.0, 24.0]
-
-    tp1_p, tp2_p, tp3_p = to_float(tps[0]), to_float(tps[1]), to_float(tps[2])
-    p1 = int(round(to_float(tp_pcts[0], 8.0)))
-    p2 = int(round(to_float(tp_pcts[1], 16.0)))
-    p3 = int(round(to_float(tp_pcts[2], 24.0)))
-
-    try:
-        bg_color = "#0f131c"
-        panel_bg = "#131722"
-        grid_color = "#232838"
-
-        fig = plt.figure(figsize=(11.2, 6.8), dpi=160, facecolor=bg_color)
-        gs = GridSpec(2, 1, height_ratios=[4.0, 1.15], hspace=0.04, figure=fig)
-        ax = fig.add_subplot(gs[0])
-        ax_vol = fig.add_subplot(gs[1], sharex=ax)
-
-        ax.set_facecolor(panel_bg)
-        ax_vol.set_facecolor(panel_bg)
-
-        c_low_min = min(to_float(df["low"].min(), sl_p), sl_p)
-        c_high_max = max(to_float(df["high"].max(), price), price * 1.02)
-        y_piv = min(tp1_p * 0.985, c_high_max * 1.012)
-
-        candle_span = max(y_piv - c_low_min, price * 0.04)
-        tp_span = max(tp3_p - y_piv, price * 0.05)
-        comp_ratio = float(np.clip((candle_span * 0.56) / tp_span, 0.18, 0.75))
-
-        def _forward_scale(y):
-            y_arr = np.asarray(y, dtype=float)
-            return np.where(y_arr <= y_piv, y_arr, y_piv + (y_arr - y_piv) * comp_ratio)
-
-        def _inverse_scale(y):
-            y_arr = np.asarray(y, dtype=float)
-            return np.where(y_arr <= y_piv, y_arr, y_piv + (y_arr - y_piv) / max(comp_ratio, 1e-6))
-
-        try:
-            ax.set_yscale("function", functions=(_forward_scale, _inverse_scale))
-        except Exception:
-            pass
-
-        n = len(df)
-        up_color = "#089981"
-        down_color = "#f23645"
-
-        ax.text(
-            0.42,
-            0.46,
-            f"BYBIT · ${base}USDT\n15M PERPETUAL",
-            transform=ax.transAxes,
-            fontsize=32,
-            fontweight="bold",
-            color="#ffffff",
-            alpha=0.035,
-            ha="center",
-            va="center",
-            zorder=0,
-        )
-
-        for i in range(n):
-            o = to_float(df.loc[i, "open"])
-            c = to_float(df.loc[i, "close"])
-            h = to_float(df.loc[i, "high"])
-            l = to_float(df.loc[i, "low"])
-            v = to_float(df.loc[i, "volume"])
-            col = up_color if c >= o else down_color
-
-            ax.plot([i, i], [l, h], color=col, linewidth=1.35, zorder=3)
-            body_bottom = min(o, c)
-            body_h = max(abs(c - o), price * 0.0007)
-            rect = Rectangle(
-                (i - 0.36, body_bottom),
-                0.72,
-                body_h,
-                facecolor=col,
-                edgecolor=col,
-                linewidth=0.8,
-                zorder=4,
-            )
-            ax.add_patch(rect)
-            ax_vol.bar(i, v, width=0.68, color=col, alpha=0.70, zorder=3)
-
-        ax.plot(df.index, df["ma7"], color="#00e5ff", linewidth=1.2, label="MA7", alpha=0.88, zorder=5)
-        ax.plot(df.index, df["ma20"], color="#2962ff", linewidth=1.5, label="MA20", alpha=0.95, zorder=5)
-        ax.plot(df.index, df["ma50"], color="#ff9800", linewidth=1.5, label="MA50", alpha=0.90, zorder=5)
-        ax_vol.plot(df.index, df["vol_ma20"], color="#ffd166", linewidth=1.1, alpha=0.85, zorder=4)
-
-        box_start = n - 1
-        box_end = n + 4.2
-        ax.fill_between([box_start, box_end], price, tp1_p, color="#4cc9f0", alpha=0.09, zorder=2)
-        ax.fill_between([box_start, box_end], tp1_p, tp2_p, color="#06d6a0", alpha=0.11, zorder=2)
-        ax.fill_between([box_start, box_end], tp2_p, tp3_p, color="#ffd166", alpha=0.13, zorder=2)
-        ax.fill_between([box_start, box_end], sl_p, price, color="#ef476f", alpha=0.14, zorder=2)
-
-        ax.axhspan(e_low, e_high, color="#3b82f6", alpha=0.22, zorder=2)
-
-        x_right = n + 13.5
-        ax.set_xlim(-1.0, x_right)
-
-        level_specs = [
-            (tp3_p, f"TP3 (+{p3}%)  {fmt_price(tp3_p)}", "#ffd166", "--", 1.5),
-            (tp2_p, f"TP2 (+{p2}%)  {fmt_price(tp2_p)}", "#06d6a0", "--", 1.4),
-            (tp1_p, f"TP1 (+{p1}%)  {fmt_price(tp1_p)}", "#4cc9f0", "--", 1.4),
-            (price, f"ENTRY  {fmt_price(price)}", "#ffffff", "-", 1.5),
-            (sl_p, f"SL (-{sl_pct}%)  {fmt_price(sl_p)}", "#ef476f", "--", 1.5),
-        ]
-
-        for lv_price, label_txt, col, l_style, lw in level_specs:
-            if lv_price <= 0:
-                continue
-            ax.axhline(lv_price, color=col, linestyle=l_style, linewidth=lw, alpha=0.90, zorder=6)
-            ax.text(
-                n + 0.5,
-                lv_price,
-                f" {label_txt} ",
-                color="#0f131c" if col in ("#ffd166", "#06d6a0", "#4cc9f0", "#ffffff") else "#ffffff",
-                fontsize=8.8,
-                fontweight="bold",
-                va="center",
-                ha="left",
-                bbox=dict(boxstyle="round,pad=0.28", facecolor=col, edgecolor="none", alpha=0.96),
-                zorder=7,
-            )
-
-        y_min = c_low_min - candle_span * 0.08
-        y_max = tp3_p + (tp3_p - tp2_p) * 0.42
-        ax.set_ylim(y_min, y_max)
-
-        tick_candidates = sorted(list({
-            round(c_low_min, 6),
-            round(price, 6),
-            round(tp1_p, 6),
-            round(tp2_p, 6),
-            round(tp3_p, 6),
-        }))
-        ax.set_yticks(tick_candidates)
-        ax.set_yticklabels([fmt_price(t) for t in tick_candidates], color="#9ca3af", fontsize=8.5)
-
-        # 거래량 Y축 상한 및 눈금 표시 (Bybit 실제 거래량 수치 표시)
-        vol_max = to_float(df["volume"].max(), 100.0)
-        ax_vol.set_ylim(0, vol_max * 1.18)
-        ax_vol.set_yticks([vol_max * 0.5, vol_max])
-        ax_vol.set_yticklabels([fmt_vol(vol_max * 0.5), fmt_vol(vol_max)], color="#9ca3af", fontsize=7.8)
-
-        # 마지막 봉 기준 KST 시각 표시
-        tick_idxs = [i for i in range(4, n, 8)]
-        if (n - 1) not in tick_idxs:
-            tick_idxs.append(n - 1)
-        tick_labels = []
-        for idx_t in tick_idxs:
-            ts_val = to_float(df.loc[idx_t, "timestamp"], 0.0) if "timestamp" in df.columns else 0.0
-            if ts_val > 0:
-                if ts_val < 1e11:
-                    ts_val *= 1000.0
-                dt_str = datetime.fromtimestamp(ts_val / 1000.0, tz=KST).strftime("%H:%M")
-            else:
-                dt_str = f"-{(n - 1 - idx_t) * 15}m"
-            tick_labels.append(dt_str)
-
-        ax_vol.set_xticks(tick_idxs)
-        ax_vol.set_xticklabels(tick_labels, color="#9ca3af", fontsize=8.5)
-        curr_vol_v = to_float(df["volume"].iloc[-1], 0.0)
-        ax_vol.text(
-            0.01,
-            0.78,
-            f"Bybit Volume (15M): {fmt_vol(curr_vol_v)}  |  Vol MA20",
-            transform=ax_vol.transAxes,
-            color="#cbd5e1",
-            fontsize=8,
-            fontweight="bold",
-        )
-
-        ax.grid(True, linestyle="--", linewidth=0.5, color=grid_color, alpha=0.75)
-        ax_vol.grid(True, linestyle="--", linewidth=0.5, color=grid_color, alpha=0.55)
-        ax.tick_params(axis="x", labelbottom=False)
-
-        for a in (ax, ax_vol):
-            for spine in a.spines.values():
-                spine.set_color("#2a2e39")
-
-        track_badge = {
-            "TRACK_A": "TRACK A · Pullback",
-            "TRACK_B": "TRACK B · Breakout",
-            "TRACK_C": "TRACK C · Leader Fib 0.5",
-        }.get(track_type, track_type)
-
-        last_ts = to_float(df["timestamp"].iloc[-1], 0.0)
-        last_kst_str = (
-            datetime.fromtimestamp((last_ts if last_ts > 1e11 else last_ts * 1000.0) / 1000.0, tz=KST).strftime("%m/%d %H:%M KST")
-            if last_ts > 0 else "LIVE"
-        )
-
-        ax.set_title(
-            f"${base} ({symbol})  |  Bybit 15M ({last_kst_str})  |  {track_badge} (Score: {score})",
-            color="#ffffff",
-            fontsize=12.0,
-            fontweight="bold",
-            pad=14,
-            loc="left",
-        )
-
-        # TP3 선과 겹치지 않도록 범례를 차트 상단 프레임 바깥 우측에 배치
-        ax.legend(
-            loc="lower right",
-            bbox_to_anchor=(1.0, 1.01),
-            ncol=3,
-            facecolor="#1a1f2e",
-            edgecolor="#2a2e39",
-            labelcolor="#e2e8f0",
-            fontsize=8.2,
-            framealpha=0.95,
-        )
-
-        plt.subplots_adjust(left=0.07, right=0.98, top=0.91, bottom=0.07)
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", facecolor=bg_color)
-        plt.close(fig)
-        buf.seek(0)
-        return buf.getvalue()
-    except Exception as e:
-        print(f"[차트 렌더링 오류] {symbol}: {e}")
-        return None
+    tv_bytes = _render_tradingview_lightweight_chart(df, res)
+    if tv_bytes:
+        return tv_bytes
+    return None
 
 
 def send_telegram_single(text):
@@ -531,7 +665,7 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text):
     url = f"https://api.telegram.org/bot{token}/sendPhoto"
     for attempt in range(3):
         try:
-            files = {"photo": ("signal_chart.png", photo_bytes, "image/png")}
+            files = {"photo": ("tv_signal_chart.png", photo_bytes, "image/png")}
             data = {"chat_id": chat_id, "caption": caption_text}
             resp = requests.post(url, data=data, files=files, timeout=18)
             if resp.status_code == 200:
@@ -548,7 +682,7 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text):
 
 
 def send_uai_sample_test():
-    """방금 포착된 $PUMP 종목의 실제 Bybit V5 15분봉·거래량 데이터로 즉시 비교 발송"""
+    """방금 포착된 $PUMP 종목을 실제 Bybit 15분봉 + TradingView Lightweight Charts 엔진으로 테스트 발송"""
     sample_res = {
         "symbol": "PUMPUSDT",
         "base_coin": "PUMP",
@@ -568,7 +702,7 @@ def send_uai_sample_test():
     chart_bytes = generate_signal_chart_bytes(sample_res)
     if chart_bytes:
         ok = send_telegram_photo_with_caption(chart_bytes, x_caption)
-        print(f"[Bybit 실제 15M 차트 발송 결과]: {'성공' if ok else '실패'}")
+        print(f"[TradingView Lightweight Charts 15M 발송 결과]: {'성공' if ok else '실패'}")
         return ok
     return send_telegram_single(x_caption)
 
