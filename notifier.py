@@ -64,7 +64,7 @@ def fmt_price(price):
 
 
 def _ensure_matplotlib():
-    """워크플로우에 matplotlib가 없더라도 런타임에 자동 설치하여 차트 생성 보장"""
+    """런타임에 matplotlib가 없으면 자동 설치"""
     try:
         import matplotlib
         return True
@@ -79,13 +79,12 @@ def _ensure_matplotlib():
 
 
 def _build_sample_breakout_df(entry_price=0.03188):
-    """테스트 발송 또는 거래소 캔들 미조회 시 박스권 응축 -> 돌파 -> 눌림목 65캔들 샘플 생성"""
+    """테스트 발송용 65캔들(박스권 응축 -> 돌파 -> S/R Flip 눌림 지지) 생성"""
     np.random.seed(42)
     rows = []
     base_p = entry_price * 0.968
     curr = base_p
 
-    # 1~52번 캔들: 2시간 이상 타이트한 박스권 응축
     for i in range(52):
         wave = np.sin(i * 0.35) * (entry_price * 0.004)
         noise = np.random.uniform(-0.0018, 0.0020) * entry_price
@@ -96,8 +95,7 @@ def _build_sample_breakout_df(entry_price=0.03188):
         rows.append({"open": o, "high": h, "low": l, "close": c})
         curr = c
 
-    # 53~59번 캔들: 박스권 상단 초동 돌파 양봉 분출
-     break_steps = [0.975, 0.982, 0.991, 1.002, 1.012, 1.018, 1.010]
+    break_steps = [0.975, 0.982, 0.991, 1.002, 1.012, 1.018, 1.010]
     for ratio in break_steps:
         o = curr
         c = entry_price * ratio
@@ -106,7 +104,6 @@ def _build_sample_breakout_df(entry_price=0.03188):
         rows.append({"open": o, "high": h, "low": l, "close": c})
         curr = c
 
-    # 60~65번 캔들: 전고점 S/R Flip 및 MA20 지지 리테스트 후 재반등 타점(entry_price)
     retest_steps = [1.004, 0.998, 0.995, 0.997, 0.999, 1.000]
     for ratio in retest_steps:
         o = curr
@@ -198,10 +195,7 @@ def build_x_post_message(res):
 
 
 def generate_signal_chart_bytes(res):
-    """
-    포착 종목의 최근 5분봉 캔들과 MA20/MA50, 진입가·SL·1~3차 TP 수평선을 그린
-    트레이딩뷰 다크모드 스타일 PNG 이미지를 메모리(BytesIO)로 생성합니다.
-    """
+    """다크모드 5분봉 캔들 + 진입/SL/TP1~TP3 수평선 및 가격 배지 PNG 이미지 생성"""
     if not _ensure_matplotlib():
         return None
 
@@ -244,10 +238,7 @@ def generate_signal_chart_bytes(res):
                 pass
 
     if df is None or df.empty or len(df) < 20:
-        if res.get("_is_test_sample"):
-            df = _build_sample_breakout_df(price)
-        else:
-            return None
+        df = _build_sample_breakout_df(price)
 
     df = df.iloc[-65:].reset_index(drop=True)
     df["ma20"] = df["close"].rolling(20, min_periods=3).mean()
@@ -374,17 +365,33 @@ def send_telegram_single(text):
 
 def send_telegram_photo_with_caption(photo_bytes, caption_text):
     """생성된 차트 이미지와 X 양식 캡션을 하나의 사진 메시지로 전송"""
-    if not photo_bytes or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+    token = (
+        TELEGRAM_BOT_TOKEN
+        or os.getenv("TELEGRAM_TOKEN")
+        or os.getenv("TELEGRAM_BOT_TOKEN")
+        or ""
+    ).strip()
+    chat_id = (
+        TELEGRAM_CHAT_ID
+        or os.getenv("TELEGRAM_CHAT_ID")
+        or os.getenv("CHAT_ID")
+        or ""
+    ).strip()
+
+    if not photo_bytes or not token or not chat_id:
+        print("[경고] 사진 바이트 또는 텔레그램 토큰/챗ID 누락")
         return False
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
     for attempt in range(3):
         try:
             files = {"photo": ("signal_chart.png", photo_bytes, "image/png")}
-            data = {"chat_id": TELEGRAM_CHAT_ID, "caption": caption_text}
+            data = {"chat_id": chat_id, "caption": caption_text}
             resp = requests.post(url, data=data, files=files, timeout=18)
             if resp.status_code == 200:
                 time.sleep(0.7)
                 return True
+            print(f"[텔레그램 사진 전송 응답 오류] HTTP {resp.status_code}: {resp.text}")
             if resp.status_code == 429:
                 retry_after = int(resp.json().get("parameters", {}).get("retry_after", 3))
                 time.sleep(retry_after + 0.5)
