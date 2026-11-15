@@ -1257,6 +1257,58 @@
       "tp3_completed": true,
       "closed_alerted": true,
       "tp3_at": 1794776944
+    },
+    "PUMPUSDT": {
+      "created_at": 1794778487,
+      "track_type": "TRACK_A",
+      "score": 92,
+      "entry_price": 0.00291,
+      "swing_high_line": 0.002944,
+      "entry_low": 0.002902725,
+      "entry_high": 0.0029129099999999995,
+      "initial_stop_price": 0.0027354,
+      "stop_price": 0.0027354,
+      "sl_pct": 6,
+      "tps": [
+        0.0031428,
+        0.0035210999999999997,
+        0.0038121
+      ],
+      "tp_pcts": [
+        8.0,
+        21.0,
+        31.0
+      ],
+      "vol_mult": 3.0,
+      "rsi6_15m": 55.3,
+      "kdj_j_15m": 57.4,
+      "oi_m": 12.879781419159999,
+      "turnover_m": 12.091654426441,
+      "funding_pct": 0.005,
+      "reasons": [
+        "거래량 건조 선취매 포켓(16%)",
+        "바닥 이평리본 수렴 돌파(0.8%)",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "초응축 박스권(2.8%)",
+        "이평리본 초밀집 확산(0.8%)",
+        "초동수급 폭발(3.0배)",
+        "OI 실수급 유입(OI 12.9M·비중 107%)",
+        "청정 펀딩 수급(+0.0050%)"
+      ],
+      "max_high_price": 0.00291,
+      "peak_ts_ms": 1794778487000,
+      "max_favorable_pct": 0.0,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false,
+      "closed_alerted": false
     }
   },
   "alert_history": {
@@ -1283,7 +1335,8 @@
     "UAIUSDT": 1794746527,
     "PENGUUSDT": 1794746836,
     "BERAUSDT": 1794748544,
-    "ASTERUSDT": 1794763018
+    "ASTERUSDT": 1794763018,
+    "PUMPUSDT": 1794778487
   },
   "sl_history": {
     "APRUSDT_1794722093": {
@@ -2057,6 +2110,33 @@
       "tp3_completed": true,
       "sl_alerted": false,
       "closed_alerted": true,
+      "sl_at": 0
+    },
+    "PUMPUSDT_1794778487": {
+      "symbol": "PUMPUSDT",
+      "created_at": 1794778487,
+      "track_type": "TRACK_A",
+      "score": 92,
+      "entry_price": 0.00291,
+      "initial_stop_price": 0.0027354,
+      "stop_price": 0.0027354,
+      "sl_pct": 6.0,
+      "tps": [
+        0.0031428,
+        0.0035210999999999997,
+        0.0038121
+      ],
+      "max_high_price": 0.00291,
+      "max_favorable_pct": 0.0,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
       "sl_at": 0
     }
   },
