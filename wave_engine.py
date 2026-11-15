@@ -225,10 +225,10 @@ def resolve_same_candle_tie_5m(symbol, candle_ts_ms, tp_price, sl_price):
 
 def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_line, wave_h):
     """
-    발화점(ign_pos)부터 최종 고점(peak_pos)까지의 캔들 궤적을 스캔하여:
-    - 1차(Wave 1): 발화 직후 미세 노이즈를 배제하고 최소 +5.5%(또는 전체 파동의 22%) 이상 상승 후 첫 조정이 형성된 1차 저항 고점
-    - 2차(Wave 2): 최종 고점 직전 중간 조정이 형성된 2차 저항 고점
-    - 3차(Wave 3): 최종 클라이맥스 고점
+    [정밀 보정된 1·2·3차 파동 역추적기]
+    1) w3(3차 최종 고점)는 언제나 실제 도달한 최종 최고가(final_high)와 100% 일치하도록 고정 (초과 뻥튀기 원천 차단)
+    2) w1(1차 첫 조정)과 w2(2차 중간 고점)는 반드시 final_high 미만(w1 < w2 < w3 == final_high)에서 형성된 스윙 고점으로 추출
+    3) 3차 클라이맥스 캔들에 긴 윗꼬리가 달릴 때 종가 RSI가 29로 왜곡되지 않도록 고점 인접 구간의 실제 최대 과열도(RSI·KDJ)를 추출
     """
     sub = df.iloc[ign_pos: peak_pos + 1].copy()
     if sub.empty:
@@ -237,10 +237,10 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
     positions = list(sub.index)
     n_bars = len(positions)
     final_idx = positions[-1]
-    final_high = max(to_float(df.loc[final_idx, "high"], entry_price), entry_price * 1.005)
+    final_high = max(to_float(sub["high"].max(), entry_price), entry_price * 1.005)
     total_pump_pct = max(0.5, (final_high - entry_price) / max(entry_price, 1e-8) * 100.0)
 
-    min_w1_gain_thr = max(5.5, min(14.0, total_pump_pct * 0.22)) if total_pump_pct >= 15.0 else max(3.0, total_pump_pct * 0.30)
+    min_w1_gain_thr = max(4.5, min(12.0, total_pump_pct * 0.22)) if total_pump_pct >= 14.0 else max(2.5, total_pump_pct * 0.28)
 
     swing_peaks = []
     running_max_h = entry_price
@@ -252,6 +252,10 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
         if h_val > running_max_h:
             running_max_h = h_val
             running_max_idx = curr_idx
+
+        # 최종 고점의 94% 이상까지 올라간 고점은 3차 클라이맥스 영역이므로 1·2차 중간 고점 후보에서 제외
+        if running_max_h >= final_high * 0.94:
+            continue
 
         gain_so_far = (running_max_h - entry_price) / max(entry_price, 1e-8) * 100.0
         if gain_so_far < min_w1_gain_thr:
@@ -296,49 +300,55 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
                     "hold_tag": hold_tag,
                 })
 
+    total_span = max(final_high - entry_price, entry_price * 0.015)
+
     if len(swing_peaks) >= 2:
         w1_info = swing_peaks[0]
-        mid_candidates = [
-            sp for sp in swing_peaks[1:]
-            if sp["idx"] != final_idx and sp["high"] < final_high * 0.985
-        ]
-        if mid_candidates:
-            target_w2_price = entry_price + (final_high - entry_price) * 0.62
-            w2_info = min(mid_candidates, key=lambda x: abs(x["high"] - target_w2_price))
-        else:
-            w2_info = swing_peaks[1]
+        target_w2_price = entry_price + total_span * 0.65
+        w2_info = min(swing_peaks[1:], key=lambda x: abs(x["high"] - target_w2_price))
     elif len(swing_peaks) == 1:
-        w1_info = swing_peaks[0]
-        w1_pos_in_sub = positions.index(w1_info["idx"]) if w1_info["idx"] in positions else 0
-        mid_pos = positions[min(n_bars - 1, max(w1_pos_in_sub + 1, (w1_pos_in_sub + n_bars - 1) // 2))]
-        w2_info = {
-            "idx": mid_pos,
-            "high": max(to_float(df.loc[mid_pos, "high"]), w1_info["high"] + (final_high - w1_info["high"]) * 0.55),
-            "pullback_pct": 1.5,
-            "hold_tag": "MA10",
-        }
+        sp = swing_peaks[0]
+        sp_ratio = (sp["high"] - entry_price) / total_span
+        if sp_ratio <= 0.58:
+            w1_info = sp
+            sp_pos = positions.index(sp["idx"]) if sp["idx"] in positions else 0
+            mid_pos = positions[min(n_bars - 1, max(sp_pos + 1, (sp_pos + n_bars - 1) // 2))]
+            w2_h = min(final_high * 0.92, max(sp["high"] * 1.04, entry_price + total_span * 0.68))
+            w2_info = {"idx": mid_pos, "high": w2_h, "pullback_pct": 1.6, "hold_tag": "MA10"}
+        else:
+            idx1 = positions[max(0, n_bars // 3)]
+            w1_h = min(sp["high"] * 0.90, max(entry_price * 1.03, entry_price + total_span * 0.36))
+            w1_info = {"idx": idx1, "high": w1_h, "pullback_pct": 1.4, "hold_tag": "MA10"}
+            w2_info = sp
     else:
+        # 중간 조정 없이 단숨에 직선 급등한 파동($INIT 등): 전체 상승폭의 36% / 68% 지점을 1·2차 경유 고점으로 배정
         idx1 = positions[max(0, n_bars // 3)]
         idx2 = positions[max(0, (n_bars * 2) // 3)]
-        h1_est = max(to_float(df.loc[idx1, "high"]), entry_price + (final_high - entry_price) * 0.35)
-        h2_est = max(to_float(df.loc[idx2, "high"]), entry_price + (final_high - entry_price) * 0.68)
-        w1_info = {"idx": idx1, "high": h1_est, "pullback_pct": 1.2, "hold_tag": "MA5"}
-        w2_info = {"idx": idx2, "high": h2_est, "pullback_pct": 1.8, "hold_tag": "MA10"}
+        w1_h = entry_price + total_span * 0.36
+        w2_h = entry_price + total_span * 0.68
+        w1_info = {"idx": idx1, "high": w1_h, "pullback_pct": 1.2, "hold_tag": "MA5"}
+        w2_info = {"idx": idx2, "high": w2_h, "pullback_pct": 1.5, "hold_tag": "MA5"}
 
-    def _build_metrics(idx_val, high_override, pb_pct=0.0, hold_str=""):
+    def _build_metrics(idx_val, target_high, pb_pct=0.0, hold_str=""):
         row = df.loc[idx_val]
-        h_p = max(to_float(row["high"]), to_float(high_override), entry_price * 1.005)
+        h_p = max(to_float(target_high), entry_price * 1.005)
         ma20_v = to_float(row.get("ma20"), entry_price)
         ma50_v = to_float(row.get("ma50"), ma20_v)
         ma112_v = to_float(row.get("ma112"), ma50_v)
-        rsi_v = to_float(row.get("rsi6"), 68.0)
-        kdj_v = to_float(row.get("kdj_j"), 75.0)
-        vol_m = to_float(row.get("vol_mult"), 2.0)
+
+        # 윗꼬리 후 음봉 마감으로 인해 종가 RSI가 29로 급락하는 왜곡 방지: 직전 2캔들~현재 캔들 중 최대 RSI/KDJ 채택
+        pos_i = int(df.index.get_loc(idx_val))
+        win_slice = df.iloc[max(0, pos_i - 2): min(len(df), pos_i + 1)]
+        rsi_v = to_float(win_slice["rsi6"].max(), 70.0) if "rsi6" in win_slice.columns else 70.0
+        kdj_v = to_float(win_slice["kdj_j"].max(), 78.0) if "kdj_j" in win_slice.columns else 78.0
+        vol_m = to_float(win_slice["vol_mult"].max(), 2.0) if "vol_mult" in win_slice.columns else 2.0
 
         gain_pct = max(0.2, (h_p - entry_price) / max(entry_price, 1e-8) * 100.0)
-        fib_mult = max(1.05, min(8.50, (h_p - support_line) / max(wave_h, 1e-8)))
-        ma20_ext_pct = max(0.1, (h_p - ma20_v) / max(ma20_v, 1e-8) * 100.0)
-        ma50_ext_pct = max(0.1, (h_p - ma50_v) / max(ma50_v, 1e-8) * 100.0)
+        # 표준 파동 폭(최소 5.5%) 기준으로 Fib 배수 정규화하여 8.50 포화 현상 방지
+        norm_wave_h = max(wave_h, entry_price * 0.055)
+        fib_mult = max(1.05, min(6.80, (h_p - support_line) / max(norm_wave_h, 1e-8)))
+        ma20_ext_pct = max(0.2, (h_p - ma20_v) / max(ma20_v, 1e-8) * 100.0)
+        ma50_ext_pct = max(0.2, (h_p - ma50_v) / max(ma50_v, 1e-8) * 100.0)
 
         if abs(h_p - ma112_v) / max(ma112_v, 1e-8) <= 0.015:
             resist_tag = "MA112저항"
@@ -361,8 +371,13 @@ def extract_three_wave_structure(df, ign_pos, peak_pos, entry_price, support_lin
             "resist_tag": resist_tag,
         }
 
-    w1 = _build_metrics(w1_info["idx"], w1_info["high"], w1_info["pullback_pct"], w1_info["hold_tag"])
-    w2 = _build_metrics(w2_info["idx"], max(w2_info["high"], w1["price"] * 1.02), w2_info["pullback_pct"], w2_info["hold_tag"])
-    w3 = _build_metrics(final_idx, max(final_high, w2["price"] * 1.02), 0.0, "클라이맥스")
+    # w1 < w2 < w3(==final_high) 순서가 절대 역전되지 않도록 안전 클램핑
+    w3_p = final_high
+    w2_p = min(w3_p * 0.95, max(to_float(w2_info["high"]), entry_price + total_span * 0.60))
+    w1_p = min(w2_p * 0.92, max(to_float(w1_info["high"]), entry_price + total_span * 0.32))
+
+    w1 = _build_metrics(w1_info["idx"], w1_p, w1_info["pullback_pct"], w1_info["hold_tag"])
+    w2 = _build_metrics(w2_info["idx"], w2_p, w2_info["pullback_pct"], w2_info["hold_tag"])
+    w3 = _build_metrics(final_idx, w3_p, 0.0, "클라이맥스")
 
     return {"w1": w1, "w2": w2, "w3": w3}
