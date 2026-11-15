@@ -37,8 +37,8 @@ BETA_START_TS = int(datetime(2026, 11, 15, 14, 45, tzinfo=KST).timestamp())
 
 def get_learned_tp_targets():
     tp1 = to_float(getattr(cfg, "TP1_MIN_PCT", 8.5), 8.5)
-    tp2 = to_float(getattr(cfg, "TP2_MIN_PCT", 15.0), 15.0)
-    tp3 = to_float(getattr(cfg, "TP3_MIN_PCT", 22.0), 22.0)
+    tp2 = to_float(getattr(cfg, "TP2_MIN_PCT", 16.0), 16.0)
+    tp3 = to_float(getattr(cfg, "TP3_MIN_PCT", 24.0), 24.0)
 
     if os.path.exists(HISTORY_FILE):
         try:
@@ -355,10 +355,15 @@ def main():
 
     track_a = [x for x in evaluated if x["track_type"] == "TRACK_A" and x["status"] != "ACTIVE"]
     track_b = [x for x in evaluated if x["track_type"] == "TRACK_B" and x["status"] != "ACTIVE"]
+    track_c = [x for x in evaluated if x["track_type"] == "TRACK_C" and x["status"] != "ACTIVE"]
+
     win_a = sum(1 for x in track_a if x["status"].endswith("WIN"))
     win_b = sum(1 for x in track_b if x["status"].endswith("WIN"))
+    win_c = sum(1 for x in track_c if x["status"].endswith("WIN"))
+
     rate_a = (win_a / len(track_a) * 100.0) if track_a else 0.0
     rate_b = (win_b / len(track_b) * 100.0) if track_b else 0.0
+    rate_c = (win_c / len(track_c) * 100.0) if track_c else 0.0
 
     decided_items = [x for x in evaluated if x["status"] != "ACTIVE"]
     simple_sum_pct = sum(x["simple_pnl_pct"] for x in decided_items)
@@ -374,23 +379,23 @@ def main():
     w3_Pool = [x["waves"]["w3"] for x in evaluated if x["valid_max_gain_pct"] >= 15.0]
 
     wk_w1_pct = round(float(np.median([w["gain_pct"] for w in w1_Pool])) if w1_Pool else learned_tps[0], 1)
-    wk_w1_fib = round(float(np.median([w["fib_mult"] for w in w1_Pool])) if w1_Pool else 1.75, 2)
-    wk_w1_ext = round(float(np.median([w["ma20_ext_pct"] for w in w1_Pool])) if w1_Pool else 4.5, 1)
+    wk_w1_fib = round(float(np.median([w["fib_mult"] for w in w1_Pool])) if w1_Pool else 1.80, 2)
+    wk_w1_ext = round(float(np.median([w["ma20_ext_pct"] for w in w1_Pool])) if w1_Pool else 5.0, 1)
     wk_w1_rsi = round(float(np.median([w["rsi6"] for w in w1_Pool])) if w1_Pool else 72.0, 0)
 
     wk_w2_pct = round(float(np.median([w["gain_pct"] for w in w2_Pool])) if w2_Pool else learned_tps[1], 1)
     wk_w2_fib = round(float(np.median([w["fib_mult"] for w in w2_Pool])) if w2_Pool else 2.75, 2)
-    wk_w2_ext = round(float(np.median([w["ma20_ext_pct"] for w in w2_Pool])) if w2_Pool else 8.0, 1)
+    wk_w2_ext = round(float(np.median([w["ma20_ext_pct"] for w in w2_Pool])) if w2_Pool else 8.5, 1)
     wk_w2_rsi = round(float(np.median([w["rsi6"] for w in w2_Pool])) if w2_Pool else 80.0, 0)
 
     wk_w3_pct = round(float(np.median([w["gain_pct"] for w in w3_Pool])) if w3_Pool else learned_tps[2], 1)
-    wk_w3_fib = round(float(np.median([w["fib_mult"] for w in w3_Pool])) if w3_Pool else 3.85, 2)
+    wk_w3_fib = round(float(np.median([w["fib_mult"] for w in w3_Pool])) if w3_Pool else 3.90, 2)
     wk_w3_ext = round(float(np.median([w["ma20_ext_pct"] for w in w3_Pool])) if w3_Pool else 13.5, 1)
     wk_w3_rsi = round(float(np.median([w["rsi6"] for w in w3_Pool])) if w3_Pool else 85.0, 0)
 
     lines = [
         f"📅 [Bybit 스캐너 베타 주간 성과 & 1·2·3차 파동 심층 리포트 ({start_date_str} ~ {end_date_str})]",
-        f"🕒 집계 시각: {now_str} (-{FIXED_SL_PCT}% 고정SL · 동적TP +{learned_tps[0]:g}%/+{learned_tps[1]:g}%/+{learned_tps[2]:g}% · 3차트레일링 반영)\n",
+        f"🕒 집계 시각: {now_str} (-{FIXED_SL_PCT}% 고정SL · 동적TP +{learned_tps[0]:g}%/+{learned_tps[1]:g}%/+{learned_tps[2]:g}% · Track A/B/C 통합)\n",
         "1️⃣ [주간 전체 신호(Episode) 성적표]",
         f"• 총 발생 신호: {total_cnt}건 (종결 {decided_cnt}건 | 순항중 {len(act_list)}건)",
         f"• 익절 달성: {win_cnt}건 (🎯3차 {len(tp3_list)}건 | ✅2차 {len(tp2_list)}건 | ✅1차 {len(tp1_list)}건)",
@@ -400,9 +405,10 @@ def main():
         f"• 신호 1건당 평균 기대수익률(Expectancy): {avg_expectancy_pct:+.2f}%",
         f"• 실전 계좌 수익률 (타점당 시드 10% 투입 기준): {account_growth_10pct_pos:+.2f}%",
         f"• 단순 산술 누적 수익률 (분할익절 기준): {split_sum_pct:+.1f}% (단순 고점 합산 {simple_sum_pct:+.1f}%)\n",
-        "3️⃣ [트랙별 적중률 비교 (Track A vs Track B)]",
+        "3️⃣ [트랙별 적중률 비교 (Track A vs Track B vs Track C)]",
         f"• 🟢 Track A (1차 선취매/눌림): 종결 {len(track_a)}건 중 {win_a}건 익절 ({rate_a:.1f}%)",
-        f"• 🚀 Track B (2차 돌파/S&R/포켓피벗): 종결 {len(track_b)}건 중 {win_b}건 익절 ({rate_b:.1f}%)\n",
+        f"• 🚀 Track B (2차 돌파/S&R/포켓피벗): 종결 {len(track_b)}건 중 {win_b}건 익절 ({rate_b:.1f}%)",
+        f"• 🔥 Track C (대장주 피보나치 0.5 눌림목): 종결 {len(track_c)}건 중 {win_c}건 익절 ({rate_c:.1f}%)\n",
         "4️⃣ [주간 베스트 수익 타점 Top 5 & 1·2·3차 파동 로데이터]",
     ]
 
@@ -434,9 +440,9 @@ def main():
                 f"(Fib {w1['fib_mult']:.2f}배·{w1['resist_tag']}·RSI {w1['rsi6']:.0f} 저항) → {item['split_pnl_pct']:+.1f}%{sh_note}"
             )
 
-    rec_tp1 = int(np.clip(round(wk_w1_pct), 7, 14))
-    rec_tp2 = int(np.clip(round(max(rec_tp1 + 5, wk_w2_pct)), 13, 24))
-    rec_tp3 = int(np.clip(round(max(rec_tp2 + 6, wk_w3_pct)), 19, 48))
+    rec_tp1 = int(np.clip(round(wk_w1_pct), 8, 13))
+    rec_tp2 = int(np.clip(round(max(rec_tp1 + 6, wk_w2_pct)), 14, 22))
+    rec_tp3 = int(np.clip(round(max(rec_tp2 + 7, wk_w3_pct)), 21, 36))
 
     lines.extend(
         [
