@@ -17,6 +17,7 @@ from notifier import (
     fmt_price,
     generate_signal_chart_bytes,
     send_telegram_photo_with_caption,
+    send_uai_sample_test,
 )
 
 RE_ALERT_COOLDOWN_SEC = 43200
@@ -394,7 +395,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
 
 def _send_signal_notifications_safe(res, now_str):
-    # 1) 상세 브리핑 메시지 전송
     try:
         briefing_msg = build_briefing_message(res, now_str)
     except Exception:
@@ -406,7 +406,6 @@ def _send_signal_notifications_safe(res, now_str):
         )
     send_telegram_reliable(briefing_msg)
 
-    # 2) X(트위터) 양식 생성
     try:
         x_msg = build_x_post_message(res)
     except Exception:
@@ -426,10 +425,9 @@ def _send_signal_notifications_safe(res, now_str):
             f"- 3차 {fmt_price(tps[2])}(+{p3}%)"
         )
 
-    # 3) SL · 1~3차 TP가 표시된 실시간 캔들 차트 이미지를 생성해 X 양식과 함께 사진으로 전송 (실패 시 텍스트 전송 폴백)
     chart_bytes = generate_signal_chart_bytes(res)
     if chart_bytes:
-        sent_photo = send_telegram_photo_with_caption(chart_bytes, x_msg)
+        sent_photo = send_telegram_photo_with_caption(chart_bytes, x_caption if "x_caption" in locals() else x_msg)
         if not sent_photo:
             send_telegram_reliable(x_msg)
     else:
@@ -439,6 +437,14 @@ def _send_signal_notifications_safe(res, now_str):
 def main():
     start_t = time.time()
     state = load_state()
+
+    # [$UAI 차트+X양식 최초 1회 자동 테스트 발송 (성적표 데이터에는 일절 기록되지 않음)]
+    if not state.get("uai_chart_test_done"):
+        print("[테스트] $UAI 예시 차트 + X 양식 1회 테스트 발송 실행 중...")
+        if send_uai_sample_test():
+            state["uai_chart_test_done"] = True
+            save_state(state)
+
     tracked = state.get("tracked", {})
     alert_history = state.get("alert_history", {})
     sl_history = state.get("sl_history", {})
