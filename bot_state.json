@@ -206,13 +206,66 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false
+    },
+    "BANANAS31USDT": {
+      "created_at": 1794726571,
+      "track_type": "TRACK_A",
+      "score": 93,
+      "entry_price": 0.004454,
+      "swing_high_line": 0.004522,
+      "entry_low": 0.004442865,
+      "entry_high": 0.004458453999999999,
+      "initial_stop_price": 0.0041867599999999994,
+      "stop_price": 0.0041867599999999994,
+      "sl_pct": 6,
+      "tps": [
+        0.00481032,
+        0.005166639999999999,
+        0.0055229599999999995
+      ],
+      "tp_pcts": [
+        8.0,
+        16.0,
+        24.0
+      ],
+      "vol_mult": 3.3,
+      "rsi6_15m": 59.2,
+      "kdj_j_15m": 40.1,
+      "oi_m": 0.43067748114399995,
+      "turnover_m": 1.829486574,
+      "funding_pct": 0.005,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(7%)",
+        "유동성 스윕(Spring 아랫꼬리 3.9배) 반전",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "초응축 박스권(3.1%)",
+        "이평리본 초밀집 확산(1.4%)",
+        "초동수급 폭발(3.3배)",
+        "OI 수급 동조(OI 0.4M)",
+        "청정 펀딩 수급(+0.0050%)"
+      ],
+      "max_high_price": 0.004454,
+      "peak_ts_ms": 1794726571000,
+      "max_favorable_pct": 0.0,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false,
+      "closed_alerted": false
     }
   },
   "alert_history": {
     "APRUSDT": 1794722093,
     "NIGHTUSDT": 1794722093,
     "MEGAUSDT": 1794723613,
-    "GRASSUSDT": 1794723913
+    "GRASSUSDT": 1794723913,
+    "BANANAS31USDT": 1794726571
   },
   "sl_history": {},
   "signal_episodes": {
@@ -313,6 +366,33 @@
       ],
       "max_high_price": 0.4103,
       "max_favorable_pct": 1.11,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "BANANAS31USDT_1794726571": {
+      "symbol": "BANANAS31USDT",
+      "created_at": 1794726571,
+      "track_type": "TRACK_A",
+      "score": 93,
+      "entry_price": 0.004454,
+      "initial_stop_price": 0.0041867599999999994,
+      "stop_price": 0.0041867599999999994,
+      "sl_pct": 6.0,
+      "tps": [
+        0.00481032,
+        0.005166639999999999,
+        0.0055229599999999995
+      ],
+      "max_high_price": 0.004454,
+      "max_favorable_pct": 0.0,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
