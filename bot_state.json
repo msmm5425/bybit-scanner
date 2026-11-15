@@ -310,15 +310,18 @@
       "max_favorable_pct": 2.25,
       "history_backfilled": true,
       "be_armed": false,
-      "tp1_hit": false,
-      "tp2_hit": false,
-      "tp1_alerted": false,
-      "tp2_alerted": false,
-      "tp3_alerted": false,
+      "tp1_hit": true,
+      "tp2_hit": true,
+      "tp1_alerted": true,
+      "tp2_alerted": true,
+      "tp3_alerted": true,
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false,
-      "closed_alerted": false
+      "sl_alerted": true,
+      "tp3_completed": true,
+      "closed_alerted": true,
+      "sl_at": 1794704606,
+      "sl_trigger_price": 1.0213,
+      "hold_minutes": 1013
     },
     "SIGNUSDT": {
       "created_at": 1794288903,
@@ -4375,6 +4378,36 @@
         "OI 실수급 유입(OI 1.1M·비중 38%)",
         "음수 펀딩 숏스퀴즈 수급(-0.0499%)"
       ]
+    },
+    "GRAMUSDT_1794643822": {
+      "symbol": "GRAMUSDT",
+      "track_type": "TRACK_B",
+      "score": 89,
+      "entry_price": 1.0865,
+      "stop_price": 1.02131,
+      "sl_trigger_price": 1.0213,
+      "sl_pct": 6,
+      "created_at": 1794643822,
+      "sl_at": 1794704606,
+      "hold_minutes": 1013,
+      "max_high_price": 1.111,
+      "max_favorable_pct": 2.25,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 2.6,
+      "rsi6_15m": 71.2,
+      "kdj_j_15m": 79.4,
+      "oi_m": 4.577612047469995,
+      "turnover_m": 2.41727130534,
+      "funding_pct": -0.002,
+      "reasons": [
+        "전고점 S/R Flip 칼지지(오차 0.08%/눌림거래량 9%)",
+        "단기 정배열(5>20>50) 지지",
+        "박스응축(1.4%)+CVD 강세 다이버전스(저점 스윕 매수흡수)",
+        "이평리본 초밀집 확산(0.1%)",
+        "초동수급 폭발(2.6배)",
+        "OI 실수급 유입(OI 4.6M·비중 189%)",
+        "음수 펀딩 숏스퀴즈 수급(-0.0020%)"
+      ]
     }
   },
   "signal_episodes": {
@@ -7891,15 +7924,15 @@
       "max_high_price": 1.111,
       "max_favorable_pct": 2.25,
       "be_armed": false,
-      "tp1_hit": false,
-      "tp2_hit": false,
-      "tp1_alerted": false,
-      "tp2_alerted": false,
-      "tp3_alerted": false,
-      "tp3_completed": false,
-      "sl_alerted": false,
-      "closed_alerted": false,
-      "sl_at": 0
+      "tp1_hit": true,
+      "tp2_hit": true,
+      "tp1_alerted": true,
+      "tp2_alerted": true,
+      "tp3_alerted": true,
+      "tp3_completed": true,
+      "sl_alerted": true,
+      "closed_alerted": true,
+      "sl_at": 1794704606
     },
     "BANANAS31USDT_1794702127": {
       "symbol": "BANANAS31USDT",
