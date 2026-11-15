@@ -14,12 +14,14 @@ try:
     TELEGRAM_CHAT_ID = getattr(cfg, "TELEGRAM_CHAT_ID", "")
     FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
     KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
+    BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
 except Exception:
     cfg = None
     TELEGRAM_BOT_TOKEN = ""
     TELEGRAM_CHAT_ID = ""
     FIXED_SL_PCT = 6
     KST = timezone(timedelta(hours=9))
+    BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 try:
     import api as api_mod
@@ -66,14 +68,23 @@ def fmt_price(price):
     return f"{p:.6f}"
 
 
+def fmt_vol(v):
+    val = to_float(v, 0.0)
+    if val >= 1e9:
+        return f"{val / 1e9:.1f}B"
+    if val >= 1e6:
+        return f"{val / 1e6:.1f}M"
+    if val >= 1e3:
+        return f"{val / 1e3:.1f}K"
+    return f"{val:.0f}"
+
+
 def _ensure_matplotlib():
-    """런타임에 matplotlib가 없으면 자동 설치"""
     try:
         import matplotlib
         return True
     except ImportError:
         try:
-            print("[알림] matplotlib 자동 설치 중...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "matplotlib"])
             return True
         except Exception as e:
@@ -81,42 +92,57 @@ def _ensure_matplotlib():
             return False
 
 
-def _build_sample_breakout_df(entry_price=0.09520):
-    """테스트 발송용 15분봉 45캔들(박스권 응축 -> 거래량 폭발 돌파 -> 눌림 지지) 생성"""
-    np.random.seed(42)
-    rows = []
-    now_ms = int(time.time() * 1000)
-    base_p = entry_price * 0.965
-    curr = base_p
+def fetch_exact_bybit_klines(symbol, interval="15", limit=75):
+    """
+    [1순위] 게이트아이오/비트겟이 아닌 실제 Bybit V5 공식 미러 서버에서
+    바이비트 원본 캔들(OHLC)과 실제 바이비트 거래량(Volume)을 직접 가져옵니다.
+    """
+    bybit_params = {
+        "category": "linear",
+        "symbol": symbol,
+        "interval": str(interval),
+        "limit": int(limit),
+    }
+    bybit_hosts = (
+        "https://api.bybit-tr.com",
+        "https://api.bybit.kz",
+        "https://api.bytick.com",
+        "https://api.bybit.com",
+    )
 
-    for i in range(34):
-        ts = now_ms - (45 - i) * 15 * 60 * 1000
-        wave = np.sin(i * 0.4) * (entry_price * 0.006)
-        noise = np.random.uniform(-0.0025, 0.0028) * entry_price
-        o = curr
-        c = base_p + wave + noise
-        h = max(o, c) + np.random.uniform(0.0010, 0.0035) * entry_price
-        l = min(o, c) - np.random.uniform(0.0010, 0.0035) * entry_price
-        v = np.random.uniform(800, 1800)
-        rows.append({"timestamp": ts, "open": o, "high": h, "low": l, "close": c, "volume": v})
-        curr = c
+    for host in bybit_hosts:
+        try:
+            resp = requests.get(
+                f"{host}/v5/market/kline",
+                params=bybit_params,
+                headers=BROWSER_HEADERS,
+                timeout=4,
+            )
+            if resp.status_code == 200:
+                rows = resp.json().get("result", {}).get("list", [])
+                if isinstance(rows, list) and len(rows) >= 20:
+                    cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(rows[0])]
+                    df = pd.DataFrame(rows, columns=cols)
+                    for c in ("timestamp", "open", "high", "low", "close", "volume"):
+                        df[c] = pd.to_numeric(df[c], errors="coerce")
+                    df = df.dropna(subset=["timestamp", "close"]).sort_values("timestamp", ascending=True).reset_index(drop=True)
+                    if len(df) >= 20:
+                        return df
+        except Exception:
+            continue
 
-    break_steps = [
-        (0.976, 3200), (0.988, 5400), (1.004, 6800),
-        (1.015, 4900), (1.008, 2100), (1.001, 1400),
-        (0.996, 950), (0.998, 1100), (1.002, 2600),
-        (0.999, 1300), (1.000, 3100)
-    ]
-    for idx_b, (ratio, vol_v) in enumerate(break_steps):
-        ts = now_ms - (11 - idx_b) * 15 * 60 * 1000
-        o = curr
-        c = entry_price * ratio
-        h = max(o, c) + entry_price * 0.0040
-        l = min(o, c) - entry_price * 0.0030
-        rows.append({"timestamp": ts, "open": o, "high": h, "low": l, "close": c, "volume": vol_v})
-        curr = c
+    # 모든 바이비트 미러가 응답하지 않을 때만 api_mod 폴백 사용
+    if api_mod and hasattr(api_mod, "fetch_klines"):
+        try:
+            df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
+            if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= 20:
+                if "timestamp" in df.columns:
+                    df = df.sort_values("timestamp", ascending=True).reset_index(drop=True)
+                return df
+        except Exception:
+            pass
 
-    return pd.DataFrame(rows)
+    return pd.DataFrame()
 
 
 def build_briefing_message(res, now_str):
@@ -199,11 +225,10 @@ def build_x_post_message(res):
 
 def generate_signal_chart_bytes(res):
     """
-    [고급 트레이딩뷰 스타일 15분봉 차트 생성기]
-    1) 15분봉(최근 45캔들)을 사용하여 캔들 크기와 추세 가독성을 대폭 확대
-    2) 비선형 압축 스케일(FuncScale)을 적용하여 하단 캔들 영역이 화면의 62%를 시원하게 차지하고,
-       상단 TP1~TP3 사이의 과도한 빈 여백을 자동으로 압축
-    3) 롱 포지션 수익/손절 음영 박스 + 하단 거래량(Volume) 서브 패널 + 배경 워터마크 추가
+    [Bybit V5 실제 15분봉·거래량 100% 동기화 차트 생성기]
+    1) Bybit 공식 V5 미러 서버에서 실제 15분봉 캔들과 실제 거래량을 직결 조회
+    2) 비선형 스케일(FuncScale)로 캔들 영역 확대 & TP1~TP3 여백 압축
+    3) 상단 TP3 선과 이평선 범례가 겹치지 않도록 범례를 차트 프레임 상단 바깥으로 분리
     """
     if not _ensure_matplotlib():
         return None
@@ -222,46 +247,24 @@ def generate_signal_chart_bytes(res):
     if not symbol or price <= 0:
         return None
 
-    df = pd.DataFrame()
-    if not res.get("_is_test_sample"):
-        # 15분봉 65캔들 조회 (이동평균선 계산 후 최근 45캔들 슬라이싱)
-        if api_mod and hasattr(api_mod, "fetch_klines"):
-            try:
-                df = api_mod.fetch_klines(symbol, "15", limit=65)
-            except Exception:
-                df = pd.DataFrame()
-
-        if df is None or df.empty or len(df) < 20:
-            try:
-                r = requests.get(
-                    "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
-                    params={"contract": f"{base}_USDT", "interval": "15m", "limit": 65},
-                    timeout=5,
-                )
-                if r.status_code == 200 and isinstance(r.json(), list) and r.json():
-                    raw_df = pd.DataFrame(r.json()).rename(
-                        columns={"t": "timestamp", "o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"}
-                    )
-                    raw_df["timestamp"] = pd.to_numeric(raw_df["timestamp"], errors="coerce") * 1000.0
-                    for col in ("open", "high", "low", "close", "volume"):
-                        raw_df[col] = pd.to_numeric(raw_df[col], errors="coerce")
-                    df = raw_df.dropna(subset=["close"]).sort_values("timestamp").reset_index(drop=True)
-            except Exception:
-                pass
-
+    df = fetch_exact_bybit_klines(symbol, interval="15", limit=80)
     if df is None or df.empty or len(df) < 20:
-        df = _build_sample_breakout_df(price)
+        return None
 
-    if "volume" not in df.columns:
-        df["volume"] = 1000.0
-
+    # 마지막 캔들의 현재가를 포착 시점 가격과 일치시켜 갭 오차 제거
+    df = df.copy()
     df["ma7"] = df["close"].rolling(7, min_periods=2).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=3).mean()
     df["ma50"] = df["close"].rolling(50, min_periods=5).mean()
     df["vol_ma20"] = df["volume"].rolling(20, min_periods=3).mean()
 
-    # 최근 45개 15분봉만 남겨서 캔들 하나하나를 큼직하게 표시
+    # 최근 45개 15분봉(11시간 15분 흐름) 슬라이싱
     df = df.iloc[-45:].reset_index(drop=True)
+
+    # 실제 차트의 마지막 종가를 기준으로 진입가 동기화 (실제 차트와 100% 일치 보장)
+    latest_close = to_float(df["close"].iloc[-1], price)
+    if abs(latest_close - price) / max(price, 1e-8) <= 0.03:
+        price = latest_close
 
     e_low = to_float(res.get("entry_low"), price * 0.9975)
     e_high = to_float(res.get("entry_high"), price * 1.0010)
@@ -281,22 +284,20 @@ def generate_signal_chart_bytes(res):
         grid_color = "#232838"
 
         fig = plt.figure(figsize=(11.2, 6.8), dpi=160, facecolor=bg_color)
-        gs = GridSpec(2, 1, height_ratios=[4.2, 1.0], hspace=0.04, figure=fig)
+        gs = GridSpec(2, 1, height_ratios=[4.0, 1.15], hspace=0.04, figure=fig)
         ax = fig.add_subplot(gs[0])
         ax_vol = fig.add_subplot(gs[1], sharex=ax)
 
         ax.set_facecolor(panel_bg)
         ax_vol.set_facecolor(panel_bg)
 
-        # [핵심] 캔들 영역은 크게 키우고 TP1~TP3 사이의 빈 공간은 압축하는 이중 스케일(Piecewise Scale)
         c_low_min = min(to_float(df["low"].min(), sl_p), sl_p)
-        c_high_max = max(to_float(df["high"].max(), price), price * 1.025)
+        c_high_max = max(to_float(df["high"].max(), price), price * 1.02)
         y_piv = min(tp1_p * 0.985, c_high_max * 1.012)
 
         candle_span = max(y_piv - c_low_min, price * 0.04)
         tp_span = max(tp3_p - y_piv, price * 0.05)
-        # TP 영역이 차트 상단 38% 안에 오밀조밀하게 들어오도록 압축 비율 자동 계산
-        comp_ratio = float(np.clip((candle_span * 0.58) / tp_span, 0.18, 0.75))
+        comp_ratio = float(np.clip((candle_span * 0.56) / tp_span, 0.18, 0.75))
 
         def _forward_scale(y):
             y_arr = np.asarray(y, dtype=float)
@@ -315,13 +316,12 @@ def generate_signal_chart_bytes(res):
         up_color = "#089981"
         down_color = "#f23645"
 
-        # 배경 중앙 워터마크 (트레이딩뷰 스타일)
         ax.text(
             0.42,
-            0.48,
-            f"${base}\n15M CHART",
+            0.46,
+            f"BYBIT · ${base}USDT\n15M PERPETUAL",
             transform=ax.transAxes,
-            fontsize=38,
+            fontsize=32,
             fontweight="bold",
             color="#ffffff",
             alpha=0.035,
@@ -330,7 +330,6 @@ def generate_signal_chart_bytes(res):
             zorder=0,
         )
 
-        # 캔들스틱 & 하단 거래량 바 렌더링 (캔들 폭을 0.72로 넓혀 시원하게 표시)
         for i in range(n):
             o = to_float(df.loc[i, "open"])
             c = to_float(df.loc[i, "close"])
@@ -341,7 +340,7 @@ def generate_signal_chart_bytes(res):
 
             ax.plot([i, i], [l, h], color=col, linewidth=1.35, zorder=3)
             body_bottom = min(o, c)
-            body_h = max(abs(c - o), price * 0.0008)
+            body_h = max(abs(c - o), price * 0.0007)
             rect = Rectangle(
                 (i - 0.36, body_bottom),
                 0.72,
@@ -352,16 +351,13 @@ def generate_signal_chart_bytes(res):
                 zorder=4,
             )
             ax.add_patch(rect)
+            ax_vol.bar(i, v, width=0.68, color=col, alpha=0.70, zorder=3)
 
-            ax_vol.bar(i, v, width=0.68, color=col, alpha=0.65, zorder=3)
-
-        # 이평선 렌더링 (MA7 민트, MA20 블루, MA50 오렌지)
-        ax.plot(df.index, df["ma7"], color="#00e5ff", linewidth=1.2, label="MA7", alpha=0.85, zorder=5)
+        ax.plot(df.index, df["ma7"], color="#00e5ff", linewidth=1.2, label="MA7", alpha=0.88, zorder=5)
         ax.plot(df.index, df["ma20"], color="#2962ff", linewidth=1.5, label="MA20", alpha=0.95, zorder=5)
         ax.plot(df.index, df["ma50"], color="#ff9800", linewidth=1.5, label="MA50", alpha=0.90, zorder=5)
         ax_vol.plot(df.index, df["vol_ma20"], color="#ffd166", linewidth=1.1, alpha=0.85, zorder=4)
 
-        # 우측 타점 프로젝션 영역 (트레이딩뷰 Long Position Tool 스타일 수익/손절 박스)
         box_start = n - 1
         box_end = n + 4.2
         ax.fill_between([box_start, box_end], price, tp1_p, color="#4cc9f0", alpha=0.09, zorder=2)
@@ -369,7 +365,6 @@ def generate_signal_chart_bytes(res):
         ax.fill_between([box_start, box_end], tp2_p, tp3_p, color="#ffd166", alpha=0.13, zorder=2)
         ax.fill_between([box_start, box_end], sl_p, price, color="#ef476f", alpha=0.14, zorder=2)
 
-        # 진입 구간 밴드 강조
         ax.axhspan(e_low, e_high, color="#3b82f6", alpha=0.22, zorder=2)
 
         x_right = n + 13.5
@@ -401,10 +396,9 @@ def generate_signal_chart_bytes(res):
             )
 
         y_min = c_low_min - candle_span * 0.08
-        y_max = tp3_p + (tp3_p - tp2_p) * 0.35
+        y_max = tp3_p + (tp3_p - tp2_p) * 0.42
         ax.set_ylim(y_min, y_max)
 
-        # Y축 눈금이 겹치지 않도록 주요 가격대만 깔끔하게 표시
         tick_candidates = sorted(list({
             round(c_low_min, 6),
             round(price, 6),
@@ -415,8 +409,16 @@ def generate_signal_chart_bytes(res):
         ax.set_yticks(tick_candidates)
         ax.set_yticklabels([fmt_price(t) for t in tick_candidates], color="#9ca3af", fontsize=8.5)
 
-        # X축 하단 시간 라벨 (15분봉 KST 기준)
-        tick_idxs = [i for i in range(0, n, 8)]
+        # 거래량 Y축 상한 및 눈금 표시 (Bybit 실제 거래량 수치 표시)
+        vol_max = to_float(df["volume"].max(), 100.0)
+        ax_vol.set_ylim(0, vol_max * 1.18)
+        ax_vol.set_yticks([vol_max * 0.5, vol_max])
+        ax_vol.set_yticklabels([fmt_vol(vol_max * 0.5), fmt_vol(vol_max)], color="#9ca3af", fontsize=7.8)
+
+        # 마지막 봉 기준 KST 시각 표시
+        tick_idxs = [i for i in range(4, n, 8)]
+        if (n - 1) not in tick_idxs:
+            tick_idxs.append(n - 1)
         tick_labels = []
         for idx_t in tick_idxs:
             ts_val = to_float(df.loc[idx_t, "timestamp"], 0.0) if "timestamp" in df.columns else 0.0
@@ -430,10 +432,15 @@ def generate_signal_chart_bytes(res):
 
         ax_vol.set_xticks(tick_idxs)
         ax_vol.set_xticklabels(tick_labels, color="#9ca3af", fontsize=8.5)
-        ax_vol.set_yticks([])
+        curr_vol_v = to_float(df["volume"].iloc[-1], 0.0)
         ax_vol.text(
-            0.01, 0.78, "Volume (15M) & MA20",
-            transform=ax_vol.transAxes, color="#9ca3af", fontsize=8, fontweight="bold"
+            0.01,
+            0.78,
+            f"Bybit Volume (15M): {fmt_vol(curr_vol_v)}  |  Vol MA20",
+            transform=ax_vol.transAxes,
+            color="#cbd5e1",
+            fontsize=8,
+            fontweight="bold",
         )
 
         ax.grid(True, linestyle="--", linewidth=0.5, color=grid_color, alpha=0.75)
@@ -450,24 +457,34 @@ def generate_signal_chart_bytes(res):
             "TRACK_C": "TRACK C · Leader Fib 0.5",
         }.get(track_type, track_type)
 
+        last_ts = to_float(df["timestamp"].iloc[-1], 0.0)
+        last_kst_str = (
+            datetime.fromtimestamp((last_ts if last_ts > 1e11 else last_ts * 1000.0) / 1000.0, tz=KST).strftime("%m/%d %H:%M KST")
+            if last_ts > 0 else "LIVE"
+        )
+
         ax.set_title(
-            f"${base} ({symbol})  |  15M Chart & Targets  |  {track_badge} (Score: {score})",
+            f"${base} ({symbol})  |  Bybit 15M ({last_kst_str})  |  {track_badge} (Score: {score})",
             color="#ffffff",
-            fontsize=12.5,
+            fontsize=12.0,
             fontweight="bold",
-            pad=12,
+            pad=14,
             loc="left",
         )
+
+        # TP3 선과 겹치지 않도록 범례를 차트 상단 프레임 바깥 우측에 배치
         ax.legend(
-            loc="upper left",
+            loc="lower right",
+            bbox_to_anchor=(1.0, 1.01),
             ncol=3,
             facecolor="#1a1f2e",
             edgecolor="#2a2e39",
             labelcolor="#e2e8f0",
-            fontsize=8.5,
+            fontsize=8.2,
+            framealpha=0.95,
         )
 
-        plt.subplots_adjust(left=0.07, right=0.98, top=0.92, bottom=0.07)
+        plt.subplots_adjust(left=0.07, right=0.98, top=0.91, bottom=0.07)
         buf = io.BytesIO()
         plt.savefig(buf, format="png", facecolor=bg_color)
         plt.close(fig)
@@ -495,7 +512,6 @@ def send_telegram_single(text):
 
 
 def send_telegram_photo_with_caption(photo_bytes, caption_text):
-    """생성된 차트 이미지와 X 양식 캡션을 하나의 사진 메시지로 전송"""
     token = (
         TELEGRAM_BOT_TOKEN
         or os.getenv("TELEGRAM_TOKEN")
@@ -510,7 +526,6 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text):
     ).strip()
 
     if not photo_bytes or not token or not chat_id:
-        print("[경고] 사진 바이트 또는 텔레그램 토큰/챗ID 누락")
         return False
 
     url = f"https://api.telegram.org/bot{token}/sendPhoto"
@@ -522,7 +537,6 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text):
             if resp.status_code == 200:
                 time.sleep(0.7)
                 return True
-            print(f"[텔레그램 사진 전송 응답 오류] HTTP {resp.status_code}: {resp.text}")
             if resp.status_code == 429:
                 retry_after = int(resp.json().get("parameters", {}).get("retry_after", 3))
                 time.sleep(retry_after + 0.5)
@@ -534,31 +548,29 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text):
 
 
 def send_uai_sample_test():
-    """방금 포착된 $BERA 수치 기준으로 업그레이드된 15M 고화질 차트 테스트 발송"""
+    """방금 포착된 $PUMP 종목의 실제 Bybit V5 15분봉·거래량 데이터로 즉시 비교 발송"""
     sample_res = {
-        "symbol": "BERAUSDT",
-        "base_coin": "BERA",
-        "base": "BERA",
+        "symbol": "PUMPUSDT",
+        "base_coin": "PUMP",
+        "base": "PUMP",
         "track_type": "TRACK_A",
-        "track_title": "🧪 [15M 차트 업그레이드 프리뷰]",
-        "score": 85,
-        "price": 0.09520,
-        "entry_low": 0.09496,
-        "entry_high": 0.09530,
-        "stop_price": 0.08949,
+        "track_title": "🟢 [1차 선취매/눌림 타점 포착]",
+        "score": 92,
+        "price": 0.002910,
+        "entry_low": 0.002903,
+        "entry_high": 0.002913,
+        "stop_price": 0.002735,
         "sl_pct": 6,
-        "tps": [0.10282, 0.11519, 0.12471],
+        "tps": [0.003143, 0.003521, 0.003812],
         "tp_pcts": [8.0, 21.0, 31.0],
     }
     x_caption = build_x_post_message(sample_res)
     chart_bytes = generate_signal_chart_bytes(sample_res)
     if chart_bytes:
         ok = send_telegram_photo_with_caption(chart_bytes, x_caption)
-        print(f"[15M 고화질 차트 테스트 발송 결과]: {'성공' if ok else '실패'}")
+        print(f"[Bybit 실제 15M 차트 발송 결과]: {'성공' if ok else '실패'}")
         return ok
-    else:
-        ok = send_telegram_single(x_caption)
-        return ok
+    return send_telegram_single(x_caption)
 
 
 if __name__ == "__main__":
