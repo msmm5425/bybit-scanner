@@ -557,9 +557,9 @@
         "OI 실수급 유입(OI 2.5M·비중 93%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.05659,
-      "peak_ts_ms": 1794742740000,
-      "max_favorable_pct": 0.68,
+      "max_high_price": 0.05668,
+      "peak_ts_ms": 1794743580000,
+      "max_favorable_pct": 0.84,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -883,6 +883,58 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false
+    },
+    "1000BONKUSDT": {
+      "created_at": 1794743638,
+      "track_type": "TRACK_A",
+      "score": 95,
+      "entry_price": 2.397e-06,
+      "swing_high_line": 2.419e-06,
+      "entry_low": 2.3910075e-06,
+      "entry_high": 2.399397e-06,
+      "initial_stop_price": 2.2531799999999997e-06,
+      "stop_price": 2.2531799999999997e-06,
+      "sl_pct": 6,
+      "tps": [
+        2.5887600000000003e-06,
+        2.90037e-06,
+        3.1400700000000002e-06
+      ],
+      "tp_pcts": [
+        8.0,
+        21.0,
+        31.0
+      ],
+      "vol_mult": 4.6,
+      "rsi6_15m": 54.6,
+      "kdj_j_15m": 20.9,
+      "oi_m": 2.953792038373,
+      "turnover_m": 2.127330270724,
+      "funding_pct": 0.005,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(3%)",
+        "바닥 이평리본 수렴 돌파(0.6%)",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "초응축 박스권(1.3%)",
+        "이평리본 초밀집 확산(0.6%)",
+        "초동수급 폭발(4.6배)",
+        "OI 실수급 유입(OI 3.0M·비중 139%)",
+        "청정 펀딩 수급(+0.0050%)"
+      ],
+      "max_high_price": 2.397e-06,
+      "peak_ts_ms": 1794743638000,
+      "max_favorable_pct": 0.0,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false,
+      "closed_alerted": false
     }
   },
   "alert_history": {
@@ -902,7 +954,8 @@
     "GRAMUSDT": 1794741572,
     "PIUSDT": 1794741572,
     "XPLUSDT": 1794741572,
-    "TRUMPUSDT": 1794743038
+    "TRUMPUSDT": 1794743038,
+    "1000BONKUSDT": 1794743638
   },
   "sl_history": {},
   "signal_episodes": {
@@ -1190,8 +1243,8 @@
         0.06801410000000001,
         0.07363510000000001
       ],
-      "max_high_price": 0.05659,
-      "max_favorable_pct": 0.68,
+      "max_high_price": 0.05668,
+      "max_favorable_pct": 0.84,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -1354,6 +1407,33 @@
       ],
       "max_high_price": 0.971,
       "max_favorable_pct": 0.31,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "1000BONKUSDT_1794743638": {
+      "symbol": "1000BONKUSDT",
+      "created_at": 1794743638,
+      "track_type": "TRACK_A",
+      "score": 95,
+      "entry_price": 2.397e-06,
+      "initial_stop_price": 2.2531799999999997e-06,
+      "stop_price": 2.2531799999999997e-06,
+      "sl_pct": 6.0,
+      "tps": [
+        2.5887600000000003e-06,
+        2.90037e-06,
+        3.1400700000000002e-06
+      ],
+      "max_high_price": 2.397e-06,
+      "max_favorable_pct": 0.0,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
