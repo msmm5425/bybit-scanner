@@ -453,9 +453,9 @@
         "OI 실수급 유입(OI 4.3M·비중 182%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.513,
-      "peak_ts_ms": 1794746100000,
-      "max_favorable_pct": 1.18,
+      "max_high_price": 0.5155,
+      "peak_ts_ms": 1794746280000,
+      "max_favorable_pct": 1.68,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -1038,6 +1038,58 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false
+    },
+    "UAIUSDT": {
+      "created_at": 1794746527,
+      "track_type": "TRACK_A",
+      "score": 100,
+      "entry_price": 0.03189,
+      "swing_high_line": 0.03211,
+      "entry_low": 0.031810275000000006,
+      "entry_high": 0.03192189,
+      "initial_stop_price": 0.0299766,
+      "stop_price": 0.0299766,
+      "sl_pct": 6,
+      "tps": [
+        0.034441200000000005,
+        0.0385869,
+        0.041775900000000005
+      ],
+      "tp_pcts": [
+        8.0,
+        21.0,
+        31.0
+      ],
+      "vol_mult": 3.0,
+      "rsi6_15m": 71.4,
+      "kdj_j_15m": 80.2,
+      "oi_m": 1.47854085523,
+      "turnover_m": 3.5442009746300003,
+      "funding_pct": 0.005,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(7%)",
+        "완전 정배열(5>20>50>112) 지지",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "박스응축(3.6%)+CVD 강세 다이버전스(저점 스윕 매수흡수)",
+        "이평리본 초밀집 확산(0.9%)",
+        "초동수급 폭발(3.0배)",
+        "OI 실수급 유입(OI 1.5M·비중 42%)",
+        "청정 펀딩 수급(+0.0050%)"
+      ],
+      "max_high_price": 0.03189,
+      "peak_ts_ms": 1794746527000,
+      "max_favorable_pct": 0.0,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false,
+      "closed_alerted": false
     }
   },
   "alert_history": {
@@ -1060,7 +1112,8 @@
     "TRUMPUSDT": 1794743038,
     "1000BONKUSDT": 1794743638,
     "HYPEUSDT": 1794744726,
-    "FARTCOINUSDT": 1794744726
+    "FARTCOINUSDT": 1794744726,
+    "UAIUSDT": 1794746527
   },
   "sl_history": {},
   "signal_episodes": {
@@ -1294,8 +1347,8 @@
         0.58812,
         0.62868
       ],
-      "max_high_price": 0.513,
-      "max_favorable_pct": 1.18,
+      "max_high_price": 0.5155,
+      "max_favorable_pct": 1.68,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -1593,6 +1646,33 @@
       ],
       "max_high_price": 0.09455,
       "max_favorable_pct": 0.62,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "UAIUSDT_1794746527": {
+      "symbol": "UAIUSDT",
+      "created_at": 1794746527,
+      "track_type": "TRACK_A",
+      "score": 100,
+      "entry_price": 0.03189,
+      "initial_stop_price": 0.0299766,
+      "stop_price": 0.0299766,
+      "sl_pct": 6.0,
+      "tps": [
+        0.034441200000000005,
+        0.0385869,
+        0.041775900000000005
+      ],
+      "max_high_price": 0.03189,
+      "max_favorable_pct": 0.0,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
