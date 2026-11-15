@@ -10,7 +10,14 @@ import config as cfg
 from config import STATE_FILE, KST, to_float, is_tradfi_ticker
 from api import get_scanner_candidates, fetch_verified_1m_klines, fetch_klines
 from analyzer import analyze_symbol, get_dynamic_tp_params
-from notifier import build_briefing_message, build_x_post_message, send_telegram_single, fmt_price
+from notifier import (
+    build_briefing_message,
+    build_x_post_message,
+    send_telegram_single,
+    fmt_price,
+    generate_signal_chart_bytes,
+    send_telegram_photo_with_caption,
+)
 
 RE_ALERT_COOLDOWN_SEC = 43200
 SL_RECOVERY_COOLDOWN_SEC = getattr(cfg, "SL_RECOVERY_COOLDOWN_SEC", 14400)
@@ -232,7 +239,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     tps_list = t_item.get("tps") or []
     just_armed_protection = False
 
-    # 일일 리포트가 학습한 최신 동적 TP(예: +8.5% / +15% / +22%)와 기존 종목의 TP 중 먼저 도달 가능한 현실적 목표가 연동
     learned_tp1_p = entry_ref * (1.0 + tp_params["tp1_min_pct"] / 100.0)
     learned_tp2_p = entry_ref * (1.0 + tp_params["tp2_min_pct"] / 100.0)
     learned_tp3_p = entry_ref * (1.0 + tp_params["tp3_min_pct"] / 100.0)
@@ -264,7 +270,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             )
         return {"messages": messages, "sl_record": None}
 
-    # 2. 2차 목표가(TP2) 달성 확인 -> 2차 TP 수익의 85% 보존 + 최고가 대비 -3.5% 고점 트레일링 스탑 가동!
+    # 2. 2차 목표가(TP2) 달성 확인 -> 최고가 대비 -3.5% 고점 트레일링 스탑 가동
     if tp2_target_p > 0 and max_high >= tp2_target_p:
         was_tp2_alerted = bool(t_item.get("tp2_alerted") or t_item.get("tp2_hit"))
         t_item["be_armed"] = True
@@ -286,7 +292,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 2차 분할 익절(30%) 확정! 남은 30% 물량은 최고가 대비 -3.5% 트레일링 보호선({fmt_price(stop_p)}, +{lock_pct:.1f}%)으로 3차 고점을 끝까지 추적합니다."
             )
 
-    # 3. 1차 목표가(TP1) 달성 확인 -> 첫 조정 버티기(+0.6%) 후 2차 TP 75% 근접 시 1차 수익의 80% 자동 잠금
+    # 3. 1차 목표가(TP1) 달성 확인
     elif tp1_target_p > 0 and max_high >= tp1_target_p:
         was_tp1_alerted = bool(t_item.get("tp1_alerted") or t_item.get("tp1_hit"))
         t_item["be_armed"] = True
@@ -388,6 +394,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
 
 def _send_signal_notifications_safe(res, now_str):
+    # 1) 상세 브리핑 메시지 전송
     try:
         briefing_msg = build_briefing_message(res, now_str)
     except Exception:
@@ -399,20 +406,34 @@ def _send_signal_notifications_safe(res, now_str):
         )
     send_telegram_reliable(briefing_msg)
 
+    # 2) X(트위터) 양식 생성
     try:
         x_msg = build_x_post_message(res)
     except Exception:
         tps = res.get("tps", [0, 0, 0])
-        tp_pcts = res.get("tp_pcts", [8.5, 15.0, 22.0])
+        tp_pcts = res.get("tp_pcts", [8.0, 16.0, 24.0])
+        p1 = int(round(to_float(tp_pcts[0], 8.0)))
+        p2 = int(round(to_float(tp_pcts[1], 16.0)))
+        p3 = int(round(to_float(tp_pcts[2], 24.0)))
         x_msg = (
+            "혹시 이 종목을 보유하고 있는 분 계신가요?\n"
+            "어디에서 익절될거 같나요?😎\n\n"
             f"${res.get('base_coin', '')} ({res.get('symbol', '')})\n\n"
-            f"- 진입 구간: {fmt_price(res.get('entry_low', 0))} ~ {fmt_price(res.get('entry_high', 0))} USDT\n\n"
-            f"- SL: {fmt_price(res.get('stop_price', 0))} USDT (-{res.get('sl_pct', DEFAULT_FIXED_SL_PCT)}%)\n\n"
-            f"- 1차 {fmt_price(tps[0])}(+{tp_pcts[0]}%)\n"
-            f"- 2차 {fmt_price(tps[1])}(+{tp_pcts[1]}%)\n"
-            f"- 3차 {fmt_price(tps[2])}(+{tp_pcts[2]}%)"
+            f"- 진입 구간: {fmt_price(res.get('entry_low', 0))} ~ {fmt_price(res.get('entry_high', 0))} USDT\n"
+            f"- SL: {fmt_price(res.get('stop_price', 0))} USDT (-{int(round(to_float(res.get('sl_pct'), DEFAULT_FIXED_SL_PCT)))}%)\n"
+            f"- 1차 {fmt_price(tps[0])}(+{p1}%)\n"
+            f"- 2차 {fmt_price(tps[1])}(+{p2}%)\n"
+            f"- 3차 {fmt_price(tps[2])}(+{p3}%)"
         )
-    send_telegram_reliable(x_msg)
+
+    # 3) SL · 1~3차 TP가 표시된 실시간 캔들 차트 이미지를 생성해 X 양식과 함께 사진으로 전송 (실패 시 텍스트 전송 폴백)
+    chart_bytes = generate_signal_chart_bytes(res)
+    if chart_bytes:
+        sent_photo = send_telegram_photo_with_caption(chart_bytes, x_msg)
+        if not sent_photo:
+            send_telegram_reliable(x_msg)
+    else:
+        send_telegram_reliable(x_msg)
 
 
 def main():
