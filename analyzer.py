@@ -24,15 +24,15 @@ def get_dynamic_tp_params():
 
     params = {
         "tp1_min_pct": cfg.to_float(getattr(cfg, "TP1_MIN_PCT", 8.5), 8.5),
-        "tp2_min_pct": cfg.to_float(getattr(cfg, "TP2_MIN_PCT", 15.0), 15.0),
-        "tp3_min_pct": cfg.to_float(getattr(cfg, "TP3_MIN_PCT", 22.0), 22.0),
+        "tp2_min_pct": cfg.to_float(getattr(cfg, "TP2_MIN_PCT", 16.0), 16.0),
+        "tp3_min_pct": cfg.to_float(getattr(cfg, "TP3_MIN_PCT", 24.0), 24.0),
         "tp3_max_cap_pct": cfg.to_float(getattr(cfg, "TP3_MAX_CAP_PCT", 50.0), 50.0),
-        "tp1_fib_mult": cfg.to_float(getattr(cfg, "TP1_FIB_MULT", 1.80), 1.80),
-        "tp2_fib_mult": cfg.to_float(getattr(cfg, "TP2_FIB_MULT", 2.85), 2.85),
-        "tp3_fib_mult": cfg.to_float(getattr(cfg, "TP3_FIB_MULT", 4.10), 4.10),
-        "tp1_ma20_ext_pct": 5.5,
-        "tp2_ma20_ext_pct": 9.5,
-        "tp3_ma20_ext_pct": 14.5,
+        "tp1_fib_mult": cfg.to_float(getattr(cfg, "TP1_FIB_MULT", 1.90), 1.90),
+        "tp2_fib_mult": cfg.to_float(getattr(cfg, "TP2_FIB_MULT", 3.29), 3.29),
+        "tp3_fib_mult": cfg.to_float(getattr(cfg, "TP3_FIB_MULT", 4.47), 4.47),
+        "tp1_ma20_ext_pct": 6.4,
+        "tp2_ma20_ext_pct": 9.8,
+        "tp3_ma20_ext_pct": 13.3,
     }
 
     hist_file = getattr(cfg, "HISTORY_FILE", "analyzer_history.json")
@@ -48,9 +48,9 @@ def get_dynamic_tp_params():
                 params["tp1_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp1_fib_mult"), params["tp1_fib_mult"]), 1.50, 2.35))
                 params["tp2_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp2_fib_mult"), params["tp2_fib_mult"]), 2.30, 3.50))
                 params["tp3_fib_mult"] = float(np.clip(cfg.to_float(dt.get("tp3_fib_mult"), params["tp3_fib_mult"]), 3.10, 4.80))
-                params["tp1_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp1_ma20_ext_pct"), 5.5), 3.0, 9.0))
-                params["tp2_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp2_ma20_ext_pct"), 9.5), 6.0, 15.0))
-                params["tp3_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp3_ma20_ext_pct"), 14.5), 9.5, 24.0))
+                params["tp1_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp1_ma20_ext_pct"), 6.4), 3.0, 9.0))
+                params["tp2_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp2_ma20_ext_pct"), 9.8), 6.0, 15.0))
+                params["tp3_ma20_ext_pct"] = float(np.clip(cfg.to_float(dt.get("tp3_ma20_ext_pct"), 13.3), 9.5, 24.0))
         except Exception:
             pass
 
@@ -302,19 +302,68 @@ def analyze_symbol(coin):
     if close <= 0:
         return None
 
-    # 1. 설거지 및 역V자 급락 사전 차단
-    recent_12h = df_5m.iloc[-144:]
-    high_12h = to_float(recent_12h["high"].max(), close)
-    low_12h = to_float(recent_12h["low"].min(), close)
+    turnover_m = to_float(coin.get("turnover_m"))
+    if turnover_m <= 0:
+        turnover_m = to_float(coin.get("turnover24h")) / 1e6
 
-    drawdown_12h_pct = (high_12h - close) / max(high_12h, 1e-8) * 100.0
-    if drawdown_12h_pct >= cfg.MAX_DRAWDOWN_FROM_12H_HIGH_PCT:
+    oi_m = to_float(coin.get("oi_m"))
+    if oi_m <= 0:
+        oi_m = to_float(coin.get("openInterestValue")) / 1e6
+
+    if "funding_pct" in coin:
+        raw_f = to_float(coin.get("funding_pct"))
+        funding_pct = cfg.normalize_funding_pct(raw_f) if hasattr(cfg, "normalize_funding_pct") else raw_f
+    else:
+        funding_pct = to_float(coin.get("fundingRate")) * 100.0
+
+    if "change_24h" in coin:
+        change_24h = to_float(coin.get("change_24h"))
+    else:
+        change_24h = to_float(coin.get("price24hPcnt")) * 100.0
+
+    oi_turnover_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0
+
+    # 1H 상위프레임 중심선 지지 먼저 계산
+    ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
+    ema20_1h = to_float(df_1h["close"].ewm(span=20, adjust=False).mean().iloc[-1], close)
+    htf_support_ok = (close >= ma20_1h * 0.995) or (close >= ema20_1h * 0.995)
+    if not htf_support_ok:
         return None
 
-    prior_pump_pct = (high_12h - low_12h) / max(low_12h, 1e-8) * 100.0
-    if prior_pump_pct >= cfg.MAX_PRIOR_PUMP_PCT:
-        retracement_ratio = (high_12h - close) / max(high_12h - low_12h, 1e-8)
-        if retracement_ratio >= cfg.MAX_RETRACEMENT_RATIO:
+    # 최근 12시간 고점·저점 및 피보나치 되돌림 비율 계산
+    recent_12h = df_5m.iloc[-144:]
+    high_pos_12h = int(df_5m.index.get_loc(recent_12h["high"].idxmax()))
+    high_12h = to_float(recent_12h["high"].max(), close)
+    # 고점 이전의 발화 바닥점을 찾아 정확한 상승 파동 크기 측정
+    pre_high_slice = df_5m.iloc[max(0, len(df_5m) - 144): max(1, high_pos_12h + 1)]
+    low_before_high = to_float(pre_high_slice["low"].min(), to_float(recent_12h["low"].min(), close))
+
+    drawdown_12h_pct = (high_12h - close) / max(high_12h, 1e-8) * 100.0
+    prior_pump_pct = (high_12h - low_before_high) / max(low_before_high, 1e-8) * 100.0
+    fib_retracement_ratio = (high_12h - close) / max(high_12h - low_before_high, 1e-8)
+
+    # [🔥 신규 Track C 후보 자격 심사 ($EVAA 1.58달러 대장주 눌림목 기준)]
+    # 거래대금 25M 이상 + 직전 파동 +35% 이상 폭등 + 피보나치 0.35~0.62(50% 중심값 부근) 눌림 + 1H 중심선 지지 + 청정 펀딩비
+    leader_min_turn = getattr(cfg, "LEADER_MIN_TURNOVER_M", 25.0)
+    leader_min_pump = getattr(cfg, "LEADER_MIN_PRIOR_PUMP_PCT", 35.0)
+    fib_ret_min = getattr(cfg, "LEADER_FIB_RETRACE_MIN", 0.35)
+    fib_ret_max = getattr(cfg, "LEADER_FIB_RETRACE_MAX", 0.62)
+    leader_max_fund = getattr(cfg, "LEADER_MAX_FUNDING_PCT", 0.0150)
+
+    is_leader_fib_candidate = (
+        turnover_m >= leader_min_turn
+        and prior_pump_pct >= leader_min_pump
+        and change_24h >= 18.0
+        and (fib_ret_min <= fib_retracement_ratio <= fib_ret_max)
+        and htf_support_ok
+        and funding_pct <= leader_max_fund
+    )
+
+    # 1. 일반 종목 설거지 및 역V자 급락 사전 차단 (대장주 피보나치 눌림목 후보만 예외 허용)
+    if not is_leader_fib_candidate:
+        if drawdown_12h_pct >= cfg.MAX_DRAWDOWN_FROM_12H_HIGH_PCT:
+            return None
+        if prior_pump_pct >= cfg.MAX_PRIOR_PUMP_PCT and fib_retracement_ratio >= cfg.MAX_RETRACEMENT_RATIO:
             return None
 
     # 2. 멀티프레임 과열 차단
@@ -344,7 +393,7 @@ def analyze_symbol(coin):
         return None
     if close < ma112_15m and ((ma112_15m - close) / close * 100.0) <= 4.5:
         return None
-    if close < ma50_15m and ((ma50_15m - close) / close * 100.0) <= 3.0:
+    if not is_leader_fib_candidate and close < ma50_15m and ((ma50_15m - close) / close * 100.0) <= 3.0:
         return None
 
     ribbon_max = df_5m[["ema5", "ema20", "ema50"]].max(axis=1)
@@ -363,22 +412,9 @@ def analyze_symbol(coin):
     if bb_mid_ext_pct > allowed_bb_ext:
         return None
 
-    if "change_24h" in coin:
-        change_24h = to_float(coin.get("change_24h"))
-    else:
-        change_24h = to_float(coin.get("price24hPcnt")) * 100.0
-
-    # 4. 1H 상위프레임 구조적 지지 (5종목 중 5종목 적중 필수 필터)
-    ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
-    ema20_1h = to_float(df_1h["close"].ewm(span=20, adjust=False).mean().iloc[-1], close)
-    htf_support_ok = (close >= ma20_1h * 0.995) or (close >= ema20_1h * 0.995)
-
-    if not htf_support_ok:
-        return None
-
     btc_dumping, _ = get_btc_market_regime()
     if btc_dumping:
-        if close < bb_mid_15m or change_24h < 2.5:
+        if (not is_leader_fib_candidate and close < bb_mid_15m) or change_24h < 2.5:
             return None
 
     if close >= ma20_1h and rsi6_1h >= 55.0:
@@ -433,22 +469,6 @@ def analyze_symbol(coin):
     cond_ema_ribbon = (pre5_min_ribbon_spread <= cfg.EMA_RIBBON_MAX_SPREAD_PCT) and (close > ma50)
     cond_vol_pocket = (pre_vol_pocket_ratio <= cfg.PRE_VOL_POCKET_MAX_RATIO) and (vol_mult >= cfg.EARLY_VOL_MULT_MIN)
 
-    turnover_m = to_float(coin.get("turnover_m"))
-    if turnover_m <= 0:
-        turnover_m = to_float(coin.get("turnover24h")) / 1e6
-
-    oi_m = to_float(coin.get("oi_m"))
-    if oi_m <= 0:
-        oi_m = to_float(coin.get("openInterestValue")) / 1e6
-
-    if "funding_pct" in coin:
-        raw_f = to_float(coin.get("funding_pct"))
-        funding_pct = cfg.normalize_funding_pct(raw_f) if hasattr(cfg, "normalize_funding_pct") else raw_f
-    else:
-        funding_pct = to_float(coin.get("fundingRate")) * 100.0
-
-    oi_turnover_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0
-
     breakout_diff_pct = (close - prev_box_high) / max(prev_box_high, 1e-8) * 100.0
     sr_error_pct = abs(pullback_low - prev_box_high) / max(prev_box_high, 1e-8) * 100.0
     is_current_ignition = (ignition_idx == df_5m.index[-1])
@@ -457,9 +477,13 @@ def analyze_symbol(coin):
     upper_wick_ratio = (high_p - max(open_p, close)) / curr_range
     curr_candle_gain_pct = (close - open_p) / max(open_p, 1e-8) * 100.0
 
-    # 1) 전고점 S/R Flip 칼지지
+    # =====================================================================
+    # [트랙 조건 판정: 기존 Track B / Track A 유지 + 신규 Track C 추가]
+    # =====================================================================
+    # 1) Track B: 전고점 S/R Flip 칼지지
     cond_sr_flip_retest = (
-        (not is_current_ignition)
+        (not is_leader_fib_candidate)
+        and (not is_current_ignition)
         and (close >= prev_box_high * 0.996)
         and (breakout_diff_pct <= cfg.EARLY_BREAKOUT_MAX_PCT)
         and (sr_error_pct <= cfg.SR_FLIP_TOLERANCE_PCT)
@@ -467,11 +491,12 @@ def analyze_symbol(coin):
         and (vol_mult >= cfg.EARLY_VOL_MULT_MIN)
     )
 
-    # 2) 공중 눌림(High-Tight Bull Flag)
+    # 2) Track B: 공중 눌림(High-Tight Bull Flag)
     impulse_range = max(ignition_high - prev_box_high, close * 0.004)
     flag_support_line = ignition_high - (impulse_range * cfg.BULL_FLAG_MAX_RETRACE)
     cond_bull_flag = (
-        (not is_current_ignition)
+        (not is_leader_fib_candidate)
+        and (not is_current_ignition)
         and (close > prev_box_high)
         and (breakout_diff_pct <= cfg.EARLY_BREAKOUT_MAX_PCT)
         and (pullback_low >= flag_support_line)
@@ -480,10 +505,11 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 3) 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지
+    # 3) Track B: 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지
     fvg_mid_line = (ignition_open + ignition_high) * 0.5
     cond_fvg_mid_hold = (
-        (not is_current_ignition)
+        (not is_leader_fib_candidate)
+        and (not is_current_ignition)
         and (close >= prev_box_high * 0.995)
         and (breakout_diff_pct <= cfg.EARLY_BREAKOUT_MAX_PCT)
         and (pullback_low >= fvg_mid_line * 0.998)
@@ -491,9 +517,10 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 4) 포켓 피벗(Pocket Pivot) 초동 양봉 직격
+    # 4) Track B: 포켓 피벗(Pocket Pivot) 초동 양봉 직격
     cond_pocket_pivot = (
-        is_current_ignition
+        (not is_leader_fib_candidate)
+        and is_current_ignition
         and (close > open_p)
         and (0.4 <= curr_candle_gain_pct <= 3.8)
         and (upper_wick_ratio <= 0.36)
@@ -503,9 +530,10 @@ def analyze_symbol(coin):
         and htf_support_ok
     )
 
-    # 5) Track A (박스권 선취매)
+    # 5) Track A: 박스권 선취매 & 거래량 건조 눌림
     cond_track_a_pullback = (
-        htf_support_ok
+        (not is_leader_fib_candidate)
+        and htf_support_ok
         and (close >= ma112)
         and (close <= prev_box_high * 1.008)
         and (close >= ma20 * 0.996)
@@ -514,85 +542,127 @@ def analyze_symbol(coin):
         and (ma_short_aligned or cond_spring or cond_ema_ribbon)
     )
 
+    # 6) 🔥 신규 Track C: 대장주 피보나치 0.5(38.2%~62%) 눌림목 + 1H MA20 지지 + 5m MA20 재탈환 ($EVAA 1.58달러 공식)
+    recent_pullback_low = to_float(df_5m["low"].iloc[-12:].min(), close)
+    rebound_from_pb_low_pct = (close - recent_pullback_low) / max(recent_pullback_low, 1e-8) * 100.0
+    cond_track_c_leader_fib = (
+        is_leader_fib_candidate
+        and (close >= ma20 * 0.998)
+        and (close > open_p or ma5 >= ma20 * 0.998)
+        and (0.8 <= rebound_from_pb_low_pct <= 7.5)
+        and (obv_slope_up or cvd_slope_up or vol_mult >= 1.8 or lower_wick_ratio_max6 >= 1.3)
+    )
+
     is_track_b = cond_sr_flip_retest or cond_bull_flag or cond_fvg_mid_hold or cond_pocket_pivot
-    if not is_track_b and not cond_track_a_pullback:
+    if not is_track_b and not cond_track_a_pullback and not cond_track_c_leader_fib:
         return None
 
-    track_type = "TRACK_B" if is_track_b else "TRACK_A"
+    if cond_track_c_leader_fib:
+        track_type = "TRACK_C"
+        track_title = "🔥 [대장주 피보나치 0.5 눌림목 2파동 반등 포착]"
+    elif is_track_b:
+        track_type = "TRACK_B"
+        track_title = "🚀 [2차 돌파/리테스트 타점 포착]"
+    else:
+        track_type = "TRACK_A"
+        track_title = "🟢 [1차 선취매/눌림 타점 포착]"
 
     score = 0
     reasons = []
 
-    if track_type == "TRACK_B":
-        if cond_sr_flip_retest:
-            score += 20
-            reasons.append(f"전고점 S/R Flip 칼지지(오차 {sr_error_pct:.2f}%/눌림거래량 {int(round(pullback_vol_ratio * 100))}%)")
-        elif cond_bull_flag:
-            score += 20
-            reasons.append(f"공중눌림 Bull Flag 칼지지(상단38.2%·MA5 사수/눌림거래량 {int(round(pullback_vol_ratio * 100))}%)")
-        elif cond_fvg_mid_hold:
-            score += 20
-            reasons.append(f"장대양봉 50%(FVG) 중심선 칼지지(눌림거래량 {int(round(pullback_vol_ratio * 100))}%)")
-        elif cond_pocket_pivot:
-            score += 20
-            reasons.append(f"포켓피벗 초동양봉 직격(직전거래량 {int(round(pre_vol_pocket_ratio * 100))}% 건조 후 {curr_vol_mult:.1f}배 발화)")
+    if track_type == "TRACK_C":
+        fib_pct_val = int(round(fib_retracement_ratio * 100))
+        score += 22
+        reasons.append(
+            f"대장주(거래대금 {turnover_m:.0f}M·직전 +{prior_pump_pct:.0f}% 폭발) 피보나치 {fib_pct_val}% 눌림목 지지"
+        )
+        score += 14
+        reasons.append("1H 중심선(MA20) 지지 + 5m MA20 재탈환 2파동 시동")
+        if obv_slope_up or cvd_slope_up:
+            score += 12
+            reasons.append("눌림목 구간 OBV/CVD 세력 매수세 유지(이탈 없음)")
+        else:
+            score += 8
+            reasons.append(f"눌림 바닥 아랫꼬리({lower_wick_ratio_max6:.1f}배) 저가 매수 유입")
+
+        if pre_vol_pocket_ratio <= 0.45 or effective_dryup_ratio <= 0.35:
+            score += 8
+            reasons.append("조정 말기 투매 거래량 건조 확인 후 반등 양봉")
+        if vol_mult >= 2.0 or curr_vol_mult >= 1.5:
+            score += 6
+            reasons.append(f"반등 수급 재유입({max(vol_mult, curr_vol_mult):.1f}배)")
     else:
-        if effective_dryup_ratio <= cfg.PULLBACK_DRYUP_STRICT:
-            score += 20
-            reasons.append(f"거래량 극건조 눌림 포켓({int(round(effective_dryup_ratio * 100))}%)")
+        if track_type == "TRACK_B":
+            if cond_sr_flip_retest:
+                score += 20
+                reasons.append(f"전고점 S/R Flip 칼지지(오차 {sr_error_pct:.2f}%/눌림거래량 {int(round(pullback_vol_ratio * 100))}%)")
+            elif cond_bull_flag:
+                score += 20
+                reasons.append(f"공중눌림 Bull Flag 칼지지(상단38.2%·MA5 사수/눌림거래량 {int(round(pullback_vol_ratio * 100))}%)")
+            elif cond_fvg_mid_hold:
+                score += 20
+                reasons.append(f"장대양봉 50%(FVG) 중심선 칼지지(눌림거래량 {int(round(pullback_vol_ratio * 100))}%)")
+            elif cond_pocket_pivot:
+                score += 20
+                reasons.append(f"포켓피벗 초동양봉 직격(직전거래량 {int(round(pre_vol_pocket_ratio * 100))}% 건조 후 {curr_vol_mult:.1f}배 발화)")
         else:
-            score += 17
-            reasons.append(f"거래량 건조 선취매 포켓({int(round(effective_dryup_ratio * 100))}%)")
+            if effective_dryup_ratio <= cfg.PULLBACK_DRYUP_STRICT:
+                score += 20
+                reasons.append(f"거래량 극건조 눌림 포켓({int(round(effective_dryup_ratio * 100))}%)")
+            else:
+                score += 17
+                reasons.append(f"거래량 건조 선취매 포켓({int(round(effective_dryup_ratio * 100))}%)")
 
-    if ma_full_aligned:
-        score += 15
-        reasons.append("완전 정배열(5>20>50>112) 지지")
-    elif ma_short_aligned:
-        score += 14
-        reasons.append("단기 정배열(5>20>50) 지지")
-    elif cond_spring:
-        score += 14
-        reasons.append(f"유동성 스윕(Spring 아랫꼬리 {lower_wick_ratio_max6:.1f}배) 반전")
-    elif cond_ema_ribbon:
-        score += 13
-        reasons.append(f"바닥 이평리본 수렴 돌파({pre5_min_ribbon_spread:.1f}%)")
+        if ma_full_aligned:
+            score += 15
+            reasons.append("완전 정배열(5>20>50>112) 지지")
+        elif ma_short_aligned:
+            score += 14
+            reasons.append("단기 정배열(5>20>50) 지지")
+        elif cond_spring:
+            score += 14
+            reasons.append(f"유동성 스윕(Spring 아랫꼬리 {lower_wick_ratio_max6:.1f}배) 반전")
+        elif cond_ema_ribbon:
+            score += 13
+            reasons.append(f"바닥 이평리본 수렴 돌파({pre5_min_ribbon_spread:.1f}%)")
 
-    if htf_support_ok:
-        score += 10
-        reasons.append("상위프레임(1H 중심선) 구조적 지지")
+        if htf_support_ok:
+            score += 10
+            reasons.append("상위프레임(1H 중심선) 구조적 지지")
 
-    allowed_box_max = cfg.PRE_BOX_LOOSE_MAX_PCT if cond_spring else cfg.PRE_BOX_RANGE_MAX_PCT
-    if pre_box_range_pct <= cfg.PRE_BOX_TIGHT_PCT:
-        score += 12
-        if cond_cvd_div:
+        allowed_box_max = cfg.PRE_BOX_LOOSE_MAX_PCT if cond_spring else cfg.PRE_BOX_RANGE_MAX_PCT
+        if pre_box_range_pct <= cfg.PRE_BOX_TIGHT_PCT:
+            score += 12
+            if cond_cvd_div:
+                score += 8
+                reasons.append(f"박스응축({pre_box_range_pct:.1f}%)+CVD 강세 다이버전스(저점 스윕 매수흡수)")
+            elif obv_slope_up:
+                score += 8
+                reasons.append(f"초응축({pre_box_range_pct:.1f}%)+OBV 선행매집")
+            else:
+                score += 5
+                reasons.append(f"초응축 박스권({pre_box_range_pct:.1f}%)")
+        elif pre_box_range_pct <= allowed_box_max:
             score += 8
-            reasons.append(f"박스응축({pre_box_range_pct:.1f}%)+CVD 강세 다이버전스(저점 스윕 매수흡수)")
-        elif obv_slope_up:
+            if cond_cvd_div or obv_slope_up:
+                score += 8
+                reasons.append(f"박스응축({pre_box_range_pct:.1f}%)+OBV/CVD 선행매집")
+
+        if cond_ema_ribbon:
+            score += 9
+            reasons.append(f"이평리본 초밀집 확산({pre5_min_ribbon_spread:.1f}%)")
+        elif ttm_squeeze:
             score += 8
-            reasons.append(f"초응축({pre_box_range_pct:.1f}%)+OBV 선행매집")
-        else:
-            score += 5
-            reasons.append(f"초응축 박스권({pre_box_range_pct:.1f}%)")
-    elif pre_box_range_pct <= allowed_box_max:
-        score += 8
-        if cond_cvd_div or obv_slope_up:
-            score += 8
-            reasons.append(f"박스응축({pre_box_range_pct:.1f}%)+OBV/CVD 선행매집")
+            reasons.append("TTM 켈트너 스퀴즈 응축 돌파")
 
-    if cond_ema_ribbon:
-        score += 9
-        reasons.append(f"이평리본 초밀집 확산({pre5_min_ribbon_spread:.1f}%)")
-    elif ttm_squeeze:
-        score += 8
-        reasons.append("TTM 켈트너 스퀴즈 응축 돌파")
+        if cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX:
+            score += 6
+            reasons.append(f"초동수급 폭발({vol_mult:.1f}배)")
+        elif cond_vol_pocket or pre_vol_pocket_ratio <= 0.35:
+            score += 6
+            reasons.append(f"발화전 거래량 극건조 포켓({int(round(pre_vol_pocket_ratio * 100))}%)")
 
-    if cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX:
-        score += 6
-        reasons.append(f"초동수급 폭발({vol_mult:.1f}배)")
-    elif cond_vol_pocket or pre_vol_pocket_ratio <= 0.35:
-        score += 6
-        reasons.append(f"발화전 거래량 극건조 포켓({int(round(pre_vol_pocket_ratio * 100))}%)")
-
+    # 공통 수급 점수 (OI & 펀딩비)
     if oi_m >= 1.0 and oi_turnover_ratio >= 8.0:
         score += 10
         reasons.append(f"OI 실수급 유입(OI {oi_m:.1f}M·비중 {int(round(oi_turnover_ratio))}%)")
@@ -614,8 +684,12 @@ def analyze_symbol(coin):
     if score < active_threshold:
         return None
 
-    support_line = max(prev_box_low, min(ma50, ignition_low))
-    swing_high_line = max(prev_box_high, ignition_high)
+    if track_type == "TRACK_C":
+        support_line = recent_pullback_low
+        swing_high_line = high_12h
+    else:
+        support_line = max(prev_box_low, min(ma50, ignition_low))
+        swing_high_line = max(prev_box_high, ignition_high)
 
     entry_low = close * 0.9975
     entry_high = close * 1.0010
@@ -636,43 +710,54 @@ def analyze_symbol(coin):
     fib2 = tp_params["tp2_fib_mult"]
     fib3 = tp_params["tp3_fib_mult"]
 
-    ext1_ratio = 1.0 + tp_params["tp1_ma20_ext_pct"] / 100.0
-    ext2_ratio = 1.0 + tp_params["tp2_ma20_ext_pct"] / 100.0
-    ext3_ratio = 1.0 + tp_params["tp3_ma20_ext_pct"] / 100.0
+    if track_type == "TRACK_C":
+        # 대장주 눌림목(Track C)은 1차(반락 폭의 50% 회복) -> 2차(직전 고점 재탈환) -> 3차(전고점 돌파 신고가 파동)로 설계
+        pullback_depth = max(high_12h - close, close * 0.08)
+        tp1 = max(close * tp1_min_ratio, min(close * 1.13, close + pullback_depth * 0.50))
+        tp2 = max(close * tp2_min_ratio, tp1 * 1.05, min(close * 1.25, high_12h * 0.985))
+        tp3 = max(close * tp3_min_ratio, tp2 * 1.06, min(close * tp3_cap_ratio, high_12h * 1.08))
+        tp_labels = [
+            "1차반등(낙폭50%회복)",
+            "2차전고점(고점재테스트)",
+            "3차신고가(대시세2파동)"
+        ]
+    else:
+        ext1_ratio = 1.0 + tp_params["tp1_ma20_ext_pct"] / 100.0
+        ext2_ratio = 1.0 + tp_params["tp2_ma20_ext_pct"] / 100.0
+        ext3_ratio = 1.0 + tp_params["tp3_ma20_ext_pct"] / 100.0
 
-    wave_height = max(swing_high_line - support_line, close * 0.042)
-    fib_tp1 = support_line + wave_height * fib1
-    fib_tp2 = support_line + wave_height * fib2
-    fib_tp3 = support_line + wave_height * fib3
+        wave_height = max(swing_high_line - support_line, close * 0.042)
+        fib_tp1 = support_line + wave_height * fib1
+        fib_tp2 = support_line + wave_height * fib2
+        fib_tp3 = support_line + wave_height * fib3
 
-    ma_env_tp1 = max(bb_mid_15m, ma20_1h) * ext1_ratio
-    ma_env_tp2 = max(bb_mid_15m, ma20_1h) * ext2_ratio
-    ma_env_tp3 = max(bb_mid_15m, ma20_1h) * ext3_ratio
+        ma_env_tp1 = max(bb_mid_15m, ma20_1h) * ext1_ratio
+        ma_env_tp2 = max(bb_mid_15m, ma20_1h) * ext2_ratio
+        ma_env_tp3 = max(bb_mid_15m, ma20_1h) * ext3_ratio
 
-    blended_w1 = (fib_tp1 * 0.55) + (ma_env_tp1 * 0.45)
-    blended_w2 = (fib_tp2 * 0.55) + (ma_env_tp2 * 0.45)
-    blended_w3 = (fib_tp3 * 0.60) + (ma_env_tp3 * 0.40)
+        blended_w1 = (fib_tp1 * 0.55) + (ma_env_tp1 * 0.45)
+        blended_w2 = (fib_tp2 * 0.55) + (ma_env_tp2 * 0.45)
+        blended_w3 = (fib_tp3 * 0.60) + (ma_env_tp3 * 0.40)
 
-    tp1 = max(close * tp1_min_ratio, min(close * 1.13, blended_w1))
-    tp2 = max(close * tp2_min_ratio, tp1 * 1.05, min(close * 1.24, blended_w2))
-    tp3 = max(close * tp3_min_ratio, tp2 * 1.06, min(close * tp3_cap_ratio, blended_w3))
+        tp1 = max(close * tp1_min_ratio, min(close * 1.13, blended_w1))
+        tp2 = max(close * tp2_min_ratio, tp1 * 1.05, min(close * 1.24, blended_w2))
+        tp3 = max(close * tp3_min_ratio, tp2 * 1.06, min(close * tp3_cap_ratio, blended_w3))
+        tp_labels = [
+            f"1차첫조정(Fib {fib1:.2f}·MA이격)",
+            f"2차중간고점(Fib {fib2:.2f}·MA이격)",
+            f"3차최종고점(Fib {fib3:.2f}·클라이맥스)"
+        ]
 
     tp1_pct = round((tp1 - close) / close * 100.0, 1)
     tp2_pct = round((tp2 - close) / close * 100.0, 1)
     tp3_pct = round((tp3 - close) / close * 100.0, 1)
-
-    tp_labels = [
-        f"1차첫조정(Fib {fib1:.2f}·MA이격)",
-        f"2차중간고점(Fib {fib2:.2f}·MA이격)",
-        f"3차최종고점(Fib {fib3:.2f}·클라이맥스)"
-    ]
 
     return SafeAlertDict({
         "symbol": symbol,
         "base_coin": base_coin,
         "base": base_coin,
         "track_type": track_type,
-        "track_title": "🚀 [2차 돌파/리테스트 타점 포착]" if track_type == "TRACK_B" else "🟢 [1차 선취매/눌림 타점 포착]",
+        "track_title": track_title,
         "score": score,
         "price": close,
         "last_price": close,
