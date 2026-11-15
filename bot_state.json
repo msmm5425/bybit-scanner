@@ -140,9 +140,9 @@
         "OI 실수급 유입(OI 1.4M·비중 73%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.05109,
-      "peak_ts_ms": 1794747360000,
-      "max_favorable_pct": 5.73,
+      "max_high_price": 0.05116,
+      "peak_ts_ms": 1794748140000,
+      "max_favorable_pct": 5.88,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -765,9 +765,9 @@
         "OI 실수급 유입(OI 2.7M·비중 85%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.0635,
-      "peak_ts_ms": 1794746640000,
-      "max_favorable_pct": 0.79,
+      "max_high_price": 0.0637,
+      "peak_ts_ms": 1794747960000,
+      "max_favorable_pct": 1.11,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -921,9 +921,9 @@
         "OI 실수급 유입(OI 3.0M·비중 139%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 2.417e-06,
-      "peak_ts_ms": 1794747420000,
-      "max_favorable_pct": 0.83,
+      "max_high_price": 2.418e-06,
+      "peak_ts_ms": 1794747660000,
+      "max_favorable_pct": 0.88,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -973,9 +973,9 @@
         "OI 실수급 유입(OI 162.1M·비중 123%)",
         "청정 펀딩 수급(+0.0025%)"
       ],
-      "max_high_price": 68.36,
-      "peak_ts_ms": 1794746100000,
-      "max_favorable_pct": 0.74,
+      "max_high_price": 68.451,
+      "peak_ts_ms": 1794747660000,
+      "max_favorable_pct": 0.87,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -1076,9 +1076,9 @@
         "OI 실수급 유입(OI 1.5M·비중 42%)",
         "청정 펀딩 수급(+0.0050%)"
       ],
-      "max_high_price": 0.03251,
-      "peak_ts_ms": 1794747420000,
-      "max_favorable_pct": 1.94,
+      "max_high_price": 0.03289,
+      "peak_ts_ms": 1794748080000,
+      "max_favorable_pct": 3.14,
       "history_backfilled": true,
       "be_armed": false,
       "tp1_hit": false,
@@ -1141,6 +1141,57 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false
+    },
+    "BERAUSDT": {
+      "created_at": 1794748544,
+      "track_type": "TRACK_A",
+      "score": 85,
+      "entry_price": 0.0952,
+      "swing_high_line": 0.0961,
+      "entry_low": 0.09496200000000002,
+      "entry_high": 0.0952952,
+      "initial_stop_price": 0.089488,
+      "stop_price": 0.089488,
+      "sl_pct": 6,
+      "tps": [
+        0.10281600000000002,
+        0.115192,
+        0.12471200000000002
+      ],
+      "tp_pcts": [
+        8.0,
+        21.0,
+        31.0
+      ],
+      "vol_mult": 10.3,
+      "rsi6_15m": 61.6,
+      "kdj_j_15m": 85.4,
+      "oi_m": 0.8895877045000001,
+      "turnover_m": 3.28862167479,
+      "funding_pct": -0.13140000000000002,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(0%)",
+        "완전 정배열(5>20>50>112) 지지",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "이평리본 초밀집 확산(1.1%)",
+        "초동수급 폭발(10.3배)",
+        "OI 수급 동조(OI 0.9M)",
+        "음수 펀딩 숏스퀴즈 수급(-0.1314%)"
+      ],
+      "max_high_price": 0.0952,
+      "peak_ts_ms": 1794748544000,
+      "max_favorable_pct": 0.0,
+      "history_backfilled": true,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "breakout_alerted": true,
+      "sl_alerted": false,
+      "tp3_completed": false,
+      "closed_alerted": false
     }
   },
   "alert_history": {
@@ -1165,7 +1216,8 @@
     "HYPEUSDT": 1794744726,
     "FARTCOINUSDT": 1794744726,
     "UAIUSDT": 1794746527,
-    "PENGUUSDT": 1794746836
+    "PENGUUSDT": 1794746836,
+    "BERAUSDT": 1794748544
   },
   "sl_history": {},
   "signal_episodes": {
@@ -1237,8 +1289,8 @@
         0.0599168,
         0.0715136
       ],
-      "max_high_price": 0.05109,
-      "max_favorable_pct": 5.73,
+      "max_high_price": 0.05116,
+      "max_favorable_pct": 5.88,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -1561,8 +1613,8 @@
         0.07622999999999999,
         0.08253
       ],
-      "max_high_price": 0.0635,
-      "max_favorable_pct": 0.79,
+      "max_high_price": 0.0637,
+      "max_favorable_pct": 1.11,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -1642,8 +1694,8 @@
         2.90037e-06,
         3.1400700000000002e-06
       ],
-      "max_high_price": 2.417e-06,
-      "max_favorable_pct": 0.83,
+      "max_high_price": 2.418e-06,
+      "max_favorable_pct": 0.88,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -1669,8 +1721,8 @@
         82.11181,
         88.89791000000001
       ],
-      "max_high_price": 68.36,
-      "max_favorable_pct": 0.74,
+      "max_high_price": 68.451,
+      "max_favorable_pct": 0.87,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -1723,8 +1775,8 @@
         0.0385869,
         0.041775900000000005
       ],
-      "max_high_price": 0.03251,
-      "max_favorable_pct": 1.94,
+      "max_high_price": 0.03289,
+      "max_favorable_pct": 3.14,
       "be_armed": false,
       "tp1_hit": false,
       "tp2_hit": false,
@@ -1762,6 +1814,34 @@
       "sl_alerted": false,
       "closed_alerted": false,
       "sl_at": 0
+    },
+    "BERAUSDT_1794748544": {
+      "symbol": "BERAUSDT",
+      "created_at": 1794748544,
+      "track_type": "TRACK_A",
+      "score": 85,
+      "entry_price": 0.0952,
+      "initial_stop_price": 0.089488,
+      "stop_price": 0.089488,
+      "sl_pct": 6.0,
+      "tps": [
+        0.10281600000000002,
+        0.115192,
+        0.12471200000000002
+      ],
+      "max_high_price": 0.0952,
+      "max_favorable_pct": 0.0,
+      "be_armed": false,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
     }
-  }
+  },
+  "uai_chart_test_done": true
 }
