@@ -218,8 +218,41 @@ def build_briefing_message(res, now_str):
     return "\n".join(lines)
 
 
+def build_x_hook_line(res):
+    """포착된 전략과 근거를 분석해 X(트위터)용 짧은 한 줄 핵심 요약 문구 생성"""
+    track_type = str(res.get("track_type", "TRACK_A"))
+    reasons = res.get("reasons") or []
+    r_text = " ".join(str(x) for x in reasons)
+
+    if "재진입" in str(res.get("track_title", "")) or "재탈환" in r_text:
+        return "개미털기 바닥 확인 후 거래량 실리며 V자 반등 시도중"
+
+    if track_type == "TRACK_C":
+        return "급등 대장주 핵심 눌림목 지지 후 2차 파동 시도중"
+
+    if track_type == "TRACK_B":
+        if "포켓피벗" in r_text:
+            return "거래량이 살아나면서 전고점 돌파 시도중"
+        if "S/R Flip" in r_text:
+            return "전고점 돌파 후 지지선 안착하며 재상승 시도중"
+        if "Bull Flag" in r_text or "FVG" in r_text:
+            return "장대양봉 돌파 후 매물 소화하며 추가 상승 시도중"
+        return "거래량이 살아나면서 전고점 돌파 시도중"
+
+    # TRACK_A (선취매 / 눌림목)
+    if "유동성 스윕" in r_text or "Spring" in r_text:
+        return "아랫꼬리 개미털기 후 매수세 유입되며 반등 시도중"
+    if "켈트너 스퀴즈" in r_text or "초응축" in r_text:
+        return "박스권 에너지 응축 후 거래량 살아나며 추세 전환중"
+    if "음수 펀딩" in r_text:
+        return "숏 스퀴즈 수급 유입되며 단기 추세 반등 시도중"
+    if "이평리본" in r_text:
+        return "이평선 밀집 수렴 후 수급 살아나며 돌파 시도중"
+    return "눌림목 거래량 건조 후 수급 살아나며 반등 시도중"
+
+
 def build_x_post_message(res):
-    """요청하신 최신 X(트위터) 전용 양식 반영"""
+    """요청하신 최신 X(트위터) 전용 양식 (핵심 한 줄 포착 사유 포함)"""
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
     price = to_float(res.get("price"))
@@ -235,11 +268,14 @@ def build_x_post_message(res):
     p2 = int(round(to_float(tp_pcts[1], 16.0)))
     p3 = int(round(to_float(tp_pcts[2], 24.0)))
 
+    hook_line = build_x_hook_line(res)
+
     return (
-        "혹시 이 종목을 보유하고 있는 분 계신가요?\n"
-        "😎 개인 검색기에 포착된 종목😎\n\n"
+        "혹시 이 종목을 보유하고 있는 분 계신가요?\n\n"
+        "😎개인 검색기에 포착된 종목😎\n"
+        f"⚠️{hook_line}⚠️\n\n"
         f"${base} ({symbol})\n\n"
-        f"- 진입 구간: {fmt_price(e_low)} ~ {fmt_price(e_high)} USDT\n"
+        f"- 진입 구간: {fmt_price(e_low)} ~ {fmt_price(e_high)} USDT\n\n"
         f"- SL: {fmt_price(sl_p)} (-{sl_pct}%)\n"
         f"- tp1: {fmt_price(tps[0])}(+{p1}%)\n"
         f"- tp2: {fmt_price(tps[1])}(+{p2}%)\n"
@@ -251,9 +287,8 @@ def _render_tradingview_lightweight_chart(df, res):
     """
     [트레이딩뷰 Lightweight Charts 15분봉 24시간(96캔들) 렌더링 엔진]
     1) 15분봉 96개(24시간 흐름) 표시 + 이평선 MA(5), MA(9), MA(20) 적용
-    2) 양방향 비선형 스케일(Two-Sided Piecewise Scale)로 SL 하단 빈 여백과 TP 상단 여백을 모두 압축해
-       캔들 몸통이 화면 중앙을 큼직하게 채우도록 확대
-    3) 거래량 바 높이를 하단 10%로 축소 & 진입한 마지막 캔들 봉 하단에 '▲ ENTRY' 화살표 마커 표시
+    2) 양방향 비선형 스케일로 SL 하단 빈 여백과 TP 상단 여백을 모두 압축해 캔들 크기 확대
+    3) 거래량 바 높이를 하단 10%로 축소 & 진입한 마지막 캔들 하단에 '▲ ENTRY' 화살표 마커 표시
     """
     if not _ensure_playwright():
         return None
@@ -285,7 +320,6 @@ def _render_tradingview_lightweight_chart(df, res):
     p2 = int(round(to_float(tp_pcts[1], 16.0)))
     p3 = int(round(to_float(tp_pcts[2], 24.0)))
 
-    # [핵심] 96개 캔들의 실제 고저점 범위를 기준으로 상단(TP)과 하단(SL) 빈 여백을 동시에 압축
     candle_min_low = to_float(df["low"].min(), price * 0.97)
     candle_max_high = to_float(df["high"].max(), price * 1.02)
 
@@ -299,7 +333,6 @@ def _render_tradingview_lightweight_chart(df, res):
     tp_span = max(tp3_p - high_piv, price * 0.04)
     sl_span = max(low_piv - sl_p, price * 0.01)
 
-    # 상단 TP 구간은 캔들 높이의 48% 수준으로 압축, 하단 SL 여백은 캔들 높이의 16% 수준으로 대폭 축소!
     up_comp = float(np.clip((core_candle_span * 0.48) / tp_span, 0.08, 0.65))
     down_comp = float(np.clip((core_candle_span * 0.16) / sl_span, 0.08, 0.55)) if sl_p < low_piv else 1.0
 
@@ -527,7 +560,6 @@ def _render_tradingview_lightweight_chart(df, res):
   const whitespaceData = {json.dumps(whitespace_js)};
   candleSeries.setData([...candlesData, ...whitespaceData]);
 
-  // 진입한 마지막 캔들 하단에 진입 화살표 아이콘(▲ ENTRY) 표시
   candleSeries.setMarkers([
     {{
       time: candlesData[candlesData.length - 1].time,
@@ -539,7 +571,6 @@ def _render_tradingview_lightweight_chart(df, res):
     }}
   ]);
 
-  // 이평선 5, 9, 20 렌더링
   const ma5Series = chart.addLineSeries({{ color: '#00e5ff', lineWidth: 1.6, priceLineVisible: false, lastValueVisible: false }});
   ma5Series.setData({json.dumps(ma5_js)});
 
@@ -549,7 +580,6 @@ def _render_tradingview_lightweight_chart(df, res):
   const ma20Series = chart.addLineSeries({{ color: '#2962ff', lineWidth: 2.0, priceLineVisible: false, lastValueVisible: false }});
   ma20Series.setData({json.dumps(ma20_js)});
 
-  // 거래량 영역을 하단 10%로 축소해 캔들 영역 극대화
   const volSeries = chart.addHistogramSeries({{
     priceFormat: {{ type: 'volume' }},
     priceScaleId: 'vol_scale',
@@ -580,7 +610,6 @@ def _render_tradingview_lightweight_chart(df, res):
     }});
   }});
 
-  // 상단 TP3와 하단 SL까지 여백 없이 딱 맞게 들어오도록 바운딩
   const boundsSeries = chart.addLineSeries({{
     color: 'rgba(0,0,0,0)',
     lineWidth: 1,
@@ -646,7 +675,6 @@ def generate_signal_chart_bytes(res):
     df["ma9"] = df["close"].rolling(9, min_periods=3).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=5).mean()
 
-    # 정확히 24시간 분량인 최근 96개 15분봉 슬라이싱
     df = df.iloc[-96:].reset_index(drop=True)
 
     return _render_tradingview_lightweight_chart(df, res)
@@ -705,7 +733,7 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text):
 
 
 def send_uai_sample_test():
-    """직전 포착된 $BNC 종목으로 24시간(96캔들) + MA(5,9,20) + SL여백 축소 + 진입마커 비교 테스트 발송"""
+    """직전 포착된 $BNC 종목으로 24시간(96캔들) + 새 X 양식 비교 테스트 발송"""
     sample_res = {
         "symbol": "BNCUSDT",
         "base_coin": "BNC",
@@ -720,6 +748,7 @@ def send_uai_sample_test():
         "sl_pct": 6,
         "tps": [4.1659, 4.5481, 4.9685],
         "tp_pcts": [9.0, 19.0, 30.0],
+        "reasons": ["포켓피벗 초동양봉 직격"],
     }
     x_caption = build_x_post_message(sample_res)
     chart_bytes = generate_signal_chart_bytes(sample_res)
