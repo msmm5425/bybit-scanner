@@ -17,7 +17,6 @@ from notifier import (
     fmt_price,
     generate_signal_chart_bytes,
     send_telegram_photo_with_caption,
-    send_uai_sample_test,
 )
 
 RE_ALERT_COOLDOWN_SEC = 43200
@@ -96,38 +95,17 @@ def save_state(state):
         print(f"[상태 저장 오류] {e}")
 
 
-def sync_episode_ledger(signal_episodes, symbol, t_item):
+def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
+    """
+    [손절->익절 둔갑 버그 수정 및 기존 데이터 자동 복구]
+    - 손절(sl_alerted)된 종목이 closed_alerted == True 조건 때문에 익절(tp1_hit/tp3_completed)로
+      잘못 덮어써지던 문제를 차단하고, 기존에 잘못 켜진 손절 종목의 익절 플래그를 자동 복구합니다.
+    """
     c_at = int(t_item.get("created_at", 0))
     if c_at <= 0:
         return
     ep_key = f"{symbol}_{c_at}"
     prev_ep = signal_episodes.get(ep_key, {})
-
-    lock_flags = (
-        "be_armed", "tp1_hit", "tp2_hit",
-        "tp1_alerted", "tp2_alerted", "tp3_alerted",
-        "tp3_completed", "sl_alerted", "closed_alerted",
-    )
-    for flag in lock_flags:
-        if prev_ep.get(flag) or t_item.get(flag):
-            t_item[flag] = True
-
-    if t_item.get("tp3_completed") or t_item.get("closed_alerted"):
-        t_item["tp1_hit"] = True
-        t_item["tp2_hit"] = True
-        t_item["tp1_alerted"] = True
-        t_item["tp2_alerted"] = True
-        t_item["tp3_alerted"] = True
-        t_item["tp3_completed"] = True
-        t_item["closed_alerted"] = True
-    elif t_item.get("tp2_hit") or t_item.get("tp2_alerted"):
-        t_item["tp1_hit"] = True
-        t_item["tp2_hit"] = True
-        t_item["tp1_alerted"] = True
-        t_item["tp2_alerted"] = True
-    elif t_item.get("tp1_hit") or t_item.get("tp1_alerted"):
-        t_item["tp1_hit"] = True
-        t_item["tp1_alerted"] = True
 
     max_h = max(
         to_float(prev_ep.get("max_high_price")),
@@ -140,6 +118,50 @@ def sync_episode_ledger(signal_episodes, symbol, t_item):
     )
     t_item["max_high_price"] = max_h
     t_item["max_favorable_pct"] = max_fav
+
+    is_sl = bool(
+        t_item.get("sl_alerted")
+        or prev_ep.get("sl_alerted")
+        or (isinstance(sl_history, dict) and ep_key in sl_history)
+    )
+
+    if is_sl:
+        t_item["sl_alerted"] = True
+        t_item["closed_alerted"] = True
+        if max_fav < 7.0:
+            t_item["tp1_hit"] = False
+            t_item["tp2_hit"] = False
+            t_item["tp1_alerted"] = False
+            t_item["tp2_alerted"] = False
+            t_item["tp3_alerted"] = False
+            t_item["tp3_completed"] = False
+            t_item["be_armed"] = False
+    else:
+        lock_flags = (
+            "be_armed", "tp1_hit", "tp2_hit",
+            "tp1_alerted", "tp2_alerted", "tp3_alerted",
+            "tp3_completed", "closed_alerted",
+        )
+        for flag in lock_flags:
+            if prev_ep.get(flag) or t_item.get(flag):
+                t_item[flag] = True
+
+        if t_item.get("tp3_completed") or t_item.get("tp3_alerted"):
+            t_item["tp1_hit"] = True
+            t_item["tp2_hit"] = True
+            t_item["tp1_alerted"] = True
+            t_item["tp2_alerted"] = True
+            t_item["tp3_alerted"] = True
+            t_item["tp3_completed"] = True
+            t_item["closed_alerted"] = True
+        elif t_item.get("tp2_hit") or t_item.get("tp2_alerted"):
+            t_item["tp1_hit"] = True
+            t_item["tp2_hit"] = True
+            t_item["tp1_alerted"] = True
+            t_item["tp2_alerted"] = True
+        elif t_item.get("tp1_hit") or t_item.get("tp1_alerted"):
+            t_item["tp1_hit"] = True
+            t_item["tp1_alerted"] = True
 
     signal_episodes[ep_key] = {
         "symbol": symbol,
@@ -344,7 +366,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 )
         return {"messages": messages, "sl_record": None}
 
-    # 6. 전략적 고정 손절선(-6%, init_stop_p) 이탈 확인
+    # 6. 전략적 고정 손절선(-6%, init_stop_p) 이탈 확인 (시간 경과에 따른 손절 축소 없이 -6% 고정 원칙 준수)
     min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
     min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
 
@@ -353,8 +375,12 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
         t_item["sl_alerted"] = True
         t_item["closed_alerted"] = True
+        t_item["tp1_hit"] = False
+        t_item["tp2_hit"] = False
+        t_item["tp3_completed"] = False
         t_item["sl_at"] = now_ts
         t_item["sl_trigger_price"] = trigger_price
+        t_item["sl_pct"] = DEFAULT_FIXED_SL_PCT
         t_item["hold_minutes"] = hold_min
 
         sl_key = f"{symbol}_{created_at}"
@@ -415,19 +441,20 @@ def _send_signal_notifications_safe(res, now_str):
         p2 = int(round(to_float(tp_pcts[1], 16.0)))
         p3 = int(round(to_float(tp_pcts[2], 24.0)))
         x_msg = (
-            "혹시 이 종목을 보유하고 있는 분 계신가요?\n"
-            "어디에서 익절될거 같나요?😎\n\n"
+            "혹시 이 종목을 보유하고 있는 분 계신가요?\n\n"
+            "😎개인 검색기에 포착된 종목😎\n"
+            "⚠️거래량이 살아나면서 전고점 돌파 시도중⚠️\n\n"
             f"${res.get('base_coin', '')} ({res.get('symbol', '')})\n\n"
-            f"- 진입 구간: {fmt_price(res.get('entry_low', 0))} ~ {fmt_price(res.get('entry_high', 0))} USDT\n"
-            f"- SL: {fmt_price(res.get('stop_price', 0))} USDT (-{int(round(to_float(res.get('sl_pct'), DEFAULT_FIXED_SL_PCT)))}%)\n"
-            f"- 1차 {fmt_price(tps[0])}(+{p1}%)\n"
-            f"- 2차 {fmt_price(tps[1])}(+{p2}%)\n"
-            f"- 3차 {fmt_price(tps[2])}(+{p3}%)"
+            f"- 진입 구간: {fmt_price(res.get('entry_low', 0))} ~ {fmt_price(res.get('entry_high', 0))} USDT\n\n"
+            f"- SL: {fmt_price(res.get('stop_price', 0))} (-{int(round(to_float(res.get('sl_pct'), DEFAULT_FIXED_SL_PCT)))}%)\n"
+            f"- tp1: {fmt_price(tps[0])}(+{p1}%)\n"
+            f"- tp2: {fmt_price(tps[1])}(+{p2}%)\n"
+            f"- tp3: {fmt_price(tps[2])}(+{p3}%)"
         )
 
     chart_bytes = generate_signal_chart_bytes(res)
     if chart_bytes:
-        sent_photo = send_telegram_photo_with_caption(chart_bytes, x_caption if "x_caption" in locals() else x_msg)
+        sent_photo = send_telegram_photo_with_caption(chart_bytes, x_msg)
         if not sent_photo:
             send_telegram_reliable(x_msg)
     else:
@@ -437,14 +464,6 @@ def _send_signal_notifications_safe(res, now_str):
 def main():
     start_t = time.time()
     state = load_state()
-
-    # [$UAI 차트+X양식 최초 1회 자동 테스트 발송 (성적표 데이터에는 일절 기록되지 않음)]
-    if not state.get("uai_chart_test_done"):
-        print("[테스트] $UAI 예시 차트 + X 양식 1회 테스트 발송 실행 중...")
-        if send_uai_sample_test():
-            state["uai_chart_test_v2"] = True
-            save_state(state)
-
     tracked = state.get("tracked", {})
     alert_history = state.get("alert_history", {})
     sl_history = state.get("sl_history", {})
@@ -497,7 +516,7 @@ def main():
             del tracked[sym]
             continue
 
-        sync_episode_ledger(signal_episodes, sym, t_item)
+        sync_episode_ledger(signal_episodes, sym, t_item, sl_history)
 
         is_sl_done = bool(t_item.get("sl_alerted", False))
         is_tp3_done = bool(t_item.get("tp3_completed", False))
@@ -526,12 +545,12 @@ def main():
                 sym = f_map[fut]
                 try:
                     out = fut.result()
-                    sync_episode_ledger(signal_episodes, sym, tracked[sym])
-                    if not out:
-                        continue
-                    if out.get("sl_record"):
+                    if out and out.get("sl_record"):
                         k, v = out["sl_record"]
                         sl_history[k] = v
+                    sync_episode_ledger(signal_episodes, sym, tracked[sym], sl_history)
+                    if not out:
+                        continue
                     for msg in out.get("messages", []):
                         pending_1m_messages.append(msg)
                 except Exception as e:
@@ -651,7 +670,7 @@ def main():
             "closed_alerted": False,
         }
         alert_history[symbol] = now_ts
-        sync_episode_ledger(signal_episodes, symbol, tracked[symbol])
+        sync_episode_ledger(signal_episodes, symbol, tracked[symbol], sl_history)
 
         state["tracked"] = tracked
         state["alert_history"] = alert_history
