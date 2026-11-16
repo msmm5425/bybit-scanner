@@ -2,7 +2,6 @@ import os
 import numpy as np
 from datetime import timedelta, timezone
 
-# 1. 환경변수 및 기본 설정 (TELEGRAM_TOKEN / TELEGRAM_BOT_TOKEN 모두 호환)
 TELEGRAM_BOT_TOKEN = (
     os.getenv("TELEGRAM_TOKEN")
     or os.getenv("TELEGRAM_BOT_TOKEN")
@@ -19,64 +18,58 @@ KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
 HISTORY_FILE = "analyzer_history.json"
 
-# =====================================================================
-# [기존 Track A/B 초입 전용 강화 + Track C(대장주 피보나치 0.5 눌림목) 세팅]
-# =====================================================================
-SCORE_THRESHOLD = 85                   # 평시 85점 이상 알림 발송
-BTC_DUMP_SCORE_THRESHOLD = 90          # BTC 급락 시 컷오프 90점으로 자동 상향
-BTC_DUMP_DROP_15M_PCT = -0.70          # BTC 15분봉 최근 3캔들 고점 대비 -0.70% 이하 시 위험장 판정
-BTC_DUMP_DROP_1H_PCT = -1.20           # BTC 1시간봉 최근 4캔들 고점 대비 -1.20% 이하 시 도미노 투매장 판정
-MAX_NEW_ALERTS_PER_SCAN = 3            # 1회 스캔(5분)당 최고점 상위 3종목만 발송
+SCORE_THRESHOLD = 85
+BTC_DUMP_SCORE_THRESHOLD = 90
+BTC_DUMP_DROP_15M_PCT = -0.70
+BTC_DUMP_DROP_1H_PCT = -1.20
+MAX_NEW_ALERTS_PER_SCAN = 3
 
-# [-6% 고정 손절 & 1R(+6%) 본전 방어]
-FIXED_SL_PCT = 6                       # 급등 전 아랫꼬리 휩소 방어를 위한 -6% 고정 손절
-BREAKEVEN_TRIGGER_PCT = 6.0            # 손절폭(-6%)과 1:1(1R)인 +6.0% 도달 시 본전(진입가 위) 방어 자동 가동
-SL_RECOVERY_COOLDOWN_SEC = 14400       # 스탑헌팅 손절 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
+# [-6% 고정 손절 & 1R(+6%) 본전 방어 원칙 고정]
+FIXED_SL_PCT = 6
+BREAKEVEN_TRIGGER_PCT = 6.0
+SL_RECOVERY_COOLDOWN_SEC = 14400
 
-# [Top 5 + 스캐너 코인 1·2·3차 파동 로데이터 결합 기본 TP 설정]
-TP1_MIN_PCT = 8.5                      # 1차 TP (첫 조정 형성 고점: 7%~14% 범위 동적 조율)
-TP2_MIN_PCT = 16.0                     # 2차 TP (중간 조정 고점: 13%~26% 범위 동적 조율)
-TP3_MIN_PCT = 24.0                     # 3차 TP (최종 클라이맥스 고점: 20%~45% 범위 동적 조율)
-TP3_MAX_CAP_PCT = 50.0                 # 3차 TP 상한선
+TP1_MIN_PCT = 8.5
+TP2_MIN_PCT = 16.0
+TP3_MIN_PCT = 24.0
+TP3_MAX_CAP_PCT = 50.0
 
-TP1_FIB_MULT = 1.90
-TP2_FIB_MULT = 3.29
-TP3_FIB_MULT = 4.47
+TP1_FIB_MULT = 1.85
+TP2_FIB_MULT = 2.95
+TP3_FIB_MULT = 4.10
 
-# [🔥 Track C: 대장주 피보나치 0.5 깊은 눌림목 전용 파라미터]
-LEADER_MIN_TURNOVER_M = 25.0           # 대장주 인정 최소 24h 거래대금 (25M USDT 이상)
-LEADER_MIN_PRIOR_PUMP_PCT = 35.0       # 직전 12시간 내 최소 +35% 이상 폭발한 대시세 종목만 대상
-LEADER_FIB_RETRACE_MIN = 0.38          # 고점 대비 최소 38%(Fib 0.382) 이상 충분히 눌려야만 진입 (꼭대기 진입 원천 차단!)
-LEADER_FIB_RETRACE_MAX = 0.62          # 고점 대비 최대 62%(Fib 0.618) 이내 되돌림 칼지지
-LEADER_MAX_FUNDING_PCT = 0.0150        # 대장주 눌림목 진입 시 허용 최대 펀딩비
+LEADER_MIN_TURNOVER_M = 25.0
+LEADER_MIN_PRIOR_PUMP_PCT = 35.0
+LEADER_FIB_RETRACE_MIN = 0.38
+LEADER_FIB_RETRACE_MAX = 0.62
+LEADER_MAX_FUNDING_PCT = 0.0150
 
-PULLBACK_DRYUP_STRICT = 0.14           # 발화봉 대비 눌림 거래량 14% 이하 극건조
-PULLBACK_DRYUP_MAX = 0.21              # 발화봉 대비 눌림 거래량 상한
-SR_FLIP_DRYUP_RATIO_MAX = 0.22         # 돌파 후 S/R Flip 리테스트 거래량 상한
-SR_FLIP_TOLERANCE_PCT = 1.25           # 전고점 S/R Flip 칼지지 허용 오차
+PULLBACK_DRYUP_STRICT = 0.14
+PULLBACK_DRYUP_MAX = 0.19
+SR_FLIP_DRYUP_RATIO_MAX = 0.22
+SR_FLIP_TOLERANCE_PCT = 1.25
 
-PRE_BOX_RANGE_MAX_PCT = 6.0            # 직전 2시간 박스 변동폭 상한
-PRE_BOX_LOOSE_MAX_PCT = 14.0           # 역배열 유동성 스윕(Spring) 시 허용 박스 상한
-PRE_BOX_TIGHT_PCT = 4.0                # 4.0% 이내 초응축 시 가산점 부여
-EMA_RIBBON_MAX_SPREAD_PCT = 1.6        # 이평선 리본 초밀집 기준
-PRE_VOL_POCKET_MAX_RATIO = 0.35        # 발화 직전 5캔들 최저거래량 / vol_ma20
+PRE_BOX_RANGE_MAX_PCT = 5.5
+PRE_BOX_LOOSE_MAX_PCT = 14.0
+PRE_BOX_TIGHT_PCT = 4.0
+EMA_RIBBON_MAX_SPREAD_PCT = 1.6
+PRE_VOL_POCKET_MAX_RATIO = 0.35
 
-EARLY_VOL_MULT_MIN = 2.6               # 초동 최소 거래량 배수 (2.6배)
-EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 돌파 대응 상한
-EARLY_BREAKOUT_MAX_PCT = 4.2           # 돌파 양봉 직후 공중 눌림(Bull Flag/FVG) 허용 상한 (4.2%)
-BULL_FLAG_MAX_RETRACE = 0.382          # 돌파 양봉 상단 38.2% 이내 공중 지지 기준
+EARLY_VOL_MULT_MIN = 2.6
+EARLY_VOL_MULT_MAX = 150.0
+EARLY_BREAKOUT_MAX_PCT = 4.2
+BULL_FLAG_MAX_RETRACE = 0.382
 
-# [🛡️ $EVAA 2.7692 고점 설거지 타점 영구 차단 필터 (Track A / Track B 전용)]
-MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 일반 코인: 최근 12시간 고점 대비 -7.5% 이상 하락 시 즉시 차단
-MAX_PRIOR_PUMP_PCT = 22.0              # 일반 코인(Track A/B): 최근 12h 저점 대비 이미 +22% 이상 오른 종목은 고점 박스권이므로 무조건 차단!
-MAX_CHANGE_24H_FOR_EARLY_TRACK = 26.0  # 일반 코인(Track A/B): 24h 상승률이 이미 +26%를 넘은 종목은 1차 선취매/초동 돌파에서 제외!
-MAX_MA112_15M_EXT_PCT = 13.5           # 일반 코인(Track A/B): 15분봉 MA112 대비 +13.5% 이상 공중에 붕 떠 있는 고점 박스권 즉시 차단!
-MAX_RETRACEMENT_RATIO = 0.35           # 폭등 후 상승폭의 35% 이상 반납 시 즉시 차단
+MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5
+MAX_PRIOR_PUMP_PCT = 22.0
+MAX_CHANGE_24H_FOR_EARLY_TRACK = 26.0
+MAX_MA112_15M_EXT_PCT = 13.5
+MAX_RETRACEMENT_RATIO = 0.35
 
-CUTOFF_RSI6_15M_MAX = 75.0             # 15분봉 RSI(6) 75 이상 진입 차단
-CUTOFF_KDJ_J_15M_MAX = 88.0            # 15분봉 KDJ J값 88 이상 진입 차단
-CUTOFF_BB_MID_EXT_MAX_PCT = 4.8        # 초응축 돌파 첫 파동 15분봉 BB 중심선 이격 허용 상한 (4.8%)
-CUTOFF_RSI6_1H_MAX = 78.0              # 1시간봉 RSI(6) 78 이상 장기 과열 차단
+CUTOFF_RSI6_15M_MAX = 75.0
+CUTOFF_KDJ_J_15M_MAX = 88.0
+CUTOFF_BB_MID_EXT_MAX_PCT = 4.8
+CUTOFF_RSI6_1H_MAX = 78.0
 
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -88,6 +81,7 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,ko;q=0.8",
 }
 
+# [$PEPE 등 시총이 무거운 준메이저·대형 밈코인 제외 목록]
 HEAVY_MAJOR_COINS = {
     "BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX", "LTC", "BCH",
     "DOT", "AVAX", "LINK", "XLM", "TON", "SHIB", "ETC", "XMR", "ZEC", "EOS",
@@ -97,7 +91,7 @@ HEAVY_MAJOR_COINS = {
     "TIA", "INJ", "FET", "TAO", "WLD", "PENDLE", "ENA", "STRK", "ONDO", "QNT",
     "CRV", "SNX", "COMP", "SUSHI", "1INCH", "DYDX", "GMX", "GRT", "SAND", "MANA",
     "AXS", "APE", "GALA", "IMX", "FLOW", "THETA", "EGLD", "XTZ", "NEO", "IOTA", "KAS",
-    "WIF"
+    "WIF", "PEPE", "BONK", "FLOKI", "ORDI", "SATS", "NOT", "BOME", "MEW", "MEME"
 }
 
 NON_CRYPTO_META_KEYWORDS = (
