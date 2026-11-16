@@ -20,7 +20,7 @@ STATE_FILE = "bot_state.json"
 HISTORY_FILE = "analyzer_history.json"
 
 # =====================================================================
-# [기존 Track A/B + 신규 Track C(대장주 피보나치 0.5 눌림목) 통합 세팅]
+# [기존 Track A/B 초입 전용 강화 + Track C(대장주 피보나치 0.5 눌림목) 세팅]
 # =====================================================================
 SCORE_THRESHOLD = 85                   # 평시 85점 이상 알림 발송
 BTC_DUMP_SCORE_THRESHOLD = 90          # BTC 급락 시 컷오프 90점으로 자동 상향
@@ -34,21 +34,21 @@ BREAKEVEN_TRIGGER_PCT = 6.0            # 손절폭(-6%)과 1:1(1R)인 +6.0% 도�
 SL_RECOVERY_COOLDOWN_SEC = 14400       # 스탑헌팅 손절 후 4시간 경과 & 88점↑ 시 V자 재진입 허용
 
 # [Top 5 + 스캐너 코인 1·2·3차 파동 로데이터 결합 기본 TP 설정]
-TP1_MIN_PCT = 8.5                      # 1차 TP (첫 조정 형성 고점: 8%~13% 범위 동적 조율)
-TP2_MIN_PCT = 16.0                     # 2차 TP (중간 조정 고점: 14%~22% 범위 동적 조율)
-TP3_MIN_PCT = 24.0                     # 3차 TP (최종 클라이맥스 고점: 21%~36% 범위 동적 조율)
+TP1_MIN_PCT = 8.5                      # 1차 TP (첫 조정 형성 고점: 7%~14% 범위 동적 조율)
+TP2_MIN_PCT = 16.0                     # 2차 TP (중간 조정 고점: 13%~26% 범위 동적 조율)
+TP3_MIN_PCT = 24.0                     # 3차 TP (최종 클라이맥스 고점: 20%~45% 범위 동적 조율)
 TP3_MAX_CAP_PCT = 50.0                 # 3차 TP 상한선
 
 TP1_FIB_MULT = 1.90
 TP2_FIB_MULT = 3.29
 TP3_FIB_MULT = 4.47
 
-# [🔥 신규 Track C: 대장주 피보나치 0.5 눌림목($EVAA 1.58달러 타점) 전용 파라미터]
+# [🔥 Track C: 대장주 피보나치 0.5 깊은 눌림목 전용 파라미터]
 LEADER_MIN_TURNOVER_M = 25.0           # 대장주 인정 최소 24h 거래대금 (25M USDT 이상)
 LEADER_MIN_PRIOR_PUMP_PCT = 35.0       # 직전 12시간 내 최소 +35% 이상 폭발한 대시세 종목만 대상
-LEADER_FIB_RETRACE_MIN = 0.35          # 고점 대비 최소 35% 이상 상승폭 되돌림 (고점 추격 방지)
-LEADER_FIB_RETRACE_MAX = 0.62          # 고점 대비 최대 62%(Fib 0.618) 이내 되돌림 칼지지 (추세 붕괴 방지)
-LEADER_MAX_FUNDING_PCT = 0.0150        # 대장주 눌림목 진입 시 허용 최대 펀딩비 (롱 과열 설거지 차단)
+LEADER_FIB_RETRACE_MIN = 0.38          # 고점 대비 최소 38%(Fib 0.382) 이상 충분히 눌려야만 진입 (꼭대기 진입 원천 차단!)
+LEADER_FIB_RETRACE_MAX = 0.62          # 고점 대비 최대 62%(Fib 0.618) 이내 되돌림 칼지지
+LEADER_MAX_FUNDING_PCT = 0.0150        # 대장주 눌림목 진입 시 허용 최대 펀딩비
 
 PULLBACK_DRYUP_STRICT = 0.14           # 발화봉 대비 눌림 거래량 14% 이하 극건조
 PULLBACK_DRYUP_MAX = 0.21              # 발화봉 대비 눌림 거래량 상한
@@ -66,9 +66,12 @@ EARLY_VOL_MULT_MAX = 150.0             # 거래량 극건조 바닥 초응축 �
 EARLY_BREAKOUT_MAX_PCT = 4.2           # 돌파 양봉 직후 공중 눌림(Bull Flag/FVG) 허용 상한 (4.2%)
 BULL_FLAG_MAX_RETRACE = 0.382          # 돌파 양봉 상단 38.2% 이내 공중 지지 기준
 
+# [🛡️ $EVAA 2.7692 고점 설거지 타점 영구 차단 필터 (Track A / Track B 전용)]
 MAX_DRAWDOWN_FROM_12H_HIGH_PCT = 7.5   # 일반 코인: 최근 12시간 고점 대비 -7.5% 이상 하락 시 즉시 차단
-MAX_PRIOR_PUMP_PCT = 20.0              # 일반 코인: 최근 12시간 내 이미 +20% 이상 폭등 이력 시 설거지 경계
-MAX_RETRACEMENT_RATIO = 0.35           # 일반 코인: 폭등 후 상승폭의 35% 이상 반납 시 즉시 차단
+MAX_PRIOR_PUMP_PCT = 22.0              # 일반 코인(Track A/B): 최근 12h 저점 대비 이미 +22% 이상 오른 종목은 고점 박스권이므로 무조건 차단!
+MAX_CHANGE_24H_FOR_EARLY_TRACK = 26.0  # 일반 코인(Track A/B): 24h 상승률이 이미 +26%를 넘은 종목은 1차 선취매/초동 돌파에서 제외!
+MAX_MA112_15M_EXT_PCT = 13.5           # 일반 코인(Track A/B): 15분봉 MA112 대비 +13.5% 이상 공중에 붕 떠 있는 고점 박스권 즉시 차단!
+MAX_RETRACEMENT_RATIO = 0.35           # 폭등 후 상승폭의 35% 이상 반납 시 즉시 차단
 
 CUTOFF_RSI6_15M_MAX = 75.0             # 15분봉 RSI(6) 75 이상 진입 차단
 CUTOFF_KDJ_J_15M_MAX = 88.0            # 15분봉 KDJ J값 88 이상 진입 차단
