@@ -323,18 +323,15 @@ def analyze_symbol(coin):
 
     oi_turnover_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0
 
-    # 1H 상위프레임 중심선 지지 먼저 계산
     ma20_1h = to_float(df_1h["close"].rolling(20, min_periods=10).mean().iloc[-1], close)
     ema20_1h = to_float(df_1h["close"].ewm(span=20, adjust=False).mean().iloc[-1], close)
     htf_support_ok = (close >= ma20_1h * 0.995) or (close >= ema20_1h * 0.995)
     if not htf_support_ok:
         return None
 
-    # 최근 12시간 고점·저점 및 피보나치 되돌림 비율 계산
     recent_12h = df_5m.iloc[-144:]
     high_pos_12h = int(df_5m.index.get_loc(recent_12h["high"].idxmax()))
     high_12h = to_float(recent_12h["high"].max(), close)
-    # 고점 이전의 발화 바닥점을 찾아 정확한 상승 파동 크기 측정
     pre_high_slice = df_5m.iloc[max(0, len(df_5m) - 144): max(1, high_pos_12h + 1)]
     low_before_high = to_float(pre_high_slice["low"].min(), to_float(recent_12h["low"].min(), close))
 
@@ -342,8 +339,6 @@ def analyze_symbol(coin):
     prior_pump_pct = (high_12h - low_before_high) / max(low_before_high, 1e-8) * 100.0
     fib_retracement_ratio = (high_12h - close) / max(high_12h - low_before_high, 1e-8)
 
-    # [🔥 신규 Track C 후보 자격 심사 ($EVAA 1.58달러 대장주 눌림목 기준)]
-    # 거래대금 25M 이상 + 직전 파동 +35% 이상 폭등 + 피보나치 0.35~0.62(50% 중심값 부근) 눌림 + 1H 중심선 지지 + 청정 펀딩비
     leader_min_turn = getattr(cfg, "LEADER_MIN_TURNOVER_M", 25.0)
     leader_min_pump = getattr(cfg, "LEADER_MIN_PRIOR_PUMP_PCT", 35.0)
     fib_ret_min = getattr(cfg, "LEADER_FIB_RETRACE_MIN", 0.35)
@@ -359,14 +354,12 @@ def analyze_symbol(coin):
         and funding_pct <= leader_max_fund
     )
 
-    # 1. 일반 종목 설거지 및 역V자 급락 사전 차단 (대장주 피보나치 눌림목 후보만 예외 허용)
     if not is_leader_fib_candidate:
         if drawdown_12h_pct >= cfg.MAX_DRAWDOWN_FROM_12H_HIGH_PCT:
             return None
         if prior_pump_pct >= cfg.MAX_PRIOR_PUMP_PCT and fib_retracement_ratio >= cfg.MAX_RETRACEMENT_RATIO:
             return None
 
-    # 2. 멀티프레임 과열 차단
     rsi6_15m = to_float(calc_rsi(df_15m["close"], 6).iloc[-1], 50.0)
     kdj_j_15m = to_float(calc_kdj_j(df_15m, 9).iloc[-1], 50.0)
     rsi6_1h = to_float(calc_rsi(df_1h["close"], 6).iloc[-1], 50.0)
@@ -376,7 +369,6 @@ def analyze_symbol(coin):
     if rsi6_1h >= cfg.CUTOFF_RSI6_1H_MAX:
         return None
 
-    # 3. 5분봉 이평선, 리본 밀집도, 박스권 계산
     for p in (5, 20, 50, 112):
         df_5m[f"ma{p}"] = df_5m["close"].rolling(p, min_periods=min(p, 20)).mean()
         df_5m[f"ema{p}"] = df_5m["close"].ewm(span=p, adjust=False).mean()
@@ -386,7 +378,6 @@ def analyze_symbol(coin):
     ma50 = to_float(df_5m["ma50"].iloc[-1], close)
     ma112 = to_float(df_5m["ma112"].iloc[-1], close)
 
-    # 머리 바로 위(0%~+4.0%)에 5분봉 또는 15분봉 MA112/MA50 저항이 가로막고 있으면 진입 차단
     ma50_15m = to_float(df_15m["close"].rolling(50, min_periods=15).mean().iloc[-1], close)
     ma112_15m = to_float(df_15m["close"].rolling(112, min_periods=25).mean().iloc[-1], close)
     if close < ma112 and ((ma112 - close) / close * 100.0) <= 4.0:
@@ -477,10 +468,6 @@ def analyze_symbol(coin):
     upper_wick_ratio = (high_p - max(open_p, close)) / curr_range
     curr_candle_gain_pct = (close - open_p) / max(open_p, 1e-8) * 100.0
 
-    # =====================================================================
-    # [트랙 조건 판정: 기존 Track B / Track A 유지 + 신규 Track C 추가]
-    # =====================================================================
-    # 1) Track B: 전고점 S/R Flip 칼지지
     cond_sr_flip_retest = (
         (not is_leader_fib_candidate)
         and (not is_current_ignition)
@@ -491,7 +478,6 @@ def analyze_symbol(coin):
         and (vol_mult >= cfg.EARLY_VOL_MULT_MIN)
     )
 
-    # 2) Track B: 공중 눌림(High-Tight Bull Flag)
     impulse_range = max(ignition_high - prev_box_high, close * 0.004)
     flag_support_line = ignition_high - (impulse_range * cfg.BULL_FLAG_MAX_RETRACE)
     cond_bull_flag = (
@@ -505,7 +491,6 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 3) Track B: 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지
     fvg_mid_line = (ignition_open + ignition_high) * 0.5
     cond_fvg_mid_hold = (
         (not is_leader_fib_candidate)
@@ -517,7 +502,6 @@ def analyze_symbol(coin):
         and (cfg.EARLY_VOL_MULT_MIN <= vol_mult <= cfg.EARLY_VOL_MULT_MAX)
     )
 
-    # 4) Track B: 포켓 피벗(Pocket Pivot) 초동 양봉 직격
     cond_pocket_pivot = (
         (not is_leader_fib_candidate)
         and is_current_ignition
@@ -530,7 +514,6 @@ def analyze_symbol(coin):
         and htf_support_ok
     )
 
-    # 5) Track A: 박스권 선취매 & 거래량 건조 눌림
     cond_track_a_pullback = (
         (not is_leader_fib_candidate)
         and htf_support_ok
@@ -542,7 +525,6 @@ def analyze_symbol(coin):
         and (ma_short_aligned or cond_spring or cond_ema_ribbon)
     )
 
-    # 6) 🔥 신규 Track C: 대장주 피보나치 0.5(38.2%~62%) 눌림목 + 1H MA20 지지 + 5m MA20 재탈환 ($EVAA 1.58달러 공식)
     recent_pullback_low = to_float(df_5m["low"].iloc[-12:].min(), close)
     rebound_from_pb_low_pct = (close - recent_pullback_low) / max(recent_pullback_low, 1e-8) * 100.0
     cond_track_c_leader_fib = (
@@ -662,7 +644,6 @@ def analyze_symbol(coin):
             score += 6
             reasons.append(f"발화전 거래량 극건조 포켓({int(round(pre_vol_pocket_ratio * 100))}%)")
 
-    # 공통 수급 점수 (OI & 펀딩비)
     if oi_m >= 1.0 and oi_turnover_ratio >= 8.0:
         score += 10
         reasons.append(f"OI 실수급 유입(OI {oi_m:.1f}M·비중 {int(round(oi_turnover_ratio))}%)")
@@ -699,58 +680,65 @@ def analyze_symbol(coin):
     stop_price = close * (1.0 - sl_pct_int / 100.0)
     sl_note = f"급등전 휩소·스탑헌팅 방어 고정손절(-{sl_pct_int}%)"
 
-    # 2) Top 5 + 오답노트 로데이터 학습 기반 1·2·3차 익절(TP1~TP3) 산출
+    # =====================================================================
+    # 2) [핵심 수정] 코인별 고유 변동성(15m ATR%) · 박스 진폭 · 수급 폭발 배수를 반영한 맞춤형 TP1~TP3 산출
+    #    (모든 종목이 똑같은 최소 하한선 퍼센트로 고정되던 현상 완전 해결)
+    # =====================================================================
     tp_params = get_dynamic_tp_params()
-    tp1_min_ratio = 1.0 + tp_params["tp1_min_pct"] / 100.0
-    tp2_min_ratio = 1.0 + tp_params["tp2_min_pct"] / 100.0
-    tp3_min_ratio = 1.0 + tp_params["tp3_min_pct"] / 100.0
-    tp3_cap_ratio = 1.0 + tp_params["tp3_max_cap_pct"] / 100.0
+    base_tp1_pct = tp_params["tp1_min_pct"]
+    base_tp2_pct = tp_params["tp2_min_pct"]
+    base_tp3_pct = tp_params["tp3_min_pct"]
 
     fib1 = tp_params["tp1_fib_mult"]
     fib2 = tp_params["tp2_fib_mult"]
     fib3 = tp_params["tp3_fib_mult"]
 
+    # 개별 코인의 15분봉 ATR 변동성(%) 및 구조적 파동 크기(%) 측정
+    atr_15m_val = to_float(calc_atr(df_15m, 14).iloc[-1], close * 0.018)
+    atr_15m_pct = (atr_15m_val / close) * 100.0
+    struct_span_pct = (swing_high_line - support_line) / max(close, 1e-8) * 100.0
+
+    # 수급 폭발력(거래량 배수 + OI 비중 + 음수 펀딩 숏스퀴즈) 가중치 (0.85 ~ 1.45배)
+    vol_boost = float(np.clip((vol_mult - 2.2) * 0.045, -0.08, 0.25))
+    squeeze_boost = 0.12 if funding_pct < 0 else (0.06 if oi_turnover_ratio >= 25.0 else 0.0)
+    energy_mult = float(np.clip(1.0 + vol_boost + squeeze_boost, 0.85, 1.45))
+
+    # 코인 고유의 기본 1파동 단위 크기(%) 산출
+    coin_unit_wave_pct = float(np.clip((atr_15m_pct * 2.1 + struct_span_pct * 0.45) * energy_mult, 3.6, 8.5))
+
     if track_type == "TRACK_C":
-        # 대장주 눌림목(Track C)은 1차(반락 폭의 50% 회복) -> 2차(직전 고점 재탈환) -> 3차(전고점 돌파 신고가 파동)로 설계
-        pullback_depth = max(high_12h - close, close * 0.08)
-        tp1 = max(close * tp1_min_ratio, min(close * 1.13, close + pullback_depth * 0.50))
-        tp2 = max(close * tp2_min_ratio, tp1 * 1.05, min(close * 1.25, high_12h * 0.985))
-        tp3 = max(close * tp3_min_ratio, tp2 * 1.06, min(close * tp3_cap_ratio, high_12h * 1.08))
+        pullback_depth_pct = max((high_12h - close) / close * 100.0, 9.0)
+        calc_tp1_pct = float(np.clip(pullback_depth_pct * 0.52 * energy_mult, 8.0, 15.0))
+        calc_tp2_pct = float(np.clip(max(calc_tp1_pct + 6.0, pullback_depth_pct * 0.98), 15.0, 28.0))
+        calc_tp3_pct = float(np.clip(max(calc_tp2_pct + 8.0, pullback_depth_pct * 1.45 * energy_mult), 24.0, 46.0))
         tp_labels = [
             "1차반등(낙폭50%회복)",
             "2차전고점(고점재테스트)",
             "3차신고가(대시세2파동)"
         ]
     else:
-        ext1_ratio = 1.0 + tp_params["tp1_ma20_ext_pct"] / 100.0
-        ext2_ratio = 1.0 + tp_params["tp2_ma20_ext_pct"] / 100.0
-        ext3_ratio = 1.0 + tp_params["tp3_ma20_ext_pct"] / 100.0
+        # 개별 코인 파동 목표치(65% 가중치) + 일일 리포트 학습 기준치(35% 가중치) 결합
+        raw_w1_pct = (coin_unit_wave_pct * fib1 * 0.65) + (base_tp1_pct * 0.35)
+        raw_w2_pct = (coin_unit_wave_pct * fib2 * 0.65) + (base_tp2_pct * 0.35)
+        raw_w3_pct = (coin_unit_wave_pct * fib3 * 0.65) + (base_tp3_pct * 0.35)
 
-        wave_height = max(swing_high_line - support_line, close * 0.042)
-        fib_tp1 = support_line + wave_height * fib1
-        fib_tp2 = support_line + wave_height * fib2
-        fib_tp3 = support_line + wave_height * fib3
+        calc_tp1_pct = float(np.clip(raw_w1_pct, 7.0, 14.0))
+        calc_tp2_pct = float(np.clip(max(calc_tp1_pct + 5.5, raw_w2_pct), 13.0, 26.0))
+        calc_tp3_pct = float(np.clip(max(calc_tp2_pct + 7.0, raw_w3_pct), 20.0, 45.0))
 
-        ma_env_tp1 = max(bb_mid_15m, ma20_1h) * ext1_ratio
-        ma_env_tp2 = max(bb_mid_15m, ma20_1h) * ext2_ratio
-        ma_env_tp3 = max(bb_mid_15m, ma20_1h) * ext3_ratio
-
-        blended_w1 = (fib_tp1 * 0.55) + (ma_env_tp1 * 0.45)
-        blended_w2 = (fib_tp2 * 0.55) + (ma_env_tp2 * 0.45)
-        blended_w3 = (fib_tp3 * 0.60) + (ma_env_tp3 * 0.40)
-
-        tp1 = max(close * tp1_min_ratio, min(close * 1.13, blended_w1))
-        tp2 = max(close * tp2_min_ratio, tp1 * 1.05, min(close * 1.24, blended_w2))
-        tp3 = max(close * tp3_min_ratio, tp2 * 1.06, min(close * tp3_cap_ratio, blended_w3))
         tp_labels = [
-            f"1차첫조정(Fib {fib1:.2f}·MA이격)",
-            f"2차중간고점(Fib {fib2:.2f}·MA이격)",
+            f"1차첫조정(Fib {fib1:.2f}·ATR반영)",
+            f"2차중간고점(Fib {fib2:.2f}·ATR반영)",
             f"3차최종고점(Fib {fib3:.2f}·클라이맥스)"
         ]
 
-    tp1_pct = round((tp1 - close) / close * 100.0, 1)
-    tp2_pct = round((tp2 - close) / close * 100.0, 1)
-    tp3_pct = round((tp3 - close) / close * 100.0, 1)
+    tp1_pct = round(calc_tp1_pct, 1)
+    tp2_pct = round(calc_tp2_pct, 1)
+    tp3_pct = round(calc_tp3_pct, 1)
+
+    tp1 = close * (1.0 + tp1_pct / 100.0)
+    tp2 = close * (1.0 + tp2_pct / 100.0)
+    tp3 = close * (1.0 + tp3_pct / 100.0)
 
     return SafeAlertDict({
         "symbol": symbol,
