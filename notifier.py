@@ -106,18 +106,25 @@ def _ensure_playwright():
 
 def fetch_exact_bybit_klines(symbol, interval="15", limit=130):
     """
-    Bybit V5 공식 미러 서버에서 실제 15분봉(OHLC)과 거래량(Volume)을 조회해
-    과거 -> 현재 시간 오름차순으로 정렬합니다. (24시간 96캔들 + 이평선 계산용 여유분 포함 130캔들)
+    [100% Bybit V5 공식 미러 서버 전용]
+    타 거래소(비트겟·게이트아이오) 폴백을 완전히 제거하여,
+    실제 바이비트 선물에 상장된 코인의 15분봉(OHLC)과 거래량만 가져옵니다.
     """
+    if api_mod is not None and hasattr(api_mod, "fetch_klines"):
+        df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
+        if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= 30:
+            return df
+
     bybit_params = {
         "category": "linear",
-        "symbol": symbol,
+        "symbol": str(symbol).upper(),
         "interval": str(interval),
         "limit": int(limit),
     }
     bybit_hosts = (
         "https://api.bybit-tr.com",
         "https://api.bybit.kz",
+        "https://api.bybit.nl",
         "https://api.bytick.com",
         "https://api.bybit.com",
     )
@@ -133,38 +140,21 @@ def fetch_exact_bybit_klines(symbol, interval="15", limit=130):
             if resp.status_code == 200:
                 rows = resp.json().get("result", {}).get("list", [])
                 if isinstance(rows, list) and len(rows) >= 30:
-                    cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(rows[0])]
+                    cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][: len(rows[0])]
                     df = pd.DataFrame(rows, columns=cols)
                     for c in ("timestamp", "open", "high", "low", "close", "volume"):
                         df[c] = pd.to_numeric(df[c], errors="coerce")
                     if df["timestamp"].max() < 1e11:
                         df["timestamp"] = df["timestamp"] * 1000.0
-                    df = df.dropna(subset=["timestamp", "close"]).sort_values("timestamp", ascending=True).reset_index(drop=True)
+                    df = (
+                        df.dropna(subset=["timestamp", "close"])
+                        .sort_values("timestamp", ascending=True)
+                        .reset_index(drop=True)
+                    )
                     if len(df) >= 30:
                         return df
         except Exception:
             continue
-
-    try:
-        r = requests.get(
-            "https://api.bitget.com/api/v2/mix/market/candles",
-            params={"symbol": symbol, "productType": "USDT-FUTURES", "granularity": "15m", "limit": str(limit)},
-            headers=BROWSER_HEADERS,
-            timeout=4,
-        )
-        if r.status_code == 200:
-            rows = r.json().get("data", [])
-            if isinstance(rows, list) and len(rows) >= 30:
-                cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(rows[0])]
-                df = pd.DataFrame(rows, columns=cols)
-                for c in ("timestamp", "open", "high", "low", "close", "volume"):
-                    df[c] = pd.to_numeric(df[c], errors="coerce")
-                if df["timestamp"].max() < 1e11:
-                    df["timestamp"] = df["timestamp"] * 1000.0
-                df = df.dropna(subset=["timestamp", "close"]).sort_values("timestamp", ascending=True).reset_index(drop=True)
-                return df
-    except Exception:
-        pass
 
     return pd.DataFrame()
 
@@ -239,7 +229,6 @@ def build_x_hook_line(res):
             return "장대양봉 돌파 후 매물 소화하며 추가 상승 시도중"
         return "거래량이 살아나면서 전고점 돌파 시도중"
 
-    # TRACK_A (선취매 / 눌림목)
     if "유동성 스윕" in r_text or "Spring" in r_text:
         return "아랫꼬리 개미털기 후 매수세 유입되며 반등 시도중"
     if "켈트너 스퀴즈" in r_text or "초응축" in r_text:
@@ -252,7 +241,7 @@ def build_x_hook_line(res):
 
 
 def build_x_post_message(res):
-    """요청하신 최신 X(트위터) 전용 양식 (핵심 한 줄 포착 사유 포함)"""
+    """최신 X(트위터) 전용 양식 (핵심 한 줄 포착 사유 포함)"""
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
     price = to_float(res.get("price"))
@@ -286,7 +275,7 @@ def build_x_post_message(res):
 def _render_tradingview_lightweight_chart(df, res):
     """
     [트레이딩뷰 Lightweight Charts 15분봉 24시간(96캔들) 렌더링 엔진]
-    1) 15분봉 96개(24시간 흐름) 표시 + 이평선 MA(5), MA(9), MA(20) 적용
+    1) 바이비트 실제 15분봉 96개(24시간 흐름) 표시 + 이평선 MA(5), MA(9), MA(20) 적용
     2) 양방향 비선형 스케일로 SL 하단 빈 여백과 TP 상단 여백을 모두 압축해 캔들 크기 확대
     3) 거래량 바 높이를 하단 10%로 축소 & 진입한 마지막 캔들 하단에 '▲ ENTRY' 화살표 마커 표시
     """
@@ -553,6 +542,8 @@ def _render_tradingview_lightweight_chart(df, res):
     borderDownColor: '#ef5350',
     wickUpColor: '#26a69a',
     wickDownColor: '#ef5350',
+    priceLineVisible: false,
+    lastValueVisible: false,
     priceFormat: {{ type: 'custom', minMove: {min_move}, formatter: fmtReal }},
   }});
 
@@ -657,10 +648,6 @@ def _render_tradingview_lightweight_chart(df, res):
 
 
 def generate_signal_chart_bytes(res):
-    """
-    Bybit V5 실제 15분봉 130캔들을 조회하여 MA(5, 9, 20)을 계산한 뒤,
-    최근 24시간(96캔들)을 슬라이싱해 TradingView Lightweight Charts 이미지를 생성합니다.
-    """
     symbol = res.get("symbol", "")
     price = to_float(res.get("price"))
     if not symbol or price <= 0:
@@ -730,34 +717,3 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text):
             print(f"[텔레그램 차트 사진 전송 재시도 {attempt + 1}/3] {e}")
         time.sleep(1.2)
     return False
-
-
-def send_uai_sample_test():
-    """직전 포착된 $BNC 종목으로 24시간(96캔들) + 새 X 양식 비교 테스트 발송"""
-    sample_res = {
-        "symbol": "BNCUSDT",
-        "base_coin": "BNC",
-        "base": "BNC",
-        "track_type": "TRACK_B",
-        "track_title": "🚀 [2차 돌파/리테스트 타점 포착]",
-        "score": 97,
-        "price": 3.8219,
-        "entry_low": 3.8123,
-        "entry_high": 3.8257,
-        "stop_price": 3.5926,
-        "sl_pct": 6,
-        "tps": [4.1659, 4.5481, 4.9685],
-        "tp_pcts": [9.0, 19.0, 30.0],
-        "reasons": ["포켓피벗 초동양봉 직격"],
-    }
-    x_caption = build_x_post_message(sample_res)
-    chart_bytes = generate_signal_chart_bytes(sample_res)
-    if chart_bytes:
-        ok = send_telegram_photo_with_caption(chart_bytes, x_caption)
-        print(f"[TradingView 24H(96캔들) 차트 발송 결과]: {'성공' if ok else '실패'}")
-        return ok
-    return send_telegram_single(x_caption)
-
-
-if __name__ == "__main__":
-    send_uai_sample_test()
