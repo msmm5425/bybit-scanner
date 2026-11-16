@@ -40,6 +40,14 @@ from wave_engine import (
     extract_three_wave_structure,
 )
 
+BYBIT_HOSTS = (
+    "https://api.bybit-tr.com",
+    "https://api.bybit.kz",
+    "https://api.bybit.nl",
+    "https://api.bytick.com",
+    "https://api.bybit.com",
+)
+
 
 def normalize_funding_pct(raw_val):
     v = to_float(raw_val, 0.0)
@@ -66,128 +74,38 @@ def save_json_file(path, data):
         print(f"[파일 저장 오류] {path}: {e}")
 
 
-def _normalize_kline_df(raw, expected_interval_min=None):
-    df = pd.DataFrame()
-    if isinstance(raw, pd.DataFrame) and not raw.empty:
-        df = raw.copy()
-        col_map = {}
-        for c in df.columns:
-            cl = str(c).lower()
-            if cl in ("start", "starttime", "open_time", "time", "date", "datetime", "t"):
-                col_map[c] = "timestamp"
-            elif cl in ("o", "openprice"):
-                col_map[c] = "open"
-            elif cl in ("h", "highprice"):
-                col_map[c] = "high"
-            elif cl in ("l", "lowprice"):
-                col_map[c] = "low"
-            elif cl in ("c", "closeprice"):
-                col_map[c] = "close"
-            elif cl in ("v", "vol", "basevol"):
-                col_map[c] = "volume"
-        if col_map:
-            df = df.rename(columns=col_map)
-    elif isinstance(raw, list) and len(raw) > 0:
+def _get_bybit_whitelist():
+    if api_mod is not None and hasattr(api_mod, "get_valid_bybit_linear_symbols"):
         try:
-            if isinstance(raw[0], dict):
-                return _normalize_kline_df(pd.DataFrame(raw), expected_interval_min)
-            cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(rows[0])] if "rows" in locals() else ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(raw[0])]
-            df = pd.DataFrame(raw, columns=cols)
+            syms, _ = api_mod.get_valid_bybit_linear_symbols()
+            if syms:
+                return syms
         except Exception:
-            return pd.DataFrame()
-
-    if df.empty:
-        return pd.DataFrame()
-
-    for col in ("open", "high", "low", "close", "volume"):
-        if col not in df.columns:
-            return pd.DataFrame()
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    if "timestamp" in df.columns:
-        ts = pd.to_numeric(df["timestamp"], errors="coerce")
-        if ts.notna().any():
-            if ts.max() < 1e11:
-                ts = ts * 1000.0
-            df["timestamp"] = ts
-            df = df.sort_values("timestamp", ascending=True)
-            if expected_interval_min is not None and len(df) >= 5:
-                median_diff_sec = df["timestamp"].diff().median() / 1000.0
-                target_sec = expected_interval_min * 60.0
-                if not (target_sec * 0.6 <= median_diff_sec <= target_sec * 1.4):
-                    return pd.DataFrame()
-
-    return df.dropna(subset=["close"]).reset_index(drop=True)
+            pass
+    return set()
 
 
 def fetch_klines(symbol, interval="5", limit=300):
-    iv_min = int(interval)
-    base = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
-    if not base.isascii():
-        return pd.DataFrame()
-
-    clean_base = base
-    for prefix in ("1000000", "100000", "10000", "1000", "100"):
-        if clean_base.startswith(prefix) and len(clean_base) > len(prefix):
-            clean_base = clean_base[len(prefix):]
-            break
-
-    bybit_params = {"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)}
-    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com"):
-        try:
-            resp = requests.get(f"{host}/v5/market/kline", params=bybit_params, headers=BROWSER_HEADERS, timeout=4)
-            if resp.status_code == 200:
-                df = _normalize_kline_df(resp.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 20:
-                    return df
-        except requests.RequestException:
-            pass
-
-    gate_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h", 240: "4h"}.get(iv_min, "5m")
-    for contract in (f"{base}_USDT", f"{clean_base}_USDT"):
-        try:
-            resp = requests.get(
-                "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
-                params={"contract": contract, "interval": gate_iv, "limit": int(limit)},
-                headers=BROWSER_HEADERS,
-                timeout=4,
-            )
-            if resp.status_code == 200:
-                df = _normalize_kline_df(resp.json(), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 20:
-                    return df
-        except requests.RequestException:
-            pass
-
-    bg_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1H", 240: "4H"}.get(iv_min, "5m")
-    for bg_sym in (symbol, f"{clean_base}USDT"):
-        try:
-            resp = requests.get(
-                "https://api.bitget.com/api/v2/mix/market/candles",
-                params={"symbol": bg_sym, "productType": "USDT-FUTURES", "granularity": bg_iv, "limit": str(min(int(limit), 200))},
-                headers=BROWSER_HEADERS,
-                timeout=4,
-            )
-            if resp.status_code == 200:
-                df = _normalize_kline_df(resp.json().get("data", []), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 20:
-                    return df
-        except requests.RequestException:
-            pass
-
+    """오직 Bybit V5 공식 캔들만 조회 (게이트아이오·비트겟 폴백 완전 제거)"""
+    if api_mod is not None and hasattr(api_mod, "fetch_klines"):
+        df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            return df
     return pd.DataFrame()
 
 
 def enrich_ticker_metrics(candidates):
+    valid_syms = _get_bybit_whitelist()
     ticker_map = {}
-    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com"):
+
+    for host in BYBIT_HOSTS:
         try:
             r = requests.get(f"{host}/v5/market/tickers", params={"category": "linear"}, headers=BROWSER_HEADERS, timeout=5)
             if r.status_code == 200:
                 items = r.json().get("result", {}).get("list", [])
                 if items:
                     for it in items:
-                        s = str(it.get("symbol", ""))
+                        s = str(it.get("symbol", "")).upper()
                         ticker_map[s] = {
                             "turnover_m": to_float(it.get("turnover24h")) / 1e6,
                             "oi_m": to_float(it.get("openInterestValue")) / 1e6,
@@ -197,57 +115,21 @@ def enrich_ticker_metrics(candidates):
         except requests.RequestException:
             pass
 
-    gate_map = {}
-    try:
-        r = requests.get("https://api.gateio.ws/api/v4/futures/usdt/tickers", headers=BROWSER_HEADERS, timeout=5)
-        if r.status_code == 200:
-            for it in r.json():
-                sym = str(it.get("contract", "")).replace("_", "")
-                vol_usd_m = to_float(it.get("volume_24h_settle") or it.get("volume_24h_quote")) / 1e6
-                mark_p = to_float(it.get("mark_price") or it.get("last"))
-                quanto = to_float(it.get("quanto_multiplier"), 1.0)
-                total_size = to_float(it.get("total_size"))
-                oi_usd_m = (total_size * quanto * mark_p) / 1e6 if quanto > 0 else 0.0
-                gate_map[sym] = {
-                    "turnover_m": vol_usd_m,
-                    "oi_m": oi_usd_m,
-                    "funding_pct": to_float(it.get("funding_rate")) * 100.0,
-                }
-    except requests.RequestException:
-        pass
-
     filtered_candidates = []
     for c in candidates:
-        sym = str(c.get("symbol", ""))
-        base = sym[:-4].upper() if sym.endswith("USDT") else sym.upper()
+        sym = str(c.get("symbol", "")).upper()
+        base = sym[:-4] if sym.endswith("USDT") else sym
         if not base.isascii() or is_tradfi_ticker(base):
             continue
+        if valid_syms and sym not in valid_syms:
+            continue
+        if ticker_map and sym not in ticker_map:
+            continue
 
-        t_m = to_float(c.get("turnover_m") or c.get("turnover24h_m") or c.get("vol_m"))
-        if t_m <= 0 and to_float(c.get("turnover24h")) > 0:
-            t_m = to_float(c.get("turnover24h")) / 1e6
-
-        o_m = to_float(c.get("oi_m") or c.get("open_interest_m") or c.get("oi_usd_m"))
-        if o_m <= 0 and to_float(c.get("openInterestValue")) > 0:
-            o_m = to_float(c.get("openInterestValue")) / 1e6
-
-        ext = ticker_map.get(sym) or gate_map.get(sym) or {}
-        if t_m <= 0:
-            t_m = to_float(ext.get("turnover_m"), 0.0)
-        if o_m <= 0:
-            o_m = to_float(ext.get("oi_m"), 0.0)
-
-        if "funding_pct" in c and c.get("funding_pct") is not None:
-            f_p = normalize_funding_pct(c.get("funding_pct"))
-        elif c.get("fundingRate") is not None:
-            f_p = normalize_funding_pct(to_float(c.get("fundingRate")) * 100.0)
-        elif c.get("funding_rate") is not None:
-            f_p = normalize_funding_pct(c.get("funding_rate"))
-        else:
-            f_p = normalize_funding_pct(ext.get("funding_pct", 0.0))
-
-        if f_p == 0.0 and ext.get("funding_pct") is not None:
-            f_p = normalize_funding_pct(ext.get("funding_pct"))
+        ext = ticker_map.get(sym, {})
+        t_m = to_float(c.get("turnover_m") or ext.get("turnover_m"), 0.0)
+        o_m = to_float(c.get("oi_m") or ext.get("oi_m"), 0.0)
+        f_p = normalize_funding_pct(c.get("funding_pct") if c.get("funding_pct") is not None else ext.get("funding_pct", 0.0))
 
         c["turnover_m"] = t_m
         c["oi_m"] = o_m
@@ -258,6 +140,7 @@ def enrich_ticker_metrics(candidates):
 
 
 def fetch_top_gainer_candidates():
+    """오직 바이비트 V5 선물 상장 종목 중에서만 Top 5 후보군 추출"""
     if api_mod is not None and hasattr(api_mod, "get_scanner_candidates"):
         try:
             res = api_mod.get_scanner_candidates()
@@ -265,41 +148,7 @@ def fetch_top_gainer_candidates():
             if isinstance(cands, list) and len(cands) > 0:
                 return enrich_ticker_metrics(cands)
         except Exception as e:
-            print(f"[api.get_scanner_candidates 실패 -> 직통 폴백 전환] {e}")
-
-    try:
-        bg_resp = requests.get(
-            "https://api.bitget.com/api/v2/mix/market/tickers",
-            params={"productType": "USDT-FUTURES"},
-            headers=BROWSER_HEADERS,
-            timeout=6,
-        )
-        if bg_resp.status_code == 200:
-            items = bg_resp.json().get("data", [])
-            fallback_cands = []
-            for it in items:
-                sym = str(it.get("symbol", ""))
-                if not sym.endswith("USDT"):
-                    continue
-                base = sym[:-4].upper()
-                if not base.isascii() or is_tradfi_ticker(base):
-                    continue
-                turnover_m = to_float(it.get("usdtVolume") or it.get("quoteVolume")) / 1e6
-                if turnover_m < 2.0:
-                    continue
-                fallback_cands.append({
-                    "symbol": sym,
-                    "base_coin": base,
-                    "price": to_float(it.get("lastPr")),
-                    "change_24h": to_float(it.get("change24h")) * 100.0,
-                    "turnover_m": turnover_m,
-                    "oi_m": to_float(it.get("holdingAmount")) * to_float(it.get("lastPr")) / 1e6,
-                    "funding_pct": to_float(it.get("fundingRate")) * 100.0,
-                })
-            if fallback_cands:
-                return enrich_ticker_metrics(fallback_cands)
-    except Exception as e:
-        print(f"[자체 폴백 후보군 조회 오류] {e}")
+            print(f"[api.get_scanner_candidates 오류] {e}")
 
     return []
 
@@ -342,9 +191,13 @@ def slice_df_window_ms(df, start_ms, end_ms, now_ts, interval_min=5):
 
 
 def reverse_engineer_top_coin(coin, now_ts):
-    symbol = str(coin.get("symbol", "UNKNOWN"))
-    base_check = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
+    symbol = str(coin.get("symbol", "UNKNOWN")).upper()
+    base_check = symbol[:-4] if symbol.endswith("USDT") else symbol
     if not base_check.isascii() or is_tradfi_ticker(base_check):
+        return None
+
+    valid_syms = _get_bybit_whitelist()
+    if valid_syms and symbol not in valid_syms:
         return None
 
     try:
@@ -589,6 +442,7 @@ def reverse_engineer_top_coin(coin, now_ts):
 
 
 def analyze_scanner_coins_and_postmortem(now_ts):
+    valid_syms = _get_bybit_whitelist()
     state = load_json_file(STATE_FILE, {"tracked": {}, "sl_history": {}, "signal_episodes": {}})
     if not isinstance(state, dict):
         state = {"tracked": {}, "sl_history": {}, "signal_episodes": {}}
@@ -614,11 +468,16 @@ def analyze_scanner_coins_and_postmortem(now_ts):
         "coin_wave_samples": [],
     }
 
-    for sym, t_item in tracked.items():
+    for sym in list(tracked.keys()):
+        t_item = tracked.get(sym)
         if not isinstance(t_item, dict):
             continue
-        base_c = sym[:-4].upper() if sym.endswith("USDT") else sym.upper()
+        sym_u = str(sym).upper()
+        base_c = sym_u[:-4] if sym_u.endswith("USDT") else sym_u
         if not base_c.isascii() or is_tradfi_ticker(base_c):
+            continue
+        # 바이비트 미상장 종목($UNITAS, $BNC 등)은 성적표 및 분석에서 즉시 제외
+        if valid_syms and sym_u not in valid_syms:
             continue
 
         c_at = int(t_item.get("created_at", 0))
@@ -641,7 +500,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
         tp1_val = to_float(tps_list[0]) if len(tps_list) >= 1 else entry_p * 1.085
 
         if entry_p > 0:
-            df_15m_chk = fetch_klines(sym, "15", limit=180)
+            df_15m_chk = fetch_klines(sym_u, "15", limit=180)
             if not df_15m_chk.empty:
                 for p in (5, 10, 20, 50, 112):
                     df_15m_chk[f"ma{p}"] = df_15m_chk["close"].rolling(p, min_periods=2).mean()
@@ -706,7 +565,6 @@ def analyze_scanner_coins_and_postmortem(now_ts):
 
         fav_now = to_float(t_item.get("max_favorable_pct"), 0.0)
 
-        # [핵심 수정] 손절(is_sl_item) 여부를 최우선으로 확인하여 손절 종목이 익절로 집계되는 현상 원천 차단
         if is_sl_item and fav_now < 7.5:
             sl_count_48h += 1
             counted_sl_keys.add(sl_key)
@@ -722,7 +580,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
 
         if is_sl_item and sl_key not in sl_history:
             sl_history[sl_key] = {
-                "symbol": sym,
+                "symbol": sym_u,
                 "track_type": t_item.get("track_type", "TRACK_A"),
                 "score": int(t_item.get("score", 85)),
                 "entry_price": entry_p,
@@ -744,6 +602,9 @@ def analyze_scanner_coins_and_postmortem(now_ts):
     recent_sl_list = []
     for k_sl, v_sl in sl_history.items():
         if isinstance(v_sl, dict) and (now_ts - int(v_sl.get("created_at", now_ts))) <= 172800:
+            sym_sl = str(v_sl.get("symbol", "")).upper()
+            if valid_syms and sym_sl not in valid_syms:
+                continue
             recent_sl_list.append(v_sl)
             if k_sl not in counted_sl_keys:
                 sl_count_48h += 1
@@ -962,11 +823,6 @@ def analyze_scanner_coins_and_postmortem(now_ts):
 
 
 def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
-    """
-    [내 스캐너 코인 파동 중심(65% 가중치) 동적 TP 과열 방지 엔진]
-    - Top 5 대장주의 극단적 폭등치($RARE +86.5% 등)가 기본 TP를 과도하게 끌어올리지 않도록
-      내 스캐너 포착 코인의 실제 파동 로데이터 가중치를 높여 현실적인 목표가 밸런스를 유지합니다.
-    """
     t5_w1_gain = [x["waves"]["w1"]["gain_pct"] for x in analyzed_top5]
     t5_w1_fib = [x["waves"]["w1"]["fib_mult"] for x in analyzed_top5]
     t5_w1_ext = [x["waves"]["w1"]["ma20_ext_pct"] for x in analyzed_top5]
@@ -1103,6 +959,7 @@ def normalize_history_data(raw_data):
 
 
 def evaluate_48h_history(history_list, now_ts, tp_tuning):
+    valid_syms = _get_bybit_whitelist()
     today_prefix = datetime.now(KST).strftime("%Y-%m-%d")
     target_snap = None
     for snap in reversed(history_list):
@@ -1137,8 +994,10 @@ def evaluate_48h_history(history_list, now_ts, tp_tuning):
     for item in target_snap.get("coins", []):
         if not isinstance(item, dict):
             continue
-        sym = str(item.get("symbol", ""))
+        sym = str(item.get("symbol", "")).upper()
         if not sym:
+            continue
+        if valid_syms and sym not in valid_syms:
             continue
         base = sym.replace("USDT", "")
         if not base.isascii() or is_tradfi_ticker(base):
