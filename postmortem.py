@@ -91,7 +91,7 @@ def _normalize_kline_df(raw, expected_interval_min=None):
         try:
             if isinstance(raw[0], dict):
                 return _normalize_kline_df(pd.DataFrame(raw), expected_interval_min)
-            cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(raw[0])]
+            cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(rows[0])] if "rows" in locals() else ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(raw[0])]
             df = pd.DataFrame(raw, columns=cols)
         except Exception:
             return pd.DataFrame()
@@ -132,6 +132,17 @@ def fetch_klines(symbol, interval="5", limit=300):
             clean_base = clean_base[len(prefix):]
             break
 
+    bybit_params = {"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)}
+    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com"):
+        try:
+            resp = requests.get(f"{host}/v5/market/kline", params=bybit_params, headers=BROWSER_HEADERS, timeout=4)
+            if resp.status_code == 200:
+                df = _normalize_kline_df(resp.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
+                if not df.empty and len(df) >= 20:
+                    return df
+        except requests.RequestException:
+            pass
+
     gate_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h", 240: "4h"}.get(iv_min, "5m")
     for contract in (f"{base}_USDT", f"{clean_base}_USDT"):
         try:
@@ -161,43 +172,6 @@ def fetch_klines(symbol, interval="5", limit=300):
                 df = _normalize_kline_df(resp.json().get("data", []), expected_interval_min=iv_min)
                 if not df.empty and len(df) >= 20:
                     return df
-        except requests.RequestException:
-            pass
-
-    bybit_params = {"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)}
-    for host in ("https://api.bybit-tr.com", "https://api.bybit.kz", "https://api.bytick.com"):
-        try:
-            resp = requests.get(f"{host}/v5/market/kline", params=bybit_params, headers=BROWSER_HEADERS, timeout=4)
-            if resp.status_code == 200:
-                df = _normalize_kline_df(resp.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 20:
-                    return df
-        except requests.RequestException:
-            pass
-
-    mexc_iv = {1: "Min1", 5: "Min5", 15: "Min15", 60: "Min60"}.get(iv_min, "Min5")
-    for m_sym in (f"{base}_USDT", f"{clean_base}_USDT"):
-        try:
-            resp = requests.get(
-                f"https://contract.mexc.com/api/v1/contract/kline/{m_sym}",
-                params={"interval": mexc_iv},
-                headers=BROWSER_HEADERS,
-                timeout=4,
-            )
-            if resp.status_code == 200:
-                d = resp.json().get("data", {})
-                if isinstance(d, dict) and d.get("close"):
-                    df = pd.DataFrame({
-                        "timestamp": pd.to_numeric(d.get("time", []), errors="coerce") * 1000.0,
-                        "open": pd.to_numeric(d.get("open", []), errors="coerce"),
-                        "high": pd.to_numeric(d.get("high", []), errors="coerce"),
-                        "low": pd.to_numeric(d.get("low", []), errors="coerce"),
-                        "close": pd.to_numeric(d.get("close", []), errors="coerce"),
-                        "volume": pd.to_numeric(d.get("vol", []), errors="coerce"),
-                    })
-                    df = _normalize_kline_df(df.iloc[-int(limit):], expected_interval_min=iv_min)
-                    if not df.empty and len(df) >= 20:
-                        return df
         except requests.RequestException:
             pass
 
@@ -519,7 +493,6 @@ def reverse_engineer_top_coin(coin, now_ts):
         oi_ratio = (oi_m / max(turnover_m, 1e-8)) * 100.0 if turnover_m > 0 else 0.0
 
         alphas = []
-        # 고점 이후 피보나치 0.382~0.618 눌림목 반등(Track C 패턴) 출현 여부 역추적
         if peak_pos < len(df_5m) - 3 and pump_from_ign_pct >= 30.0:
             after_peak_df = df_5m.iloc[peak_pos:]
             pb_low_after_peak = to_float(after_peak_df["low"].min(), peak_high)
@@ -632,6 +605,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
     be_protect_count = 0
     active_count = 0
     sl_count_48h = 0
+    counted_sl_keys = set()
 
     scanner_wave_stats = {
         "w1_gains": [], "w1_fibs": [], "w1_ma20_exts": [], "w1_ma50_exts": [], "w1_rsis": [], "w1_kdjs": [], "w1_holds": [],
@@ -651,6 +625,9 @@ def analyze_scanner_coins_and_postmortem(now_ts):
         if (now_ts - c_at) > 172800:
             continue
 
+        sl_key = f"{sym}_{c_at}"
+        is_sl_item = bool(t_item.get("sl_alerted") or (sl_key in sl_history))
+
         stop_p_val = to_float(t_item.get("initial_stop_price") or t_item.get("stop_price"))
         entry_low = to_float(t_item.get("entry_low"))
         entry_high = to_float(t_item.get("entry_high"))
@@ -658,13 +635,10 @@ def analyze_scanner_coins_and_postmortem(now_ts):
         if entry_p <= 0:
             entry_p = (entry_low + entry_high) / 2.0 if entry_low > 0 else stop_p_val
 
-        raw_sl_pct = to_float(t_item.get("sl_pct"), 0.0)
-        if raw_sl_pct <= 0 and entry_p > 0 and stop_p_val > 0:
-            raw_sl_pct = round(abs(entry_p - stop_p_val) / entry_p * 100.0, 1)
-        item_sl_pct = float(np.clip(raw_sl_pct if raw_sl_pct > 0 else float(FIXED_SL_PCT), 2.0, 8.0))
+        item_sl_pct = float(FIXED_SL_PCT)
 
         tps_list = t_item.get("tps") or []
-        tp1_val = to_float(tps_list[0]) if len(tps_list) >= 1 else entry_p * 1.090
+        tp1_val = to_float(tps_list[0]) if len(tps_list) >= 1 else entry_p * 1.085
 
         if entry_p > 0:
             df_15m_chk = fetch_klines(sym, "15", limit=180)
@@ -676,7 +650,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                 df_15m_chk["vol_ma20"] = df_15m_chk["volume"].rolling(20, min_periods=3).mean().shift(1).bfill()
                 df_15m_chk["vol_mult"] = (df_15m_chk["volume"] / df_15m_chk["vol_ma20"].replace(0, np.nan)).fillna(1.0)
 
-                end_eval_ms = int(t_item.get("sl_at") or now_ts) * 1000 if t_item.get("sl_alerted") else now_ts * 1000
+                end_eval_ms = int(t_item.get("sl_at") or now_ts) * 1000 if is_sl_item else now_ts * 1000
                 win_15m = slice_df_window_ms(df_15m_chk, c_at * 1000, end_eval_ms, now_ts, interval_min=15)
                 if not win_15m.empty:
                     ign_pos_15 = int(df_15m_chk.index.get_loc(win_15m.index[0]))
@@ -686,10 +660,11 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                     fav_pct = round((max_h_15m - entry_p) / entry_p * 100.0, 2)
                     t_item["max_favorable_pct"] = max(to_float(t_item.get("max_favorable_pct")), max(0.0, fav_pct))
 
-                    if max_h_15m >= tp1_val:
-                        t_item["tp1_hit"] = True
-                    elif fav_pct >= item_sl_pct:
-                        t_item["be_armed"] = True
+                    if not is_sl_item:
+                        if max_h_15m >= tp1_val:
+                            t_item["tp1_hit"] = True
+                        elif fav_pct >= item_sl_pct:
+                            t_item["be_armed"] = True
 
                     if fav_pct >= 5.0 and peak_pos_15 >= ign_pos_15 and not is_heavy_major_coin(base_c):
                         sup_p = entry_p * 0.960
@@ -730,37 +705,51 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                         })
 
         fav_now = to_float(t_item.get("max_favorable_pct"), 0.0)
-        if t_item.get("tp1_hit") or t_item.get("tp2_hit") or (t_item.get("tp3_completed") and fav_now >= 8.0):
-            tp_win_count += 1
-        elif t_item.get("be_armed") and t_item.get("tp3_completed"):
-            be_protect_count += 1
-        elif t_item.get("sl_alerted"):
+
+        # [핵심 수정] 손절(is_sl_item) 여부를 최우선으로 확인하여 손절 종목이 익절로 집계되는 현상 원천 차단
+        if is_sl_item and fav_now < 7.5:
             sl_count_48h += 1
+            counted_sl_keys.add(sl_key)
+        elif (t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("tp3_completed")) and fav_now >= 7.0:
+            tp_win_count += 1
+        elif t_item.get("be_armed") and fav_now >= item_sl_pct:
+            be_protect_count += 1
+        elif is_sl_item:
+            sl_count_48h += 1
+            counted_sl_keys.add(sl_key)
         else:
             active_count += 1
 
-        if t_item.get("sl_alerted"):
-            sl_key = f"{sym}_{c_at}"
-            if sl_key not in sl_history:
-                sl_history[sl_key] = {
-                    "symbol": sym,
-                    "track_type": t_item.get("track_type", "TRACK_A"),
-                    "score": int(t_item.get("score", 85)),
-                    "entry_price": entry_p,
-                    "stop_price": stop_p_val,
-                    "sl_trigger_price": to_float(t_item.get("sl_trigger_price"), stop_p_val),
-                    "sl_pct": item_sl_pct,
-                    "created_at": c_at,
-                    "sl_at": int(t_item.get("sl_at", 0)),
-                    "hold_minutes": int(t_item.get("hold_minutes", 0)),
-                    "max_favorable_pct": fav_now,
-                    "vol_mult": to_float(t_item.get("vol_mult", 1.0)),
-                    "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
-                    "oi_m": to_float(t_item.get("oi_m", 0.0)),
-                    "turnover_m": to_float(t_item.get("turnover_m", 0.0)),
-                    "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
-                    "reasons": t_item.get("reasons", []),
-                }
+        if is_sl_item and sl_key not in sl_history:
+            sl_history[sl_key] = {
+                "symbol": sym,
+                "track_type": t_item.get("track_type", "TRACK_A"),
+                "score": int(t_item.get("score", 85)),
+                "entry_price": entry_p,
+                "stop_price": stop_p_val,
+                "sl_trigger_price": to_float(t_item.get("sl_trigger_price"), stop_p_val),
+                "sl_pct": FIXED_SL_PCT,
+                "created_at": c_at,
+                "sl_at": int(t_item.get("sl_at", 0)),
+                "hold_minutes": int(t_item.get("hold_minutes", 0)),
+                "max_favorable_pct": fav_now,
+                "vol_mult": to_float(t_item.get("vol_mult", 1.0)),
+                "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
+                "oi_m": to_float(t_item.get("oi_m", 0.0)),
+                "turnover_m": to_float(t_item.get("turnover_m", 0.0)),
+                "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
+                "reasons": t_item.get("reasons", []),
+            }
+
+    recent_sl_list = []
+    for k_sl, v_sl in sl_history.items():
+        if isinstance(v_sl, dict) and (now_ts - int(v_sl.get("created_at", now_ts))) <= 172800:
+            recent_sl_list.append(v_sl)
+            if k_sl not in counted_sl_keys:
+                sl_count_48h += 1
+                counted_sl_keys.add(k_sl)
+
+    recent_sl_list.sort(key=lambda x: int(x.get("sl_at") or x.get("created_at") or 0), reverse=True)
 
     other_lines = [
         "━━━━━━━━━━━━━━━━━━",
@@ -800,12 +789,6 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                 f"→ 2차고점 +{sw2['gain_pct']:.1f}%(Fib {sw2['fib_mult']:.2f}) "
                 f"→ 3차최종 +{sw3['gain_pct']:.1f}%(Fib {sw3['fib_mult']:.2f}·RSI {sw3['rsi6']:.0f})"
             )
-
-    recent_sl_list = [
-        v for v in sl_history.values()
-        if isinstance(v, dict) and (now_ts - int(v.get("created_at", now_ts))) <= 172800
-    ]
-    recent_sl_list.sort(key=lambda x: int(x.get("sl_at") or x.get("created_at") or 0), reverse=True)
 
     total_eval = tp_win_count + be_protect_count + sl_count_48h + active_count
 
@@ -851,10 +834,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
         t_type = track_label_map.get(sl_item.get("track_type", "TRACK_A"), "Track A(선취매)")
         entry_p = to_float(sl_item.get("entry_price"))
         stop_p = to_float(sl_item.get("stop_price"))
-        raw_sl = to_float(sl_item.get("sl_pct"), 0.0)
-        if raw_sl <= 0 and entry_p > 0 and stop_p > 0:
-            raw_sl = round(abs(entry_p - stop_p) / entry_p * 100.0, 1)
-        sl_pct = float(np.clip(raw_sl if raw_sl > 0 else float(FIXED_SL_PCT), 2.0, 8.0))
+        sl_pct = int(FIXED_SL_PCT)
 
         created_at = int(sl_item.get("created_at", now_ts - 3600))
         sl_at = int(sl_item.get("sl_at", 0))
@@ -927,7 +907,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
                 btc_drop_pct = (b_low - b_high) / max(b_high, 1e-8) * 100.0
 
         if max_fav >= sl_pct:
-            cause_tag = f"유형3 [1R(+{sl_pct:g}%) 도달(최고 +{max_fav:.1f}%) 후 반락]"
+            cause_tag = f"유형3 [1R(+{sl_pct}%) 도달(최고 +{max_fav:.1f}%) 후 반락]"
             cause_detail = f"첫 조정 고점(Fib {peak_fib_at_sl}배·{resist_ma_tag}·RSI {peak_rsi_at_sl})에서 꺾임 (1R 본전방어 및 TP1 학습 반영)"
             cause_counter["PROFIT_GIVEBACK"] += 1
         elif btc_drop_pct <= -0.80:
@@ -949,7 +929,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
 
         sl_dt_str = datetime.fromtimestamp(sl_at, tz=KST).strftime("%m/%d %H:%M")
         lines.append(
-            f"  {idx}) ❌ ${base} ({t_type} | SL -{sl_pct:g}% | {sl_dt_str} 이탈 | 보유 {hold_min}분 | 첫고점 +{max_fav:.1f}%)"
+            f"  {idx}) ❌ ${base} ({t_type} | SL -{sl_pct}% | {sl_dt_str} 이탈 | 보유 {hold_min}분 | 첫고점 +{max_fav:.1f}%)"
         )
         lines.append(f"     - [패인 & 저항로데이터]: {cause_tag} — {cause_detail}")
 
@@ -971,7 +951,7 @@ def analyze_scanner_coins_and_postmortem(now_ts):
         )
     if cause_counter["LOW_OI_DRAIN"] > 0:
         prescription_notes.append(
-            "• [수급 둔화 & 장기이평 천장 방어]: 머리 위 5m/15m MA112 저항 종목 진입 차단 및 무거운 준메이저 코인 배제"
+            "• [수급 둔화 & 장기이평 천장 방어]: 머리 위 5m/15m MA112 저항 및 과이격 차단, $PEPE 등 무거운 준메이저·대형 밈코인 배제"
         )
 
     if prescription_notes:
@@ -982,6 +962,11 @@ def analyze_scanner_coins_and_postmortem(now_ts):
 
 
 def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
+    """
+    [내 스캐너 코인 파동 중심(65% 가중치) 동적 TP 과열 방지 엔진]
+    - Top 5 대장주의 극단적 폭등치($RARE +86.5% 등)가 기본 TP를 과도하게 끌어올리지 않도록
+      내 스캐너 포착 코인의 실제 파동 로데이터 가중치를 높여 현실적인 목표가 밸런스를 유지합니다.
+    """
     t5_w1_gain = [x["waves"]["w1"]["gain_pct"] for x in analyzed_top5]
     t5_w1_fib = [x["waves"]["w1"]["fib_mult"] for x in analyzed_top5]
     t5_w1_ext = [x["waves"]["w1"]["ma20_ext_pct"] for x in analyzed_top5]
@@ -997,24 +982,17 @@ def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
     t5_w3_ext = [x["waves"]["w3"]["ma20_ext_pct"] for x in analyzed_top5]
     t5_w3_rsi = [x["waves"]["w3"]["rsi6"] for x in analyzed_top5]
 
-    def _robust_top5_stat(arr, default_val):
-        if not arr:
-            return default_val
-        med = float(np.median(arr))
-        p65 = float(np.percentile(arr, 65))
-        return (med * 0.60) + (p65 * 0.40)
+    t5_g1 = float(np.median(t5_w1_gain)) if t5_w1_gain else 9.0
+    t5_g2 = float(np.median(t5_w2_gain)) if t5_w2_gain else 16.0
+    t5_g3 = float(np.median(t5_w3_gain)) if t5_w3_gain else 25.0
 
-    t5_g1 = _robust_top5_stat(t5_w1_gain, 9.0)
-    t5_g2 = _robust_top5_stat(t5_w2_gain, 16.0)
-    t5_g3 = _robust_top5_stat(t5_w3_gain, 25.0)
+    t5_f1 = float(np.median(t5_w1_fib)) if t5_w1_fib else 1.80
+    t5_f2 = float(np.median(t5_w2_fib)) if t5_w2_fib else 2.80
+    t5_f3 = float(np.median(t5_w3_fib)) if t5_w3_fib else 4.00
 
-    t5_f1 = _robust_top5_stat(t5_w1_fib, 1.80)
-    t5_f2 = _robust_top5_stat(t5_w2_fib, 2.75)
-    t5_f3 = _robust_top5_stat(t5_w3_fib, 3.90)
-
-    t5_e1 = _robust_top5_stat(t5_w1_ext, 5.0)
-    t5_e2 = _robust_top5_stat(t5_w2_ext, 9.0)
-    t5_e3 = _robust_top5_stat(t5_w3_ext, 13.5)
+    t5_e1 = float(np.median(t5_w1_ext)) if t5_w1_ext else 5.0
+    t5_e2 = float(np.median(t5_w2_ext)) if t5_w2_ext else 9.0
+    t5_e3 = float(np.median(t5_w3_ext)) if t5_w3_ext else 13.5
 
     pm_w1_gain = scanner_wave_stats.get("w1_gains", [])
     pm_w1_fib = scanner_wave_stats.get("w1_fibs", [])
@@ -1029,31 +1007,31 @@ def calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats):
     pm_w3_ext = scanner_wave_stats.get("w3_ma20_exts", [])
 
     def _blend_with_anchor(t5_v, pm_arr, anchor_v):
-        if len(pm_arr) >= 4:
+        if len(pm_arr) >= 3:
             pm_v = float(np.median(pm_arr))
-            return (t5_v * 0.45) + (pm_v * 0.55)
+            return (t5_v * 0.25) + (pm_v * 0.50) + (anchor_v * 0.25)
         elif len(pm_arr) >= 1:
             pm_v = float(np.median(pm_arr))
-            return (t5_v * 0.40) + (pm_v * 0.30) + (anchor_v * 0.30)
+            return (t5_v * 0.30) + (pm_v * 0.40) + (anchor_v * 0.30)
         else:
-            return (t5_v * 0.50) + (anchor_v * 0.50)
+            return (t5_v * 0.40) + (anchor_v * 0.60)
 
-    raw_tp1 = _blend_with_anchor(t5_g1, pm_w1_gain, 9.0)
-    tp1_pct = int(np.clip(round(raw_tp1), 8, 13))
-    tp1_fib = round(float(np.clip(_blend_with_anchor(t5_f1, pm_w1_fib, 1.80), 1.55, 2.25)), 2)
-    tp1_ext = round(float(np.clip(_blend_with_anchor(t5_e1, pm_w1_ext, 5.0), 3.5, 8.5)), 1)
+    raw_tp1 = _blend_with_anchor(t5_g1, pm_w1_gain, 8.5)
+    tp1_pct = int(np.clip(round(raw_tp1), 8, 10))
+    tp1_fib = round(float(np.clip(_blend_with_anchor(t5_f1, pm_w1_fib, 1.75), 1.55, 2.10)), 2)
+    tp1_ext = round(float(np.clip(_blend_with_anchor(t5_e1, pm_w1_ext, 5.0), 3.5, 8.0)), 1)
     tp1_rsi = round(float(np.median(t5_w1_rsi + scanner_wave_stats.get("w1_rsis", []))) if t5_w1_rsi else 82.0, 1)
 
-    raw_tp2 = _blend_with_anchor(t5_g2, pm_w2_gain, 16.0)
-    tp2_pct = int(np.clip(round(max(tp1_pct + 6, raw_tp2)), 14, 22))
-    tp2_fib = round(float(np.clip(max(tp1_fib + 0.65, _blend_with_anchor(t5_f2, pm_w2_fib, 2.75)), 2.30, 3.40)), 2)
-    tp2_ext = round(float(np.clip(max(tp1_ext + 2.5, _blend_with_anchor(t5_e2, pm_w2_ext, 9.0)), 6.5, 14.5)), 1)
+    raw_tp2 = _blend_with_anchor(t5_g2, pm_w2_gain, 15.5)
+    tp2_pct = int(np.clip(round(max(tp1_pct + 6, raw_tp2)), 14, 18))
+    tp2_fib = round(float(np.clip(max(tp1_fib + 0.65, _blend_with_anchor(t5_f2, pm_w2_fib, 2.75)), 2.30, 3.20)), 2)
+    tp2_ext = round(float(np.clip(max(tp1_ext + 2.5, _blend_with_anchor(t5_e2, pm_w2_ext, 8.5)), 6.5, 13.0)), 1)
     tp2_rsi = round(float(np.median(t5_w2_rsi + scanner_wave_stats.get("w2_rsis", []))) if t5_w2_rsi else 86.0, 1)
 
     raw_tp3 = _blend_with_anchor(t5_g3, pm_w3_gain, 24.0)
-    tp3_pct = int(np.clip(round(max(tp2_pct + 7, raw_tp3)), 21, 36))
-    tp3_fib = round(float(np.clip(max(tp2_fib + 0.75, _blend_with_anchor(t5_f3, pm_w3_fib, 3.90)), 3.20, 4.50)), 2)
-    tp3_ext = round(float(np.clip(max(tp2_ext + 3.5, _blend_with_anchor(t5_e3, pm_w3_ext, 13.5)), 10.0, 21.0)), 1)
+    tp3_pct = int(np.clip(round(max(tp2_pct + 7, raw_tp3)), 21, 28))
+    tp3_fib = round(float(np.clip(max(tp2_fib + 0.75, _blend_with_anchor(t5_f3, pm_w3_fib, 3.85)), 3.20, 4.30)), 2)
+    tp3_ext = round(float(np.clip(max(tp2_ext + 3.5, _blend_with_anchor(t5_e3, pm_w3_ext, 13.0)), 10.0, 18.0)), 1)
     tp3_rsi = round(float(np.median(t5_w3_rsi + scanner_wave_stats.get("w3_rsis", []))) if t5_w3_rsi else 82.0, 1)
 
     return {
@@ -1151,9 +1129,9 @@ def evaluate_48h_history(history_list, now_ts, tp_tuning):
     snap_date = target_snap.get("date_str", "이전 포착분")
     lines[1] = f"⏱️ [48시간 경과 동일 상위종목({snap_date} 포착분) 실전 익절(TP1~TP3) 사후 검증]"
 
-    t1_thr = tp_tuning.get("tp1_min_pct", 9.0)
+    t1_thr = tp_tuning.get("tp1_min_pct", 8.5)
     t2_thr = tp_tuning.get("tp2_min_pct", 16.0)
-    t3_thr = tp_tuning.get("tp3_min_pct", 23.0)
+    t3_thr = tp_tuning.get("tp3_min_pct", 24.0)
 
     added_rows = 0
     for item in target_snap.get("coins", []):
