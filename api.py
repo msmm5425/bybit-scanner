@@ -1,441 +1,252 @@
+import os
+import json
 import time
 import requests
 import numpy as np
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor
 
 import config as cfg
+from config import (
+    BROWSER_HEADERS,
+    STATE_FILE,
+    to_float,
+    normalize_funding_pct,
+    is_tradfi_ticker,
+    is_heavy_major_coin,
+)
 
-BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
-to_float = cfg.to_float
-is_tradfi_ticker = cfg.is_tradfi_ticker
-strip_multiplier_prefix = cfg.strip_multiplier_prefix
-
-BYBIT_DIRECT_HOSTS = (
+# 깃허브 액션(미국 IP)에서도 차단 없이 접속되는 바이비트 공식 V5 글로벌 미러 도메인
+BYBIT_HOSTS = (
     "https://api.bybit-tr.com",
     "https://api.bybit.kz",
+    "https://api.bybit.nl",
     "https://api.bytick.com",
     "https://api.bybit.com",
 )
 
-# $EWY, $AAOI 등 선물 마켓에 상장된 해외 주식/국가별 ETF 추가 차단 목록
-EXTRA_TRADFI_TICKERS = {
-    "EWY", "AAOI", "EWJ", "EWZ", "EWT", "EWG", "EWU", "EWC", "EWA", "EWH",
-    "EWS", "EWW", "EWL", "EWP", "EWQ", "EWI", "EWD", "EWN", "EWK", "EWO",
-    "INDA", "MCHI", "ASHR", "YINN", "YANG", "CWEB", "DIREXION", "PROSHARES",
-    "IONQ", "RGTI", "QBTS", "QUBT", "SOUN", "HIMS", "TEM", "ALAB", "ASTS",
-    "LUNR", "SERV", "OKLO", "SMR", "VST", "TLN", "DELL", "HPE", "HPQ",
-    "ANET", "CLS", "GGLL", "GGLS", "SKDD", "SKLL", "FN", "LITE", "CIEN",
-}
+_VALID_BYBIT_SYMBOLS_CACHE = {"ts": 0, "symbols": set(), "bases": set()}
 
 
-def _is_blocked_ticker(base_coin):
-    b1 = base_coin.upper()
-    b2 = strip_multiplier_prefix(b1)
-    if b1 in EXTRA_TRADFI_TICKERS or b2 in EXTRA_TRADFI_TICKERS:
-        return True
-    return is_tradfi_ticker(b1) or is_tradfi_ticker(b2)
+def _normalize_bybit_kline_df(rows, expected_interval_min=None):
+    if not isinstance(rows, list) or len(rows) == 0:
+        return pd.DataFrame()
+    try:
+        cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][: len(rows[0])]
+        df = pd.DataFrame(rows, columns=cols)
+        for col in ("timestamp", "open", "high", "low", "close", "volume"):
+            if col not in df.columns:
+                return pd.DataFrame()
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        if df["timestamp"].max() < 1e11:
+            df["timestamp"] = df["timestamp"] * 1000.0
+
+        # Bybit V5 원본은 최신 캔들이 맨 앞(역순)이므로 반드시 과거->현재 오름차순 정렬
+        df = (
+            df.dropna(subset=["timestamp", "open", "high", "low", "close"])
+            .sort_values("timestamp", ascending=True)
+            .reset_index(drop=True)
+        )
+
+        if expected_interval_min is not None and len(df) >= 5:
+            median_diff_sec = df["timestamp"].diff().median() / 1000.0
+            target_sec = expected_interval_min * 60.0
+            if not (target_sec * 0.6 <= median_diff_sec <= target_sec * 1.4):
+                return pd.DataFrame()
+
+        return df
+    except Exception:
+        return pd.DataFrame()
 
 
-def _normalize_funding(val):
-    v = to_float(val, 0.0)
-    if abs(v) > 0.15:
-        return v / 100.0 if abs(v) <= 2.5 else v
-    return v
+def get_valid_bybit_linear_symbols():
+    """
+    바이비트 V5 선물(linear)에 실제로 상장되어 현재 거래 중(Trading)인
+    USDT 무기한 선물 심볼 목록만 화이트리스트로 가져옵니다.
+    """
+    now = time.time()
+    if now - _VALID_BYBIT_SYMBOLS_CACHE["ts"] < 600 and _VALID_BYBIT_SYMBOLS_CACHE["symbols"]:
+        return _VALID_BYBIT_SYMBOLS_CACHE["symbols"], _VALID_BYBIT_SYMBOLS_CACHE["bases"]
 
+    valid_syms = set()
+    valid_bases = set()
 
-def _fetch_bybit_tickers():
-    for host in BYBIT_DIRECT_HOSTS:
+    for host in BYBIT_HOSTS:
         try:
-            r = requests.get(
-                f"{host}/v5/market/tickers",
-                params={"category": "linear"},
+            resp = requests.get(
+                f"{host}/v5/market/instruments-info",
+                params={"category": "linear", "status": "Trading", "limit": 1000},
                 headers=BROWSER_HEADERS,
                 timeout=5,
             )
-            if r.status_code == 200:
-                rows = r.json().get("result", {}).get("list", [])
-                if rows:
-                    out = {}
-                    for it in rows:
-                        sym = str(it.get("symbol", ""))
-                        if not sym.endswith("USDT"):
-                            continue
-                        price = to_float(it.get("lastPrice"))
-                        if price <= 0:
-                            continue
-                        f_raw = it.get("fundingRate")
-                        f_rate = to_float(f_raw, 0.0)
-                        out[sym] = {
-                            "symbol": sym,
-                            "base_coin": sym[:-4].upper(),
-                            "price": price,
-                            "change_24h": to_float(it.get("price24hPcnt")) * 100.0,
-                            "price24hPcnt": to_float(it.get("price24hPcnt")),
-                            "turnover_m": to_float(it.get("turnover24h")) / 1e6,
-                            "turnover24h": to_float(it.get("turnover24h")),
-                            "oi_m": to_float(it.get("openInterestValue")) / 1e6,
-                            "openInterestValue": to_float(it.get("openInterestValue")),
-                            "funding_pct": _normalize_funding(f_rate * 100.0),
-                            "fundingRate": f_rate,
-                        }
-                    if out:
-                        return out
-        except requests.RequestException:
+            if resp.status_code == 200:
+                items = resp.json().get("result", {}).get("list", [])
+                for it in items:
+                    sym = str(it.get("symbol", "")).upper()
+                    quote = str(it.get("quoteCoin", "")).upper()
+                    status = str(it.get("status", ""))
+                    contract_type = str(it.get("contractType", "LinearPerpetual"))
+                    if (
+                        sym.endswith("USDT")
+                        and quote == "USDT"
+                        and status == "Trading"
+                        and contract_type == "LinearPerpetual"
+                    ):
+                        base = sym[:-4]
+                        if base.isascii() and not is_tradfi_ticker(base):
+                            valid_syms.add(sym)
+                            valid_bases.add(base)
+                if valid_syms:
+                    _VALID_BYBIT_SYMBOLS_CACHE["ts"] = now
+                    _VALID_BYBIT_SYMBOLS_CACHE["symbols"] = valid_syms
+                    _VALID_BYBIT_SYMBOLS_CACHE["bases"] = valid_bases
+                    return valid_syms, valid_bases
+        except Exception:
             continue
-    return {}
 
-
-def _fetch_gate_tickers():
-    out = {}
-    try:
-        r = requests.get(
-            "https://api.gateio.ws/api/v4/futures/usdt/tickers",
-            headers=BROWSER_HEADERS,
-            timeout=5,
-        )
-        if r.status_code == 200:
-            for it in r.json():
-                contract = str(it.get("contract", ""))
-                if not contract.endswith("_USDT"):
-                    continue
-                base = contract[:-5].upper()
-                sym = f"{base}USDT"
-                price = to_float(it.get("last"))
-                if price <= 0:
-                    continue
-                vol_usd = to_float(it.get("volume_24h_settle") or it.get("volume_24h_quote"))
-                quanto = to_float(it.get("quanto_multiplier"), 1.0)
-                total_size = to_float(it.get("total_size"))
-                oi_usd = (total_size * quanto * price) if quanto > 0 else 0.0
-                chg_pct = to_float(it.get("change_percentage"))
-                f_rate = to_float(it.get("funding_rate"), 0.0)
-                out[sym] = {
-                    "symbol": sym,
-                    "base_coin": base,
-                    "price": price,
-                    "change_24h": chg_pct,
-                    "price24hPcnt": chg_pct / 100.0,
-                    "turnover_m": vol_usd / 1e6,
-                    "turnover24h": vol_usd,
-                    "oi_m": oi_usd / 1e6,
-                    "openInterestValue": oi_usd,
-                    "funding_pct": _normalize_funding(f_rate * 100.0),
-                    "fundingRate": f_rate,
-                }
-    except requests.RequestException as e:
-        print(f"[Gate 티커 조회 경고] {e}")
-    return out
-
-
-def _fetch_bitget_tickers():
-    out = {}
-    try:
-        r = requests.get(
-            "https://api.bitget.com/api/v2/mix/market/tickers",
-            params={"productType": "USDT-FUTURES"},
-            headers=BROWSER_HEADERS,
-            timeout=5,
-        )
-        if r.status_code == 200:
-            for it in r.json().get("data", []):
-                sym = str(it.get("symbol", ""))
-                if not sym.endswith("USDT"):
-                    continue
-                base = sym[:-4].upper()
-                price = to_float(it.get("lastPr"))
-                if price <= 0:
-                    continue
-                vol_usd = to_float(it.get("usdtVolume") or it.get("quoteVolume"))
-                oi_usd = to_float(it.get("holdingAmount")) * price
-                chg_raw = to_float(it.get("change24h"))
-                f_rate = to_float(it.get("fundingRate"), 0.0)
-                out[sym] = {
-                    "symbol": sym,
-                    "base_coin": base,
-                    "price": price,
-                    "change_24h": chg_raw * 100.0,
-                    "price24hPcnt": chg_raw,
-                    "turnover_m": vol_usd / 1e6,
-                    "turnover24h": vol_usd,
-                    "oi_m": oi_usd / 1e6,
-                    "openInterestValue": oi_usd,
-                    "funding_pct": _normalize_funding(f_rate * 100.0),
-                    "fundingRate": f_rate,
-                }
-    except requests.RequestException as e:
-        print(f"[Bitget 티커 조회 경고] {e}")
-    return out
-
-
-def _fetch_spot_pure_crypto_bases():
-    """
-    오직 순수 암호화폐 현물 마켓(Binance Spot, OKX Spot, Bitget Spot) 및
-    CoinPaprika 암호화폐 도감에 등재된 심볼만 수집 ($EWY, $AAOI, $CLS, $SKDD 등 주식/ETF 완벽 차단)
-    """
-    pure_bases = set()
-
-    # 1. Binance Spot
-    try:
-        r = requests.get("https://data-api.binance.vision/api/v3/ticker/price", headers=BROWSER_HEADERS, timeout=4)
-        if r.status_code == 200:
-            for it in r.json():
-                s = str(it.get("symbol", ""))
-                if s.endswith("USDT"):
-                    pure_bases.add(s[:-4].upper())
-    except requests.RequestException:
-        pass
-
-    # 2. OKX Spot
-    try:
-        r = requests.get(
-            "https://www.okx.com/api/v5/market/tickers",
-            params={"instType": "SPOT"},
-            headers=BROWSER_HEADERS,
-            timeout=4,
-        )
-        if r.status_code == 200:
-            for it in r.json().get("data", []):
-                inst = str(it.get("instId", ""))
-                if inst.endswith("-USDT"):
-                    pure_bases.add(inst[:-5].upper())
-    except requests.RequestException:
-        pass
-
-    # 3. Bitget Spot (토큰화 주식이 없는 순수 코인 현물 마켓)
-    try:
-        r = requests.get(
-            "https://api.bitget.com/api/v2/spot/market/tickers",
-            headers=BROWSER_HEADERS,
-            timeout=4,
-        )
-        if r.status_code == 200:
-            for it in r.json().get("data", []):
-                s = str(it.get("symbol", ""))
-                if s.endswith("USDT"):
-                    b = s[:-4].upper()
-                    if not _is_blocked_ticker(b):
-                        pure_bases.add(b)
-    except requests.RequestException:
-        pass
-
-    # 4. CoinPaprika 글로벌 순수 암호화폐 목록 (무료·무제한·미국 서버 무차단, 주식/ETF 0개)
-    try:
-        r = requests.get("https://api.coinpaprika.com/v1/tickers", headers=BROWSER_HEADERS, timeout=5)
-        if r.status_code == 200:
-            for it in r.json():
-                sym = str(it.get("symbol", "")).upper()
-                name_low = str(it.get("name", "")).lower()
-                if sym and not _is_blocked_ticker(sym):
-                    if not any(k in name_low for k in getattr(cfg, "NON_CRYPTO_META_KEYWORDS", ())):
-                        pure_bases.add(sym)
-    except requests.RequestException:
-        pass
-
-    return pure_bases
+    return _VALID_BYBIT_SYMBOLS_CACHE["symbols"], _VALID_BYBIT_SYMBOLS_CACHE["bases"]
 
 
 def get_scanner_candidates():
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        f_bybit = ex.submit(_fetch_bybit_tickers)
-        f_gate = ex.submit(_fetch_gate_tickers)
-        f_bitget = ex.submit(_fetch_bitget_tickers)
-        f_spot = ex.submit(_fetch_spot_pure_crypto_bases)
-
-        bybit_map = f_bybit.result()
-        gate_map = f_gate.result()
-        bitget_map = f_bitget.result()
-        pure_crypto_bases = f_spot.result()
-
-    primary_map = bybit_map if bybit_map else (bitget_map if bitget_map else gate_map)
-    all_symbols = set(primary_map.keys()) | (set(gate_map.keys()) & set(bitget_map.keys()))
-
-    rwa_blocked_bases = set(EXTRA_TRADFI_TICKERS)
+    """
+    [100% 바이비트 실제 상장 선물 전용 후보군 수집]
+    - 비트겟/게이트아이오 폴백을 완전히 제거하고 오직 바이비트 V5 선물 티커만 수집합니다.
+    - 기존 bot_state.json에 남아 있던 타 거래소 코인($UNITAS, $BNC 등)은 rwa_blocked_bases에 넣어 즉시 삭제합니다.
+    """
+    valid_syms, valid_bases = get_valid_bybit_linear_symbols()
     candidates = []
+    pure_crypto_bases = set(valid_bases)
+    rwa_blocked_bases = set()
 
-    for sym in all_symbols:
-        base = sym[:-4].upper()
-        clean_base = strip_multiplier_prefix(base)
-
-        if _is_blocked_ticker(base) or _is_blocked_ticker(clean_base):
-            rwa_blocked_bases.add(base)
-            continue
-
-        # 핵심: 현물 코인 마켓 또는 크립토 도감(pure_crypto_bases)에 없는 선물 전용 주식/ETF($EWY, $AAOI 등) 무조건 차단!
-        if pure_crypto_bases and (base not in pure_crypto_bases) and (clean_base not in pure_crypto_bases):
-            rwa_blocked_bases.add(base)
-            continue
-
-        item = dict(primary_map.get(sym) or bitget_map.get(sym) or gate_map.get(sym) or {})
-        if not item:
-            continue
-
-        g_it = gate_map.get(sym, {})
-        b_it = bitget_map.get(sym, {})
-
-        if to_float(item.get("turnover_m")) <= 0:
-            item["turnover_m"] = max(to_float(b_it.get("turnover_m")), to_float(g_it.get("turnover_m")))
-            item["turnover24h"] = item["turnover_m"] * 1e6
-
-        if to_float(item.get("oi_m")) <= 0:
-            item["oi_m"] = max(to_float(b_it.get("oi_m")), to_float(g_it.get("oi_m")))
-            item["openInterestValue"] = item["oi_m"] * 1e6
-
-        if to_float(item.get("funding_pct")) == 0.0:
-            f_backup = to_float(b_it.get("funding_pct")) or to_float(g_it.get("funding_pct"))
-            item["funding_pct"] = _normalize_funding(f_backup)
-
-        turnover_m = to_float(item.get("turnover_m"))
-        change_24h = to_float(item.get("change_24h"))
-
-        if turnover_m < 1.5 or change_24h < -15.0:
-            continue
-
-        candidates.append(item)
-
-    candidates.sort(
-        key=lambda x: (to_float(x.get("change_24h")) * 0.7 + min(50.0, to_float(x.get("turnover_m"))) * 0.3),
-        reverse=True,
-    )
-    return candidates[:90], pure_crypto_bases, rwa_blocked_bases
-
-
-def _normalize_kline_df(raw, expected_interval_min=None):
-    df = pd.DataFrame()
-    if isinstance(raw, pd.DataFrame) and not raw.empty:
-        df = raw.copy()
-    elif isinstance(raw, list) and len(raw) > 0:
+    for host in BYBIT_HOSTS:
         try:
-            if isinstance(raw[0], dict):
-                df = pd.DataFrame(raw)
-                df = df.rename(columns={"t": "timestamp", "o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"})
-            else:
-                cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(raw[0])]
-                df = pd.DataFrame(raw, columns=cols)
+            resp = requests.get(
+                f"{host}/v5/market/tickers",
+                params={"category": "linear"},
+                headers=BROWSER_HEADERS,
+                timeout=6,
+            )
+            if resp.status_code != 200:
+                continue
+
+            items = resp.json().get("result", {}).get("list", [])
+            if not isinstance(items, list) or not items:
+                continue
+
+            for it in items:
+                sym = str(it.get("symbol", "")).upper()
+                if not sym.endswith("USDT"):
+                    continue
+                base = sym[:-4]
+
+                if valid_syms and sym not in valid_syms:
+                    rwa_blocked_bases.add(base)
+                    continue
+
+                if not base.isascii() or is_tradfi_ticker(base):
+                    rwa_blocked_bases.add(base)
+                    continue
+
+                pure_crypto_bases.add(base)
+
+                if is_heavy_major_coin(base):
+                    continue
+
+                price = to_float(it.get("lastPrice"))
+                turnover_m = to_float(it.get("turnover24h")) / 1e6
+                oi_m = to_float(it.get("openInterestValue")) / 1e6
+                change_24h = to_float(it.get("price24hPcnt")) * 100.0
+                funding_pct = normalize_funding_pct(to_float(it.get("fundingRate")) * 100.0)
+
+                if price <= 0 or turnover_m < 2.0:
+                    continue
+
+                candidates.append({
+                    "symbol": sym,
+                    "base_coin": base,
+                    "price": price,
+                    "turnover_m": turnover_m,
+                    "oi_m": oi_m,
+                    "change_24h": change_24h,
+                    "funding_pct": funding_pct,
+                })
+
+            if candidates:
+                break
+        except Exception as e:
+            print(f"[Bybit 티커 조회 재시도 ({host})] {e}")
+            continue
+
+    # 기존 bot_state.json에 저장된 코인 중 바이비트 미상장 종목($UNITAS 등)을 자동 차단 목록에 등록
+    if os.path.exists(STATE_FILE) and pure_crypto_bases:
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                st = json.load(f)
+            for sym_k in list((st.get("tracked") or {}).keys()):
+                b_c = sym_k[:-4].upper() if sym_k.endswith("USDT") else sym_k.upper()
+                if b_c not in pure_crypto_bases:
+                    rwa_blocked_bases.add(b_c)
         except Exception:
-            return pd.DataFrame()
+            pass
 
-    if df.empty:
-        return pd.DataFrame()
-
-    for col in ("open", "high", "low", "close", "volume"):
-        if col not in df.columns:
-            return pd.DataFrame()
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    if "timestamp" in df.columns:
-        ts = pd.to_numeric(df["timestamp"], errors="coerce")
-        if ts.notna().any():
-            if ts.max() < 1e11:
-                ts = ts * 1000.0
-            df["timestamp"] = ts
-            df = df.sort_values("timestamp", ascending=True)
-            if expected_interval_min is not None and len(df) >= 5:
-                median_diff_sec = df["timestamp"].diff().median() / 1000.0
-                target_sec = expected_interval_min * 60.0
-                if not (target_sec * 0.6 <= median_diff_sec <= target_sec * 1.4):
-                    return pd.DataFrame()
-
-    return df.dropna(subset=["close"]).reset_index(drop=True)
+    candidates.sort(key=lambda x: x["change_24h"], reverse=True)
+    return candidates, pure_crypto_bases, rwa_blocked_bases
 
 
 def fetch_klines(symbol, interval="5", limit=150):
-    iv_min = int(interval)
-    base = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
-    clean_base = strip_multiplier_prefix(base)
+    """
+    [100% 바이비트 V5 공식 캔들만 조회]
+    게이트아이오·비트겟 우회 호출을 완전히 제거하여 바이비트에 없는 종목은 빈 DataFrame을 반환합니다.
+    """
+    sym = str(symbol).upper()
+    if not sym.endswith("USDT"):
+        return pd.DataFrame()
 
-    gate_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h", 240: "4h"}.get(iv_min, "5m")
-    for contract in (f"{base}_USDT", f"{clean_base}_USDT"):
+    valid_syms, _ = get_valid_bybit_linear_symbols()
+    if valid_syms and sym not in valid_syms:
+        return pd.DataFrame()
+
+    iv_str = str(interval)
+    iv_min_map = {"1": 1, "3": 3, "5": 5, "15": 15, "30": 30, "60": 60, "120": 120, "240": 240, "D": 1440}
+    iv_min = iv_min_map.get(iv_str, 5)
+
+    params = {
+        "category": "linear",
+        "symbol": sym,
+        "interval": iv_str,
+        "limit": int(min(limit, 1000)),
+    }
+
+    for host in BYBIT_HOSTS:
         try:
-            r = requests.get(
-                "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
-                params={"contract": contract, "interval": gate_iv, "limit": int(limit)},
+            resp = requests.get(
+                f"{host}/v5/market/kline",
+                params=params,
                 headers=BROWSER_HEADERS,
                 timeout=4,
             )
-            if r.status_code == 200:
-                df = _normalize_kline_df(r.json(), expected_interval_min=iv_min)
+            if resp.status_code == 200:
+                rows = resp.json().get("result", {}).get("list", [])
+                df = _normalize_bybit_kline_df(rows, expected_interval_min=iv_min)
                 if not df.empty and len(df) >= 15:
                     return df
-        except requests.RequestException:
-            pass
-
-    bg_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1H", 240: "4H"}.get(iv_min, "5m")
-    for bg_sym in (symbol, f"{clean_base}USDT"):
-        try:
-            r = requests.get(
-                "https://api.bitget.com/api/v2/mix/market/candles",
-                params={"symbol": bg_sym, "productType": "USDT-FUTURES", "granularity": bg_iv, "limit": str(limit)},
-                headers=BROWSER_HEADERS,
-                timeout=4,
-            )
-            if r.status_code == 200:
-                df = _normalize_kline_df(r.json().get("data", []), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 15:
-                    return df
-        except requests.RequestException:
-            pass
-
-    bybit_params = {"category": "linear", "symbol": symbol, "interval": str(interval), "limit": int(limit)}
-    for host in BYBIT_DIRECT_HOSTS:
-        try:
-            r = requests.get(f"{host}/v5/market/kline", params=bybit_params, headers=BROWSER_HEADERS, timeout=4)
-            if r.status_code == 200:
-                df = _normalize_kline_df(r.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 15:
-                    return df
-        except requests.RequestException:
-            pass
-
-    mexc_iv = {1: "Min1", 5: "Min5", 15: "Min15", 60: "Min60"}.get(iv_min, "Min5")
-    for m_sym in (f"{base}_USDT", f"{clean_base}_USDT"):
-        try:
-            r = requests.get(
-                f"https://contract.mexc.com/api/v1/contract/kline/{m_sym}",
-                params={"interval": mexc_iv},
-                headers=BROWSER_HEADERS,
-                timeout=4,
-            )
-            if r.status_code == 200:
-                d = r.json().get("data", {})
-                if isinstance(d, dict) and d.get("close"):
-                    df = pd.DataFrame({
-                        "timestamp": pd.to_numeric(d.get("time", []), errors="coerce") * 1000.0,
-                        "open": pd.to_numeric(d.get("open", []), errors="coerce"),
-                        "high": pd.to_numeric(d.get("high", []), errors="coerce"),
-                        "low": pd.to_numeric(d.get("low", []), errors="coerce"),
-                        "close": pd.to_numeric(d.get("close", []), errors="coerce"),
-                        "volume": pd.to_numeric(d.get("vol", []), errors="coerce"),
-                    })
-                    df = _normalize_kline_df(df.iloc[-int(limit):], expected_interval_min=iv_min)
-                    if not df.empty and len(df) >= 15:
-                        return df
-        except requests.RequestException:
-            pass
+        except Exception:
+            continue
 
     return pd.DataFrame()
 
 
 def fetch_verified_1m_klines(symbol, entry_ref=0.0, limit=25):
-    df = fetch_klines(symbol, "1", limit=limit)
+    """
+    1분봉 실시간 익절/손절 감시 역시 100% 바이비트 V5 1분봉만 사용합니다.
+    """
+    df = fetch_klines(symbol, interval="1", limit=limit)
     if df.empty:
         return pd.DataFrame()
 
-    if entry_ref > 0:
-        last_close = to_float(df["close"].iloc[-1])
-        if last_close <= 0:
-            return pd.DataFrame()
-
-        ratio = entry_ref / last_close
-        for mult in (100.0, 1000.0, 10000.0, 100000.0, 1000000.0, 0.01, 0.001, 0.0001, 0.000001):
-            if 0.85 <= (ratio / mult) <= 1.15:
-                for col in ("open", "high", "low", "close"):
-                    df[col] = df[col] * mult
-                last_close = to_float(df["close"].iloc[-1])
-                break
-
-        final_ratio = last_close / max(entry_ref, 1e-8)
-        if not (0.65 <= final_ratio <= 1.45):
+    if entry_ref and entry_ref > 0:
+        last_close = to_float(df["close"].iloc[-1], 0.0)
+        if last_close <= 0 or not (0.40 <= (last_close / entry_ref) <= 2.60):
             return pd.DataFrame()
 
     return df
