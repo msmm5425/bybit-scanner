@@ -1458,15 +1458,18 @@
       "max_favorable_pct": 0.99,
       "history_backfilled": true,
       "be_armed": false,
-      "tp1_hit": false,
-      "tp2_hit": false,
-      "tp1_alerted": false,
-      "tp2_alerted": false,
-      "tp3_alerted": false,
+      "tp1_hit": true,
+      "tp2_hit": true,
+      "tp1_alerted": true,
+      "tp2_alerted": true,
+      "tp3_alerted": true,
       "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false,
-      "closed_alerted": false
+      "sl_alerted": true,
+      "tp3_completed": true,
+      "closed_alerted": true,
+      "sl_at": 1794800742,
+      "sl_trigger_price": 2.603,
+      "hold_minutes": 65
     }
   },
   "alert_history": {
@@ -1652,6 +1655,36 @@
         "초동수급 폭발(3.7배)",
         "OI 실수급 유입(OI 1.6M·비중 47%)",
         "음수 펀딩 숏스퀴즈 수급(-0.0064%)"
+      ]
+    },
+    "EVAAUSDT_1794796786": {
+      "symbol": "EVAAUSDT",
+      "track_type": "TRACK_A",
+      "score": 87,
+      "entry_price": 2.7692,
+      "stop_price": 2.603048,
+      "sl_trigger_price": 2.603,
+      "sl_pct": 6,
+      "created_at": 1794796786,
+      "sl_at": 1794800742,
+      "hold_minutes": 65,
+      "max_high_price": 2.7965,
+      "max_favorable_pct": 0.99,
+      "tp1_hit_before_sl": false,
+      "vol_mult": 3.9,
+      "rsi6_15m": 53.5,
+      "kdj_j_15m": 55.0,
+      "oi_m": 10.2698183952,
+      "turnover_m": 98.9347738462,
+      "funding_pct": 0.005,
+      "reasons": [
+        "거래량 극건조 눌림 포켓(7%)",
+        "유동성 스윕(Spring 아랫꼬리 2.9배) 반전",
+        "상위프레임(1H 중심선) 구조적 지지",
+        "이평리본 초밀집 확산(0.3%)",
+        "초동수급 폭발(3.9배)",
+        "OI 실수급 유입(OI 10.3M·비중 10%)",
+        "청정 펀딩 수급(+0.0050%)"
       ]
     }
   },
@@ -2402,15 +2435,15 @@
       "max_high_price": 2.7965,
       "max_favorable_pct": 0.99,
       "be_armed": false,
-      "tp1_hit": false,
-      "tp2_hit": false,
-      "tp1_alerted": false,
-      "tp2_alerted": false,
-      "tp3_alerted": false,
-      "tp3_completed": false,
-      "sl_alerted": false,
-      "closed_alerted": false,
-      "sl_at": 0
+      "tp1_hit": true,
+      "tp2_hit": true,
+      "tp1_alerted": true,
+      "tp2_alerted": true,
+      "tp3_alerted": true,
+      "tp3_completed": true,
+      "sl_alerted": true,
+      "closed_alerted": true,
+      "sl_at": 1794800742
     }
   },
   "uai_chart_test_done": true
