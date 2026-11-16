@@ -14,10 +14,6 @@ _DYNAMIC_TP_CACHE = {"ts": 0, "data": {}}
 
 
 def get_dynamic_tp_params():
-    """
-    postmortem.py(binance_analyzer.py)가 Top 5 + 내 스캐너 코인의 1·2·3차 파동 로데이터에서 학습해
-    analyzer_history.json에 저장한 최신 TP1~TP3 기준값을 실시간으로 불러옵니다.
-    """
     now = time.time()
     if now - _DYNAMIC_TP_CACHE["ts"] < 60 and _DYNAMIC_TP_CACHE["data"]:
         return _DYNAMIC_TP_CACHE["data"]
@@ -290,9 +286,9 @@ def analyze_symbol(coin):
     if df_5m.empty or len(df_5m) < 60:
         return None
 
-    df_15m = fetch_klines(symbol, "15", limit=90)
+    df_15m = fetch_klines(symbol, "15", limit=120)
     df_1h = fetch_klines(symbol, "60", limit=75)
-    if df_15m.empty or len(df_15m) < 25 or df_1h.empty or len(df_1h) < 25:
+    if df_15m.empty or len(df_15m) < 30 or df_1h.empty or len(df_1h) < 25:
         return None
 
     close = to_float(df_5m["close"].iloc[-1])
@@ -329,19 +325,23 @@ def analyze_symbol(coin):
     if not htf_support_ok:
         return None
 
+    # 최근 12~18시간 고점·저점 및 피보나치 되돌림 비율 계산
     recent_12h = df_5m.iloc[-144:]
     high_pos_12h = int(df_5m.index.get_loc(recent_12h["high"].idxmax()))
     high_12h = to_float(recent_12h["high"].max(), close)
+    low_24h_15m = to_float(df_15m["low"].iloc[-96:].min(), close)
     pre_high_slice = df_5m.iloc[max(0, len(df_5m) - 144): max(1, high_pos_12h + 1)]
-    low_before_high = to_float(pre_high_slice["low"].min(), to_float(recent_12h["low"].min(), close))
+    low_before_high = min(to_float(pre_high_slice["low"].min(), close), low_24h_15m)
 
     drawdown_12h_pct = (high_12h - close) / max(high_12h, 1e-8) * 100.0
     prior_pump_pct = (high_12h - low_before_high) / max(low_before_high, 1e-8) * 100.0
+    curr_gain_from_low_pct = (close - low_before_high) / max(low_before_high, 1e-8) * 100.0
     fib_retracement_ratio = (high_12h - close) / max(high_12h - low_before_high, 1e-8)
 
+    # [🔥 Track C 후보 자격 심사: 이미 크게 오른 대장주는 반드시 고점 대비 38%~62% 충분히 눌렸을 때만 통과!]
     leader_min_turn = getattr(cfg, "LEADER_MIN_TURNOVER_M", 25.0)
     leader_min_pump = getattr(cfg, "LEADER_MIN_PRIOR_PUMP_PCT", 35.0)
-    fib_ret_min = getattr(cfg, "LEADER_FIB_RETRACE_MIN", 0.35)
+    fib_ret_min = getattr(cfg, "LEADER_FIB_RETRACE_MIN", 0.38)
     fib_ret_max = getattr(cfg, "LEADER_FIB_RETRACE_MAX", 0.62)
     leader_max_fund = getattr(cfg, "LEADER_MAX_FUNDING_PCT", 0.0150)
 
@@ -350,17 +350,28 @@ def analyze_symbol(coin):
         and prior_pump_pct >= leader_min_pump
         and change_24h >= 18.0
         and (fib_ret_min <= fib_retracement_ratio <= fib_ret_max)
+        and (drawdown_12h_pct >= 12.0)  # 고점($2.9111)에서 최소 -12% 이상 실제로 눌린 상태여야 함 (꼭대기 횡보 $2.7692 차단!)
         and htf_support_ok
         and funding_pct <= leader_max_fund
     )
 
+    # =====================================================================
+    # [🛡️ 1. $EVAA 2.7692 고점 설거지 박스권 영구 차단 관문]
+    # =====================================================================
+    max_early_pump = getattr(cfg, "MAX_PRIOR_PUMP_PCT", 22.0)
+    max_early_chg24 = getattr(cfg, "MAX_CHANGE_24H_FOR_EARLY_TRACK", 26.0)
+
     if not is_leader_fib_candidate:
+        # (1) 이미 저점 대비 +22% 이상 올랐거나 24h +26% 이상 오른 코인은 '초입(Track A/B)'이 아니므로 즉시 차단!
+        if prior_pump_pct >= max_early_pump or curr_gain_from_low_pct >= 20.0 or change_24h >= max_early_chg24:
+            return None
+        # (2) 12h 고점 대비 -7.5% 이상 빠진 역V자 설거지 종목 즉시 차단
         if drawdown_12h_pct >= cfg.MAX_DRAWDOWN_FROM_12H_HIGH_PCT:
             return None
-        if prior_pump_pct >= cfg.MAX_PRIOR_PUMP_PCT and fib_retracement_ratio >= cfg.MAX_RETRACEMENT_RATIO:
-            return None
 
-    rsi6_15m = to_float(calc_rsi(df_15m["close"], 6).iloc[-1], 50.0)
+    # 2. 멀티프레임 과열 및 고점 피로 누적(RSI 다이버전스) 차단
+    rsi6_15m_series = calc_rsi(df_15m["close"], 6)
+    rsi6_15m = to_float(rsi6_15m_series.iloc[-1], 50.0)
     kdj_j_15m = to_float(calc_kdj_j(df_15m, 9).iloc[-1], 50.0)
     rsi6_1h = to_float(calc_rsi(df_1h["close"], 6).iloc[-1], 50.0)
 
@@ -369,6 +380,12 @@ def analyze_symbol(coin):
     if rsi6_1h >= cfg.CUTOFF_RSI6_1H_MAX:
         return None
 
+    # 직전 6시간(15분봉 24개) 이내에 이미 RSI6가 82 이상 극과열을 찍고 꺾인 종목은 Track A/B 진입 차단
+    recent_6h_max_rsi15 = to_float(rsi6_15m_series.iloc[-24:-1].max(), 50.0)
+    if not is_leader_fib_candidate and recent_6h_max_rsi15 >= 82.0:
+        return None
+
+    # 3. 5분봉·15분봉 이평선 및 장기 이평(MA112) 고점 이격 차단
     for p in (5, 20, 50, 112):
         df_5m[f"ma{p}"] = df_5m["close"].rolling(p, min_periods=min(p, 20)).mean()
         df_5m[f"ema{p}"] = df_5m["close"].ewm(span=p, adjust=False).mean()
@@ -380,11 +397,19 @@ def analyze_symbol(coin):
 
     ma50_15m = to_float(df_15m["close"].rolling(50, min_periods=15).mean().iloc[-1], close)
     ma112_15m = to_float(df_15m["close"].rolling(112, min_periods=25).mean().iloc[-1], close)
+
+    # (1) 머리 바로 위에 장기 이평 저항이 가로막고 있으면 차단
     if close < ma112 and ((ma112 - close) / close * 100.0) <= 4.0:
         return None
     if close < ma112_15m and ((ma112_15m - close) / close * 100.0) <= 4.5:
         return None
     if not is_leader_fib_candidate and close < ma50_15m and ((ma50_15m - close) / close * 100.0) <= 3.0:
+        return None
+
+    # (2) [핵심] 15분봉 MA112 대비 과도하게 공중에 붕 떠 있는 고점 박스권($EVAA: MA112 2.2963 대비 +20.6% 이격) 즉시 차단!
+    ma112_15m_ext_pct = (close - ma112_15m) / max(ma112_15m, 1e-8) * 100.0
+    max_ma112_ext = getattr(cfg, "MAX_MA112_15M_EXT_PCT", 13.5)
+    if not is_leader_fib_candidate and ma112_15m_ext_pct > max_ma112_ext:
         return None
 
     ribbon_max = df_5m[["ema5", "ema20", "ema50"]].max(axis=1)
@@ -457,7 +482,9 @@ def analyze_symbol(coin):
     kc_lower = df_5m["ma20"] - 1.5 * atr_5m
     ttm_squeeze = bool(((bb_upper < kc_upper) & (bb_lower > kc_lower)).iloc[-8:-1].any())
 
-    cond_ema_ribbon = (pre5_min_ribbon_spread <= cfg.EMA_RIBBON_MAX_SPREAD_PCT) and (close > ma50)
+    # 이평 리본 밀집은 MA50과 MA112 간격이 8% 이내인 '진짜 바닥권 수렴'일 때만 인정! (고점 착시 리본 차단)
+    ma50_ma112_gap_pct = abs(ma50 - ma112) / max(ma112, 1e-8) * 100.0
+    cond_ema_ribbon = (pre5_min_ribbon_spread <= cfg.EMA_RIBBON_MAX_SPREAD_PCT) and (close > ma50) and (ma50_ma112_gap_pct <= 8.0)
     cond_vol_pocket = (pre_vol_pocket_ratio <= cfg.PRE_VOL_POCKET_MAX_RATIO) and (vol_mult >= cfg.EARLY_VOL_MULT_MIN)
 
     breakout_diff_pct = (close - prev_box_high) / max(prev_box_high, 1e-8) * 100.0
@@ -675,15 +702,11 @@ def analyze_symbol(coin):
     entry_low = close * 0.9975
     entry_high = close * 1.0010
 
-    # 1) 고정 손절 -6%
     sl_pct_int = int(getattr(cfg, "FIXED_SL_PCT", 6))
     stop_price = close * (1.0 - sl_pct_int / 100.0)
     sl_note = f"급등전 휩소·스탑헌팅 방어 고정손절(-{sl_pct_int}%)"
 
-    # =====================================================================
-    # 2) [핵심 수정] 코인별 고유 변동성(15m ATR%) · 박스 진폭 · 수급 폭발 배수를 반영한 맞춤형 TP1~TP3 산출
-    #    (모든 종목이 똑같은 최소 하한선 퍼센트로 고정되던 현상 완전 해결)
-    # =====================================================================
+    # 종목별 고유 변동성(15m ATR%) · 박스 진폭 · 수급 폭발 배수를 반영한 맞춤형 TP1~TP3 산출
     tp_params = get_dynamic_tp_params()
     base_tp1_pct = tp_params["tp1_min_pct"]
     base_tp2_pct = tp_params["tp2_min_pct"]
@@ -693,17 +716,14 @@ def analyze_symbol(coin):
     fib2 = tp_params["tp2_fib_mult"]
     fib3 = tp_params["tp3_fib_mult"]
 
-    # 개별 코인의 15분봉 ATR 변동성(%) 및 구조적 파동 크기(%) 측정
     atr_15m_val = to_float(calc_atr(df_15m, 14).iloc[-1], close * 0.018)
     atr_15m_pct = (atr_15m_val / close) * 100.0
     struct_span_pct = (swing_high_line - support_line) / max(close, 1e-8) * 100.0
 
-    # 수급 폭발력(거래량 배수 + OI 비중 + 음수 펀딩 숏스퀴즈) 가중치 (0.85 ~ 1.45배)
     vol_boost = float(np.clip((vol_mult - 2.2) * 0.045, -0.08, 0.25))
     squeeze_boost = 0.12 if funding_pct < 0 else (0.06 if oi_turnover_ratio >= 25.0 else 0.0)
     energy_mult = float(np.clip(1.0 + vol_boost + squeeze_boost, 0.85, 1.45))
 
-    # 코인 고유의 기본 1파동 단위 크기(%) 산출
     coin_unit_wave_pct = float(np.clip((atr_15m_pct * 2.1 + struct_span_pct * 0.45) * energy_mult, 3.6, 8.5))
 
     if track_type == "TRACK_C":
@@ -717,7 +737,6 @@ def analyze_symbol(coin):
             "3차신고가(대시세2파동)"
         ]
     else:
-        # 개별 코인 파동 목표치(65% 가중치) + 일일 리포트 학습 기준치(35% 가중치) 결합
         raw_w1_pct = (coin_unit_wave_pct * fib1 * 0.65) + (base_tp1_pct * 0.35)
         raw_w2_pct = (coin_unit_wave_pct * fib2 * 0.65) + (base_tp2_pct * 0.35)
         raw_w3_pct = (coin_unit_wave_pct * fib3 * 0.65) + (base_tp3_pct * 0.35)
