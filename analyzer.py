@@ -1,8 +1,6 @@
 import os
 import json
 import time
-import inspect
-import requests
 import numpy as np
 import pandas as pd
 
@@ -23,9 +21,9 @@ def get_dynamic_tp_params():
         "tp2_min_pct": cfg.to_float(getattr(cfg, "TP2_MIN_PCT", 16.0), 16.0),
         "tp3_min_pct": cfg.to_float(getattr(cfg, "TP3_MIN_PCT", 24.0), 24.0),
         "tp3_max_cap_pct": cfg.to_float(getattr(cfg, "TP3_MAX_CAP_PCT", 50.0), 50.0),
-        "tp1_fib_mult": cfg.to_float(getattr(cfg, "TP1_FIB_MULT", 1.90), 1.90),
-        "tp2_fib_mult": cfg.to_float(getattr(cfg, "TP2_FIB_MULT", 3.29), 3.29),
-        "tp3_fib_mult": cfg.to_float(getattr(cfg, "TP3_FIB_MULT", 4.47), 4.47),
+        "tp1_fib_mult": cfg.to_float(getattr(cfg, "TP1_FIB_MULT", 1.85), 1.85),
+        "tp2_fib_mult": cfg.to_float(getattr(cfg, "TP2_FIB_MULT", 2.95), 2.95),
+        "tp3_fib_mult": cfg.to_float(getattr(cfg, "TP3_FIB_MULT", 4.10), 4.10),
         "tp1_ma20_ext_pct": 6.4,
         "tp2_ma20_ext_pct": 9.8,
         "tp3_ma20_ext_pct": 13.3,
@@ -88,61 +86,8 @@ class SafeAlertDict(dict):
         return 0.0 if key.endswith(("_price", "_pct", "_m", "_mult")) else ""
 
 
-def _normalize_df(raw, expected_interval_min=None):
-    df = pd.DataFrame()
-    if isinstance(raw, pd.DataFrame) and not raw.empty:
-        df = raw.copy()
-        col_map = {}
-        for c in df.columns:
-            cl = str(c).lower()
-            if cl in ("start", "starttime", "open_time", "time", "date", "datetime", "t"):
-                col_map[c] = "timestamp"
-            elif cl in ("o", "openprice"):
-                col_map[c] = "open"
-            elif cl in ("h", "highprice"):
-                col_map[c] = "high"
-            elif cl in ("l", "lowprice"):
-                col_map[c] = "low"
-            elif cl in ("c", "closeprice"):
-                col_map[c] = "close"
-            elif cl in ("v", "vol", "basevol"):
-                col_map[c] = "volume"
-        if col_map:
-            df = df.rename(columns=col_map)
-    elif isinstance(raw, list) and len(raw) > 0:
-        try:
-            if isinstance(raw[0], dict):
-                return _normalize_df(pd.DataFrame(raw), expected_interval_min)
-            cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][:len(raw[0])]
-            df = pd.DataFrame(raw, columns=cols)
-        except Exception:
-            return pd.DataFrame()
-
-    if df.empty:
-        return pd.DataFrame()
-
-    for col in ("open", "high", "low", "close", "volume"):
-        if col not in df.columns:
-            return pd.DataFrame()
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    if "timestamp" in df.columns:
-        ts = pd.to_numeric(df["timestamp"], errors="coerce")
-        if ts.notna().any():
-            if ts.max() < 1e11:
-                ts = ts * 1000.0
-            df["timestamp"] = ts
-            df = df.sort_values("timestamp")
-            if expected_interval_min is not None and len(df) >= 5:
-                median_diff_sec = df["timestamp"].diff().median() / 1000.0
-                target_sec = expected_interval_min * 60.0
-                if not (target_sec * 0.6 <= median_diff_sec <= target_sec * 1.4):
-                    return pd.DataFrame()
-
-    return df.dropna(subset=["close"]).reset_index(drop=True)
-
-
 def fetch_klines(symbol, interval="5", limit=150):
+    """오직 api.py의 Bybit V5 공식 캔들만 조회 (타 거래소 우회 완전 제거)"""
     if api_mod is not None and hasattr(api_mod, "fetch_klines"):
         try:
             df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
@@ -150,44 +95,6 @@ def fetch_klines(symbol, interval="5", limit=150):
                 return df
         except Exception:
             pass
-
-    iv_min = int(interval)
-    headers = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
-    base = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
-    clean_base = cfg.strip_multiplier_prefix(base)
-
-    gate_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1h", 240: "4h"}.get(iv_min, "5m")
-    for contract in (f"{base}_USDT", f"{clean_base}_USDT"):
-        try:
-            r = requests.get(
-                "https://api.gateio.ws/api/v4/futures/usdt/candlesticks",
-                params={"contract": contract, "interval": gate_iv, "limit": int(limit)},
-                headers=headers,
-                timeout=5,
-            )
-            if r.status_code == 200:
-                df = _normalize_df(r.json(), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 20:
-                    return df
-        except Exception:
-            pass
-
-    bg_iv = {1: "1m", 5: "5m", 15: "15m", 60: "1H", 240: "4H"}.get(iv_min, "5m")
-    for bg_sym in (symbol, f"{clean_base}USDT"):
-        try:
-            r = requests.get(
-                "https://api.bitget.com/api/v2/mix/market/candles",
-                params={"symbol": bg_sym, "productType": "USDT-FUTURES", "granularity": bg_iv, "limit": str(limit)},
-                headers=headers,
-                timeout=5,
-            )
-            if r.status_code == 200:
-                df = _normalize_df(r.json().get("data", []), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 20:
-                    return df
-        except Exception:
-            pass
-
     return pd.DataFrame()
 
 
@@ -273,14 +180,20 @@ def get_btc_market_regime():
 
 
 def analyze_symbol(coin):
-    symbol = coin["symbol"]
-    base_coin = symbol[:-4].upper() if symbol.endswith("USDT") else symbol.upper()
+    symbol = str(coin.get("symbol", "")).upper()
+    base_coin = symbol[:-4] if symbol.endswith("USDT") else symbol
     to_float = cfg.to_float
 
     if cfg.is_tradfi_ticker(base_coin):
         return None
     if hasattr(cfg, "is_heavy_major_coin") and cfg.is_heavy_major_coin(base_coin):
         return None
+
+    # 바이비트 실제 상장 여부 재검증
+    if api_mod is not None and hasattr(api_mod, "get_valid_bybit_linear_symbols"):
+        valid_syms, _ = api_mod.get_valid_bybit_linear_symbols()
+        if valid_syms and symbol not in valid_syms:
+            return None
 
     df_5m = fetch_klines(symbol, "5", limit=150)
     if df_5m.empty or len(df_5m) < 60:
@@ -325,7 +238,6 @@ def analyze_symbol(coin):
     if not htf_support_ok:
         return None
 
-    # 최근 12~18시간 고점·저점 및 피보나치 되돌림 비율 계산
     recent_12h = df_5m.iloc[-144:]
     high_pos_12h = int(df_5m.index.get_loc(recent_12h["high"].idxmax()))
     high_12h = to_float(recent_12h["high"].max(), close)
@@ -338,7 +250,6 @@ def analyze_symbol(coin):
     curr_gain_from_low_pct = (close - low_before_high) / max(low_before_high, 1e-8) * 100.0
     fib_retracement_ratio = (high_12h - close) / max(high_12h - low_before_high, 1e-8)
 
-    # [🔥 Track C 후보 자격 심사: 이미 크게 오른 대장주는 반드시 고점 대비 38%~62% 충분히 눌렸을 때만 통과!]
     leader_min_turn = getattr(cfg, "LEADER_MIN_TURNOVER_M", 25.0)
     leader_min_pump = getattr(cfg, "LEADER_MIN_PRIOR_PUMP_PCT", 35.0)
     fib_ret_min = getattr(cfg, "LEADER_FIB_RETRACE_MIN", 0.38)
@@ -350,26 +261,20 @@ def analyze_symbol(coin):
         and prior_pump_pct >= leader_min_pump
         and change_24h >= 18.0
         and (fib_ret_min <= fib_retracement_ratio <= fib_ret_max)
-        and (drawdown_12h_pct >= 12.0)  # 고점($2.9111)에서 최소 -12% 이상 실제로 눌린 상태여야 함 (꼭대기 횡보 $2.7692 차단!)
+        and (drawdown_12h_pct >= 12.0)
         and htf_support_ok
         and funding_pct <= leader_max_fund
     )
 
-    # =====================================================================
-    # [🛡️ 1. $EVAA 2.7692 고점 설거지 박스권 영구 차단 관문]
-    # =====================================================================
     max_early_pump = getattr(cfg, "MAX_PRIOR_PUMP_PCT", 22.0)
     max_early_chg24 = getattr(cfg, "MAX_CHANGE_24H_FOR_EARLY_TRACK", 26.0)
 
     if not is_leader_fib_candidate:
-        # (1) 이미 저점 대비 +22% 이상 올랐거나 24h +26% 이상 오른 코인은 '초입(Track A/B)'이 아니므로 즉시 차단!
         if prior_pump_pct >= max_early_pump or curr_gain_from_low_pct >= 20.0 or change_24h >= max_early_chg24:
             return None
-        # (2) 12h 고점 대비 -7.5% 이상 빠진 역V자 설거지 종목 즉시 차단
         if drawdown_12h_pct >= cfg.MAX_DRAWDOWN_FROM_12H_HIGH_PCT:
             return None
 
-    # 2. 멀티프레임 과열 및 고점 피로 누적(RSI 다이버전스) 차단
     rsi6_15m_series = calc_rsi(df_15m["close"], 6)
     rsi6_15m = to_float(rsi6_15m_series.iloc[-1], 50.0)
     kdj_j_15m = to_float(calc_kdj_j(df_15m, 9).iloc[-1], 50.0)
@@ -380,12 +285,10 @@ def analyze_symbol(coin):
     if rsi6_1h >= cfg.CUTOFF_RSI6_1H_MAX:
         return None
 
-    # 직전 6시간(15분봉 24개) 이내에 이미 RSI6가 82 이상 극과열을 찍고 꺾인 종목은 Track A/B 진입 차단
     recent_6h_max_rsi15 = to_float(rsi6_15m_series.iloc[-24:-1].max(), 50.0)
     if not is_leader_fib_candidate and recent_6h_max_rsi15 >= 82.0:
         return None
 
-    # 3. 5분봉·15분봉 이평선 및 장기 이평(MA112) 고점 이격 차단
     for p in (5, 20, 50, 112):
         df_5m[f"ma{p}"] = df_5m["close"].rolling(p, min_periods=min(p, 20)).mean()
         df_5m[f"ema{p}"] = df_5m["close"].ewm(span=p, adjust=False).mean()
@@ -398,7 +301,6 @@ def analyze_symbol(coin):
     ma50_15m = to_float(df_15m["close"].rolling(50, min_periods=15).mean().iloc[-1], close)
     ma112_15m = to_float(df_15m["close"].rolling(112, min_periods=25).mean().iloc[-1], close)
 
-    # (1) 머리 바로 위에 장기 이평 저항이 가로막고 있으면 차단
     if close < ma112 and ((ma112 - close) / close * 100.0) <= 4.0:
         return None
     if close < ma112_15m and ((ma112_15m - close) / close * 100.0) <= 4.5:
@@ -406,7 +308,6 @@ def analyze_symbol(coin):
     if not is_leader_fib_candidate and close < ma50_15m and ((ma50_15m - close) / close * 100.0) <= 3.0:
         return None
 
-    # (2) [핵심] 15분봉 MA112 대비 과도하게 공중에 붕 떠 있는 고점 박스권($EVAA: MA112 2.2963 대비 +20.6% 이격) 즉시 차단!
     ma112_15m_ext_pct = (close - ma112_15m) / max(ma112_15m, 1e-8) * 100.0
     max_ma112_ext = getattr(cfg, "MAX_MA112_15M_EXT_PCT", 13.5)
     if not is_leader_fib_candidate and ma112_15m_ext_pct > max_ma112_ext:
@@ -482,7 +383,6 @@ def analyze_symbol(coin):
     kc_lower = df_5m["ma20"] - 1.5 * atr_5m
     ttm_squeeze = bool(((bb_upper < kc_upper) & (bb_lower > kc_lower)).iloc[-8:-1].any())
 
-    # 이평 리본 밀집은 MA50과 MA112 간격이 8% 이내인 '진짜 바닥권 수렴'일 때만 인정! (고점 착시 리본 차단)
     ma50_ma112_gap_pct = abs(ma50 - ma112) / max(ma112, 1e-8) * 100.0
     cond_ema_ribbon = (pre5_min_ribbon_spread <= cfg.EMA_RIBBON_MAX_SPREAD_PCT) and (close > ma50) and (ma50_ma112_gap_pct <= 8.0)
     cond_vol_pocket = (pre_vol_pocket_ratio <= cfg.PRE_VOL_POCKET_MAX_RATIO) and (vol_mult >= cfg.EARLY_VOL_MULT_MIN)
@@ -706,7 +606,6 @@ def analyze_symbol(coin):
     stop_price = close * (1.0 - sl_pct_int / 100.0)
     sl_note = f"급등전 휩소·스탑헌팅 방어 고정손절(-{sl_pct_int}%)"
 
-    # 종목별 고유 변동성(15m ATR%) · 박스 진폭 · 수급 폭발 배수를 반영한 맞춤형 TP1~TP3 산출
     tp_params = get_dynamic_tp_params()
     base_tp1_pct = tp_params["tp1_min_pct"]
     base_tp2_pct = tp_params["tp2_min_pct"]
