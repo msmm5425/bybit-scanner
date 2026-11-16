@@ -1368,58 +1368,6 @@
       "tp3_completed": false,
       "closed_alerted": false
     },
-    "BNCUSDT": {
-      "created_at": 1794790098,
-      "track_type": "TRACK_B",
-      "score": 97,
-      "entry_price": 3.8219,
-      "swing_high_line": 3.8324,
-      "entry_low": 3.81234525,
-      "entry_high": 3.8257218999999996,
-      "initial_stop_price": 3.592586,
-      "stop_price": 3.592586,
-      "sl_pct": 6,
-      "tps": [
-        4.127652,
-        4.624498999999999,
-        5.006689
-      ],
-      "tp_pcts": [
-        8.0,
-        21.0,
-        31.0
-      ],
-      "vol_mult": 2.9,
-      "rsi6_15m": 67.1,
-      "kdj_j_15m": 52.1,
-      "oi_m": 0.6986733601340025,
-      "turnover_m": 2.717758553902,
-      "funding_pct": 0.0,
-      "reasons": [
-        "전고점 S/R Flip 칼지지(오차 0.47%/눌림거래량 4%)",
-        "완전 정배열(5>20>50>112) 지지",
-        "상위프레임(1H 중심선) 구조적 지지",
-        "초응축(0.7%)+OBV 선행매집",
-        "이평리본 초밀집 확산(0.3%)",
-        "초동수급 폭발(2.9배)",
-        "OI 수급 동조(OI 0.7M)",
-        "음수 펀딩 숏스퀴즈 수급(+0.0000%)"
-      ],
-      "max_high_price": 3.8336,
-      "peak_ts_ms": 1794790800000,
-      "max_favorable_pct": 0.31,
-      "history_backfilled": true,
-      "be_armed": false,
-      "tp1_hit": false,
-      "tp2_hit": false,
-      "tp1_alerted": false,
-      "tp2_alerted": false,
-      "tp3_alerted": false,
-      "breakout_alerted": true,
-      "sl_alerted": false,
-      "tp3_completed": false,
-      "closed_alerted": false
-    },
     "EVAAUSDT": {
       "created_at": 1794796786,
       "track_type": "TRACK_A",
