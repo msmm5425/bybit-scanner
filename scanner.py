@@ -260,7 +260,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     messages = []
     sl_record = None
     tps_list = t_item.get("tps") or []
-    just_armed_protection = False
 
     learned_tp1_p = entry_ref * (1.0 + tp_params["tp1_min_pct"] / 100.0)
     learned_tp2_p = entry_ref * (1.0 + tp_params["tp2_min_pct"] / 100.0)
@@ -310,7 +309,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
         stop_p = new_stop
         lock_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
         if not was_tp2_alerted:
-            just_armed_protection = True
             messages.append(
                 f"✅ [2차 목표가(TP2) 돌파 & 3차 고점 트레일링 가동] ${base_coin} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav_pct:.1f}%)\n"
@@ -330,7 +328,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
         t_item["stop_price"] = new_stop
         stop_p = new_stop
         if not was_tp1_alerted:
-            just_armed_protection = True
             messages.append(
                 f"✅ [1차 목표가(TP1) 달성] ${base_coin} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav_pct:.1f}%)\n"
@@ -343,7 +340,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
         be_stop = max(stop_p, entry_ref * 1.004)
         t_item["stop_price"] = be_stop
         stop_p = be_stop
-        just_armed_protection = True
         messages.append(
             f"🛡️ [본전 방어(Breakeven·1R) 자동 발동] ${base_coin} ({symbol})\n"
             f"• 손절폭(-{be_trigger:g}%) 대비 1:1 수익권 도달 확인 (최고 +{max_fav_pct:.1f}%, {fmt_price(max_high)} USDT)\n"
