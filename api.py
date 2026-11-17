@@ -15,7 +15,7 @@ from config import (
     is_heavy_major_coin,
 )
 
-# 깃허브 액션(미국 IP)에서도 차단 없이 접속되는 바이비트 공식 V5 글로벌 미러 도메인
+# 깃허브 액션(미국 IP) 방화벽을 우회하기 위한 바이비트 글로벌 V5 공식 미러 도메인
 BYBIT_HOSTS = (
     "https://api.bybit-tr.com",
     "https://api.bybit.kz",
@@ -41,7 +41,6 @@ def _normalize_bybit_kline_df(rows, expected_interval_min=None):
         if df["timestamp"].max() < 1e11:
             df["timestamp"] = df["timestamp"] * 1000.0
 
-        # Bybit V5 원본은 최신 캔들이 맨 앞(역순)이므로 반드시 과거->현재 오름차순 정렬
         df = (
             df.dropna(subset=["timestamp", "open", "high", "low", "close"])
             .sort_values("timestamp", ascending=True)
@@ -61,8 +60,8 @@ def _normalize_bybit_kline_df(rows, expected_interval_min=None):
 
 def get_valid_bybit_linear_symbols():
     """
-    바이비트 V5 선물(linear)에 실제로 상장되어 현재 거래 중(Trading)인
-    USDT 무기한 선물 심볼 목록만 화이트리스트로 가져옵니다.
+    [바이비트 V5 선물 화이트리스트 검증]
+    바이비트 선물(linear)에 실제로 상장되어 거래 중인 USDT 무기한 심볼 목록만 확보합니다.
     """
     now = time.time()
     if now - _VALID_BYBIT_SYMBOLS_CACHE["ts"] < 600 and _VALID_BYBIT_SYMBOLS_CACHE["symbols"]:
@@ -104,14 +103,37 @@ def get_valid_bybit_linear_symbols():
         except Exception:
             continue
 
+    # 미러 서버 직접 접속이 막힐 경우 CoinGecko API를 통해 바이비트 상장 심볼 목록 백업 동기화
+    try:
+        cg_resp = requests.get(
+            "https://api.coingecko.com/api/v3/exchanges/bybit/tickers",
+            headers=BROWSER_HEADERS,
+            timeout=6,
+        )
+        if cg_resp.status_code == 200:
+            cg_items = cg_resp.json().get("tickers", [])
+            for t in cg_items:
+                if str(t.get("target", "")).upper() == "USDT" and str(t.get("trade_url", "")).find("futures") != -1:
+                    base = str(t.get("base", "")).upper()
+                    sym = f"{base}USDT"
+                    if base.isascii() and not is_tradfi_ticker(base):
+                        valid_syms.add(sym)
+                        valid_bases.add(base)
+            if valid_syms:
+                _VALID_BYBIT_SYMBOLS_CACHE["ts"] = now
+                _VALID_BYBIT_SYMBOLS_CACHE["symbols"] = valid_syms
+                _VALID_BYBIT_SYMBOLS_CACHE["bases"] = valid_bases
+                return valid_syms, valid_bases
+    except Exception:
+        pass
+
     return _VALID_BYBIT_SYMBOLS_CACHE["symbols"], _VALID_BYBIT_SYMBOLS_CACHE["bases"]
 
 
 def get_scanner_candidates():
     """
-    [100% 바이비트 실제 상장 선물 전용 후보군 수집]
-    - 비트겟/게이트아이오 폴백을 완전히 제거하고 오직 바이비트 V5 선물 티커만 수집합니다.
-    - 기존 bot_state.json에 남아 있던 타 거래소 코인($UNITAS, $BNC 등)은 rwa_blocked_bases에 넣어 즉시 삭제합니다.
+    [바이비트 실제 상장 선물 전용 후보군 수집]
+    - 타 거래소(비트겟·게이트아이오) 유입을 원천 차단하고 바이비트 화이트리스트만 사용합니다.
     """
     valid_syms, valid_bases = get_valid_bybit_linear_symbols()
     candidates = []
@@ -173,18 +195,16 @@ def get_scanner_candidates():
 
             if candidates:
                 break
-        except Exception as e:
-            print(f"[Bybit 티커 조회 재시도 ({host})] {e}")
+        except Exception:
             continue
 
-    # 기존 bot_state.json에 저장된 코인 중 바이비트 미상장 종목($UNITAS 등)을 자동 차단 목록에 등록
     if os.path.exists(STATE_FILE) and pure_crypto_bases:
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
                 st = json.load(f)
             for sym_k in list((st.get("tracked") or {}).keys()):
                 b_c = sym_k[:-4].upper() if sym_k.endswith("USDT") else sym_k.upper()
-                if b_c not in pure_crypto_bases:
+                if valid_syms and sym_k not in valid_syms:
                     rwa_blocked_bases.add(b_c)
         except Exception:
             pass
@@ -194,10 +214,7 @@ def get_scanner_candidates():
 
 
 def fetch_klines(symbol, interval="5", limit=150):
-    """
-    [100% 바이비트 V5 공식 캔들만 조회]
-    게이트아이오·비트겟 우회 호출을 완전히 제거하여 바이비트에 없는 종목은 빈 DataFrame을 반환합니다.
-    """
+    """오직 Bybit V5 공식 캔들만 조회 (미상장 종목 및 타 거래소 차단)"""
     sym = str(symbol).upper()
     if not sym.endswith("USDT"):
         return pd.DataFrame()
@@ -237,9 +254,6 @@ def fetch_klines(symbol, interval="5", limit=150):
 
 
 def fetch_verified_1m_klines(symbol, entry_ref=0.0, limit=25):
-    """
-    1분봉 실시간 익절/손절 감시 역시 100% 바이비트 V5 1분봉만 사용합니다.
-    """
     df = fetch_klines(symbol, interval="1", limit=limit)
     if df.empty:
         return pd.DataFrame()
