@@ -37,8 +37,7 @@ git config --local user.email "actions@github.com"
 git config --local user.name "GitHub Actions"
 ​for i in {1..9}; do
 echo "=== [회차 $i/9] 5분 주기 스캔 시작: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
-​# 원격의 최신 scanner_state.json을 가져오되 로컬 캐시(/tmp/scanner_runtime_state.json)와 파이썬 내부에서 자동 병합됨
-git fetch origin main || true
+​git fetch origin main || true
 git checkout origin/main -- scanner_state.json 2>/dev/null || true
 ​python scanner.py || echo "[경고] 스캔 실행 중 일시적 예외 발생"
 ​if [ -f /tmp/scanner_runtime_state.json ]; then
