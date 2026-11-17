@@ -1,4 +1,4 @@
-```python
+python
 import os
 import json
 import time
@@ -361,4 +361,3 @@ def fetch_verified_1m_klines(symbol, entry_ref=0.0, limit=25):
             return pd.DataFrame()
 
     return df
-```
