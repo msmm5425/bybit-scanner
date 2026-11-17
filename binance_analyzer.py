@@ -1,203 +1,384 @@
-import sys
+import os
+import json
 import time
+import requests
 import numpy as np
+import pandas as pd
 from datetime import datetime, timedelta, timezone
 
 try:
     import config as cfg
-    HISTORY_FILE = getattr(cfg, "HISTORY_FILE", "analyzer_history.json")
+    STATE_FILE = getattr(cfg, "STATE_FILE", "scanner_state.json")
     KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
     FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 except Exception:
     cfg = None
-    HISTORY_FILE = "analyzer_history.json"
+    STATE_FILE = "scanner_state.json"
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
-from wave_engine import (
-    to_float,
-    fmt_price,
-    send_telegram_chunked,
+from api import (
+    get_scanner_candidates,
+    fetch_klines,
+    get_valid_bybit_linear_symbols,
 )
-from postmortem import (
-    load_json_file,
-    save_json_file,
-    fetch_top_gainer_candidates,
-    reverse_engineer_top_coin,
-    analyze_scanner_coins_and_postmortem,
-    calibrate_3wave_tp_system,
-    normalize_history_data,
-    evaluate_48h_history,
-)
+
+HISTORY_FILE = "analyzer_history.json"
+
+
+def to_float(val, default=0.0):
+    try:
+        if val is None or val == "":
+            return default
+        v = float(val)
+        return default if np.isnan(v) or np.isinf(v) else v
+    except Exception:
+        return default
+
+
+def fmt_price(price):
+    p = to_float(price, 0.0)
+    if p <= 0:
+        return "0.0000"
+    if p >= 1000:
+        return f"{p:,.2f}"
+    if p >= 10:
+        return f"{p:.3f}"
+    if p >= 1:
+        return f"{p:.4f}"
+    if p >= 0.01:
+        return f"{p:.5f}"
+    return f"{p:.6f}"
+
+
+def send_telegram_report(text):
+    if not text:
+        return False
+    token = (
+        os.getenv("TELEGRAM_TOKEN")
+        or os.getenv("TELEGRAM_BOT_TOKEN")
+        or getattr(cfg, "TELEGRAM_BOT_TOKEN", "")
+        or ""
+    ).strip()
+    chat_id = (
+        os.getenv("TELEGRAM_CHAT_ID")
+        or os.getenv("CHAT_ID")
+        or getattr(cfg, "TELEGRAM_CHAT_ID", "")
+        or ""
+    ).strip()
+
+    if not token or not chat_id:
+        print("[경고] 텔레그램 토큰 또는 채팅 ID가 설정되지 않았습니다.")
+        return False
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    chunks = [text[i : i + 3800] for i in range(0, len(text), 3800)]
+
+    for chunk in chunks:
+        payload = {
+            "chat_id": chat_id,
+            "text": chunk,
+            "disable_web_page_preview": True,
+        }
+        for attempt in range(3):
+            try:
+                resp = requests.post(url, json=payload, timeout=15)
+                if resp.status_code == 200:
+                    time.sleep(0.6)
+                    break
+                if resp.status_code == 429:
+                    wait_s = int(resp.json().get("parameters", {}).get("retry_after", 3))
+                    time.sleep(wait_s + 0.5)
+            except Exception as e:
+                print(f"[텔레그램 전송 재시도 {attempt + 1}/3] {e}")
+            time.sleep(1.0)
+    return True
+
+
+def load_json_safe(path, default_val):
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, type(default_val)) else default_val
+        except Exception as e:
+            print(f"[파일 로드 경고] {path}: {e}")
+    return default_val
+
+
+def save_json_safe(path, data):
+    tmp_path = f"{path}.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except Exception as e:
+        print(f"[파일 저장 오류] {path}: {e}")
+
+
+def calc_rsi(series, period=6):
+    delta = series.diff()
+    up = delta.clip(lower=0.0)
+    down = -1.0 * delta.clip(upper=0.0)
+    ma_up = up.ewm(com=period - 1, adjust=True, min_periods=period).mean()
+    ma_down = down.ewm(com=period - 1, adjust=True, min_periods=period).mean()
+    rs = ma_up / ma_down.replace(0, np.nan)
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+    return rsi.fillna(50.0)
+
+
+def analyze_top_gainer_structure(coin):
+    symbol = coin["symbol"]
+    base = coin.get("base_coin") or symbol.replace("USDT", "")
+    price = to_float(coin.get("price"))
+    chg_24h = to_float(coin.get("change_24h"))
+    turn_m = to_float(coin.get("turnover_m"))
+    oi_m = to_float(coin.get("oi_m"))
+    fund_pct = to_float(coin.get("funding_pct"))
+
+    df_15m = fetch_klines(symbol, interval="15", limit=100)
+    df_1h = fetch_klines(symbol, interval="60", limit=60)
+
+    vol_spike = 1.0
+    rsi15 = 50.0
+    pre_squeeze_pct = 4.5
+    pattern_note = "수급 집중 돌파"
+
+    if not df_15m.empty and len(df_15m) >= 25:
+        closes = df_15m["close"]
+        vols = df_15m["volume"]
+        rsi_s = calc_rsi(closes, 6)
+        rsi15 = to_float(rsi_s.iloc[-1], 50.0)
+
+        avg_vol = to_float(vols.iloc[-25:-5].mean(), 1.0)
+        max_recent_vol = to_float(vols.iloc[-12:].max(), avg_vol)
+        if avg_vol > 0:
+            vol_spike = round(max_recent_vol / avg_vol, 1)
+
+        hi_window = to_float(df_15m["high"].iloc[-40:-15].max(), price)
+        lo_window = to_float(df_15m["low"].iloc[-40:-15].min(), price * 0.95)
+        if lo_window > 0:
+            pre_squeeze_pct = round((hi_window - lo_window) / lo_window * 100.0, 1)
+
+        if pre_squeeze_pct <= 5.0 and vol_spike >= 2.5:
+            pattern_note = f"박스권 초응축({pre_squeeze_pct:.1f}%) 후 거래량 {vol_spike:.1f}배 폭발"
+        elif fund_pct < 0:
+            pattern_note = f"음수 펀딩({fund_pct:+.3f}%) 숏스퀴즈 + 거래량 {vol_spike:.1f}배"
+        else:
+            pattern_note = f"15분봉 거래량 {vol_spike:.1f}배 유입 + 추세 가속"
+
+    htf_trend = "1H 정배열 확산"
+    if not df_1h.empty and len(df_1h) >= 20:
+        ma20_1h = to_float(df_1h["close"].rolling(20).mean().iloc[-1], price)
+        if price < ma20_1h:
+            htf_trend = "1H 급등 후 눌림"
+
+    return {
+        "symbol": symbol,
+        "base": base,
+        "price": price,
+        "change_24h": chg_24h,
+        "turnover_m": turn_m,
+        "oi_m": oi_m,
+        "funding_pct": fund_pct,
+        "vol_spike": vol_spike,
+        "rsi15": rsi15,
+        "pattern_note": pattern_note,
+        "htf_trend": htf_trend,
+    }
+
+
+def verify_48h_history(history_data, current_map, now_ts):
+    records = history_data.get("records", [])
+    if not isinstance(records, list):
+        records = []
+
+    verified_lines = []
+    updated_records = []
+
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        rec_ts = int(rec.get("timestamp", 0))
+        age_hours = (now_ts - rec_ts) / 3600.0
+        if age_hours > 168:
+            continue
+
+        sym = str(rec.get("symbol", "")).upper()
+        entry_p = to_float(rec.get("price"), 0.0)
+        if not sym or entry_p <= 0:
+            continue
+
+        curr_p = to_float(current_map.get(sym, {}).get("price"), 0.0)
+        max_h = to_float(rec.get("max_high_48h"), entry_p)
+
+        if age_hours <= 52:
+            df_1h = fetch_klines(sym, interval="60", limit=50)
+            if not df_1h.empty and "timestamp" in df_1h.columns:
+                post_df = df_1h[df_1h["timestamp"] >= rec_ts * 1000]
+                if not post_df.empty:
+                    max_h = max(max_h, to_float(post_df["high"].max(), entry_p))
+            if curr_p > max_h:
+                max_h = curr_p
+            rec["max_high_48h"] = max_h
+
+        max_gain_pct = round((max_h - entry_p) / entry_p * 100.0, 1)
+        curr_gain_pct = round((curr_p - entry_p) / entry_p * 100.0, 1) if curr_p > 0 else 0.0
+        rec["max_gain_pct"] = max_gain_pct
+
+        if 18 <= age_hours <= 54 and not rec.get("verified_reported"):
+            rec["verified_reported"] = True
+            base = sym.replace("USDT", "")
+            verified_lines.append(
+                f"• ${base} (포착 후 {int(age_hours)}h 경과): 기준가 {fmt_price(entry_p)} → 최고 {fmt_price(max_h)} (+{max_gain_pct:.1f}%) | 현재 {curr_gain_pct:+.1f}%"
+            )
+
+        updated_records.append(rec)
+
+    history_data["records"] = updated_records
+    return verified_lines
+
+
+def summarize_24h_scanner_episodes(now_ts):
+    state = load_json_safe(STATE_FILE, {})
+    episodes = state.get("signal_episodes", {})
+    sl_history = state.get("sl_history", {})
+
+    recent_eps = []
+    for ep in episodes.values():
+        if isinstance(ep, dict) and (now_ts - int(ep.get("created_at", 0))) <= 86400:
+            recent_eps.append(ep)
+
+    recent_sls = []
+    for sl in sl_history.values():
+        if isinstance(sl, dict) and (now_ts - int(sl.get("sl_at", 0))) <= 86400:
+            recent_sls.append(sl)
+
+    if not recent_eps and not recent_sls:
+        return ["• 최근 24시간 내 신규 마감/진행 중인 스캐너 에피소드가 없습니다."]
+
+    total_cnt = len(recent_eps)
+    tp3_cnt = sum(1 for e in recent_eps if e.get("tp3_alerted"))
+    tp2_cnt = sum(1 for e in recent_eps if e.get("tp2_hit"))
+    tp1_cnt = sum(1 for e in recent_eps if e.get("tp1_hit"))
+    be_cnt = sum(1 for e in recent_eps if e.get("be_armed") and not e.get("tp1_hit") and not e.get("sl_alerted"))
+    sl_cnt = sum(1 for e in recent_eps if e.get("sl_alerted"))
+
+    lines = [
+        f"• 24h 포착 종목: 총 {total_cnt}건 (1차익절 이상 {tp1_cnt}건 | 2차익절 {tp2_cnt}건 | 3차익절 {tp3_cnt}건 | 본전방어 {be_cnt}건 | 손절 {sl_cnt}건)"
+    ]
+
+    best_eps = sorted(recent_eps, key=lambda x: to_float(x.get("max_favorable_pct")), reverse=True)[:3]
+    for b in best_eps:
+        sym = b.get("symbol", "")
+        base = sym.replace("USDT", "")
+        fav = to_float(b.get("max_favorable_pct"))
+        if fav >= 3.0:
+            lines.append(f"  ↳ 🏆 우수 타점: ${base} 최고 +{fav:.1f}% 도달")
+
+    if recent_sls:
+        lines.append(f"• 📓 [손절 오답 노트 ({len(recent_sls)}건)]:")
+        for s in recent_sls[:3]:
+            sym = s.get("symbol", "").replace("USDT", "")
+            hold_m = int(s.get("hold_minutes", 0))
+            max_f = to_float(s.get("max_favorable_pct", 0.0))
+            lines.append(f"  ↳ ⚠️ ${sym}: 보유 {hold_m}분 후 -{FIXED_SL_PCT}% 이탈 (최고 반등 +{max_f:.1f}%)")
+
+    return lines
 
 
 def main():
     now_ts = int(time.time())
-    now_dt = datetime.now(KST)
-    now_str = now_dt.strftime("%Y-%m-%d %H:%M KST")
+    now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
-    candidates = fetch_top_gainer_candidates()
+    candidates, _, _ = get_scanner_candidates()
+    valid_syms, _ = get_valid_bybit_linear_symbols()
+
+    if valid_syms:
+        candidates = [c for c in candidates if c.get("symbol") in valid_syms]
+
+    history_data = load_json_safe(HISTORY_FILE, {"records": [], "learned_tp_params": {}})
+
     if not candidates:
-        print("[치명적 오류] Top 5 후보군 조회 실패")
-        sys.exit(1)
+        print("[경고] 현재 시점 후보군 조회 결과가 비어 있어 기존 상태 기록 기반으로 리포트를 생성합니다.")
+        scanner_lines = summarize_24h_scanner_episodes(now_ts)
+        fallback_msg = "\n".join([
+            f"📊 [Bybit 선물 일일 리포트 & 스캐너 점검] ({now_str})",
+            "",
+            "📈 [최근 24시간 스캐너 타점 성적표]",
+            *scanner_lines,
+        ])
+        send_telegram_report(fallback_msg)
+        save_json_safe(HISTORY_FILE, history_data)
+        return
 
-    candidates.sort(
-        key=lambda x: to_float(x.get("change_24h"), to_float(x.get("price24hPcnt")) * 100.0),
-        reverse=True,
-    )
+    current_map = {c["symbol"]: c for c in candidates}
+    top5 = sorted(candidates, key=lambda x: to_float(x.get("change_24h")), reverse=True)[:5]
 
     analyzed_top5 = []
-    for c in candidates[:25]:
-        res = reverse_engineer_top_coin(c, now_ts)
-        if res:
-            analyzed_top5.append(res)
-        if len(analyzed_top5) >= 5:
-            break
+    for c in top5:
+        info = analyze_top_gainer_structure(c)
+        analyzed_top5.append(info)
+        history_data.setdefault("records", []).append({
+            "symbol": info["symbol"],
+            "price": info["price"],
+            "change_24h": info["change_24h"],
+            "max_high_48h": info["price"],
+            "max_gain_pct": 0.0,
+            "timestamp": now_ts,
+            "verified_reported": False,
+        })
 
-    if not analyzed_top5:
-        print("[치명적 오류] 상위 종목 캔들 분석 결과 없음")
-        sys.exit(1)
+    verified_48h_lines = verify_48h_history(history_data, current_map, now_ts)
+    scanner_24h_lines = summarize_24h_scanner_episodes(now_ts)
 
-    num_icons = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
-    msg_lines = [
-        "📊 [Bybit Futures 급등 Top 5 초동 역추적 & 1·2·3차 파동 로데이터 학습]",
-        f"🕒 기준 시각: {now_str} (순수 코인 상위 5개)\n",
+    gains = [to_float(x.get("max_gain_pct")) for x in history_data.get("records", []) if to_float(x.get("max_gain_pct")) >= 6.0]
+    if len(gains) >= 5:
+        p1_learn = float(np.clip(np.percentile(gains, 35), 7.5, 11.0))
+        p2_learn = float(np.clip(np.percentile(gains, 65), 14.0, 20.0))
+        p3_learn = float(np.clip(np.percentile(gains, 85), 22.0, 32.0))
+    else:
+        p1_learn, p2_learn, p3_learn = 8.0, 16.0, 24.0
+
+    history_data["learned_tp_params"] = {
+        "tp1_min_pct": round(p1_learn, 1),
+        "tp2_min_pct": round(p2_learn, 1),
+        "tp3_min_pct": round(p3_learn, 1),
+        "updated_at": now_ts,
+    }
+    save_json_safe(HISTORY_FILE, history_data)
+
+    report_lines = [
+        f"📊 [Bybit 선물 Top 5 일간 분석 & 48h 사후검증] ({now_str})",
+        "",
+        "🔥 [금일 바이비트 선물 급등 Top 5 초입 패턴 해부]",
     ]
 
-    for i, item in enumerate(analyzed_top5):
-        icon = num_icons[i] if i < len(num_icons) else f"{i+1}."
-        alpha_str = " / ".join(item["alphas"]) if item["alphas"] else "표준 수급 돌파"
-        w1 = item["waves"]["w1"]
-        w2 = item["waves"]["w2"]
-        w3 = item["waves"]["w3"]
-
-        msg_lines.extend(
-            [
-                f"{icon} ${item['base']} ({item['symbol']} | +{item['change_24h']:.2f}% | 현재가 {fmt_price(item['price'])} USDT)",
-                f"• 거래대금: {item['turnover_m']:.1f}M | 미결제약정(OI): {item['oi_m']:.1f}M (비중 {item['oi_ratio']:.0f}%) | 펀딩비: {item['funding_pct']:+.4f}%",
-                f"• [초동 발화점]: {item['ign_time_str']} (발화가 {fmt_price(item['ign_price'])} → 최종고점까지 +{item['pump_from_ign_pct']:.1f}% 폭등 | {item['hours_to_peak']}h 소요)",
-                "• [🌊 1·2·3차 파동별 조정·고점 형성 로데이터(Raw Data) 분석]:",
-                f"  - 1차(첫 조정 고점): +{w1['gain_pct']:.1f}% ({fmt_price(w1['price'])}) | Fib {w1['fib_mult']:.2f}배 | MA20이격 +{w1['ma20_ext_pct']:.1f}% | RSI6 {w1['rsi6']:.0f}·J {w1['kdj_j']:.0f} → -{w1['pullback_pct']:.1f}% 눌림({w1['hold_tag']} 지지)",
-                f"  - 2차(중간 조정 고점): +{w2['gain_pct']:.1f}% ({fmt_price(w2['price'])}) | Fib {w2['fib_mult']:.2f}배 | MA20이격 +{w2['ma20_ext_pct']:.1f}% | RSI6 {w2['rsi6']:.0f}·J {w2['kdj_j']:.0f} → -{w2['pullback_pct']:.1f}% 숨고르기({w2['hold_tag']} 지지)",
-                f"  - 3차(최종 클라이맥스): +{w3['gain_pct']:.1f}% ({fmt_price(w3['price'])}) | Fib {w3['fib_mult']:.2f}배 | MA20이격 +{w3['ma20_ext_pct']:.1f}% | RSI6 {w3['rsi6']:.0f}·J {w3['kdj_j']:.0f} | 거래량 {w3['vol_mult']:.1f}배",
-                "• [발화 직전 컨펌된 초동 전략]:",
-                f"  - 5분봉 이평선: {item['ma_str']} | 직전 2h 박스 {item['pre_box_pct']:.1f}% 응축 | OBV/CVD {item['obv_str']}",
-                f"  - 초동 수급: 평소 대비 [{item['ign_vol_mult']:.1f}배 폭발] (발화전 포켓 {int(round(item['pre5_min_vol_ratio']*100))}%) | 돌파 후: {item['post_pattern_str']}",
-                "• [🔍 포착된 전문가급 신규 알파 전략]:",
-                f"  - {alpha_str}\n",
-            ]
+    for idx, item in enumerate(analyzed_top5, 1):
+        report_lines.append(
+            f"{idx}. ${item['base']} ({item['symbol']}) | 24h {item['change_24h']:+.1f}%\n"
+            f"   • 현재가: {fmt_price(item['price'])} USDT | 거래대금 {item['turnover_m']:.1f}M | OI {item['oi_m']:.1f}M\n"
+            f"   • 초입 특징: {item['pattern_note']} ({item['htf_trend']})"
         )
 
-    sec_postmortem, prescriptions, scanner_wave_stats = analyze_scanner_coins_and_postmortem(now_ts)
-    tp_tuning = calibrate_3wave_tp_system(analyzed_top5, scanner_wave_stats)
-
-    raw_history = load_json_file(HISTORY_FILE, {"cohorts": []})
-    history_list = normalize_history_data(raw_history)
-    sec_48h = evaluate_48h_history(history_list, now_ts, tp_tuning)
-    msg_lines.append(sec_48h)
-    msg_lines.append(sec_postmortem)
-
-    today_key = now_dt.strftime("%Y-%m-%d")
-    history_list = [h for h in history_list if not str(h.get("date_str", "")).startswith(today_key)]
-    history_list.append(
-        {
-            "date_str": today_key,
-            "timestamp": now_ts,
-            "coins": [
-                {
-                    "symbol": x["symbol"],
-                    "ign_price": x["ign_price"],
-                    "support_line": x["support_line"],
-                    "swing_high_line": x["swing_high_line"],
-                }
-                for x in analyzed_top5
-            ],
-        }
-    )
-    history_list = history_list[-10:]
-    save_json_file(HISTORY_FILE, {
-        "cohorts": history_list,
-        "dynamic_tp_tuning": tp_tuning,
-        "updated_at": now_str,
-    })
-
-    n = len(analyzed_top5)
-    c_short = sum(1 for x in analyzed_top5 if x["short_aligned"])
-    c_full = sum(1 for x in analyzed_top5 if x["full_aligned"])
-    c_obv = sum(1 for x in analyzed_top5 if x["obv_up"])
-    c_cvd = sum(1 for x in analyzed_top5 if x["cvd_up"])
-    c_spring = sum(1 for x in analyzed_top5 if x["cond_spring"])
-    c_htf = sum(1 for x in analyzed_top5 if x["htf_aligned"])
-    c_pocket = sum(1 for x in analyzed_top5 if x["is_pocket_pivot"])
-    c_ribbon = sum(1 for x in analyzed_top5 if x["pre5_min_ribbon"] <= 2.2)
-    c_bull_flag = sum(1 for x in analyzed_top5 if x["is_bull_flag"])
-    c_fvg50 = sum(1 for x in analyzed_top5 if x["is_fvg_50_hold"])
-    c_sr = sum(1 for x in analyzed_top5 if x["is_sr_flip"])
-    c_sqz = sum(1 for x in analyzed_top5 if x["ttm_sqz"])
-    c_fund = sum(1 for x in analyzed_top5 if x["funding_pct"] <= 0.015)
-
-    rec_vol_min = round(max(2.6, min(4.0, float(np.percentile([x["ign_vol_mult"] for x in analyzed_top5], 15)) * 0.85)), 1)
-    rec_box_max = round(max(5.5, min(9.5, float(np.median([x["pre_box_pct"] for x in analyzed_top5])) * 1.6)), 1)
-    rec_dryup = round(max(0.18, min(0.35, float(np.median([x["dryup_ratio"] for x in analyzed_top5])) + 0.05)), 2)
-    avg_hours = round(float(np.mean([x["hours_to_peak"] for x in analyzed_top5])), 1)
-
-    tp1_rec = int(tp_tuning["tp1_min_pct"])
-    tp2_rec = int(tp_tuning["tp2_min_pct"])
-    tp3_rec = int(tp_tuning["tp3_min_pct"])
-    fib1_rec = tp_tuning["tp1_fib_mult"]
-    fib2_rec = tp_tuning["tp2_fib_mult"]
-    fib3_rec = tp_tuning["tp3_fib_mult"]
-    ext1_rec = tp_tuning["tp1_ma20_ext_pct"]
-    ext2_rec = tp_tuning["tp2_ma20_ext_pct"]
-    ext3_rec = tp_tuning["tp3_ma20_ext_pct"]
-
-    msg_lines.extend(
-        [
-            "━━━━━━━━━━━━━━━━━━",
-            "💡 [내 전략(scanner.py / analyzer.py) 실시간 업데이트 피드백 (제미나이 복붙용)]\n",
-            "[1. 기존 vs 전문가 신규 알파 전략 적중률 비교]",
-            f"• 기존 5분봉 단기정배열(5>20>50): {n}종목 중 {c_short}종목 (완전정배열 {c_full}종목)",
-            f"• 기존 박스권 OBV 우상향 매집: {n}종목 중 {c_obv}종목 | CVD 흡수 다이버전스: {c_cvd}종목",
-            f"• [전문가] High-Tight Bull Flag 공중눌림(상단 38.2% 사수): {n}종목 중 {c_bull_flag}종목",
-            f"• [전문가] 포켓 피벗(Pocket Pivot 초동 양봉 직격): {n}종목 중 {c_pocket}종목",
-            f"• [전문가] 장대양봉 50% 중심선(FVG/Equilibrium) 칼지지: {n}종목 중 {c_fvg50}종목",
-            f"• [전문가] 전고점 S/R Flip 칼지지: {n}종목 중 {c_sr}종목 | 유동성 스윕(Spring): {c_spring}종목",
-            f"• [전문가] 이평선 리본 초밀집(<=2.2%): {n}종목 중 {c_ribbon}종목 | TTM 켈트너 스퀴즈: {c_sqz}종목",
-            f"• [전문가] 상위프레임(1H 중심선) 구조적 지지: {n}종목 중 {c_htf}종목 | 청정/음수 펀딩: {c_fund}종목\n",
-            "[2. analyzer.py & config.py 파라미터 튜닝 권장값 (자동 동기화 완료)]",
-            f"• EARLY_VOL_MULT_MIN = {rec_vol_min} (초동 최소 거래량 배수)",
-            f"• PRE_BOX_RANGE_MAX_PCT = {rec_box_max}% (직전 2시간 변동폭 상한)",
-            f"• PULLBACK_DRYUP_MAX = {rec_dryup} (발화봉 대비 눌림 거래량 상한)",
-            f"• TP1_MIN_PCT = {tp1_rec}% (Fib {fib1_rec}배 / MA20이격 +{ext1_rec}%)",
-            f"• TP2_MIN_PCT = {tp2_rec}% (Fib {fib2_rec}배 / MA20이격 +{ext2_rec}%)",
-            f"• TP3_MIN_PCT = {tp3_rec}% (Fib {fib3_rec}배 / MA20이격 +{ext3_rec}%)\n",
-            "[3. analyzer.py 추가/보완할 전문가 파이썬 조건식]",
-            "• cond_bull_flag = (close > prev_box_high) and (pullback_low >= ignition_high - (ignition_high - prev_box_high) * 0.382) and (close >= ma5 * 0.998)",
-            "• cond_pocket_pivot = is_current_ignition and (close > open_p) and (pre_vol_pocket_ratio <= 0.40) and (curr_vol_mult >= EARLY_VOL_MULT_MIN)",
-            "• cond_fvg_mid_hold = (pullback_low >= (ignition_open + ignition_high) * 0.5 * 0.998) and (pullback_vol_ratio <= 0.35)\n",
-            "[4. 오답 노트(손절 역추적) 기반 방어 필터 업데이트 요약]",
-        ]
-    )
-
-    if prescriptions:
-        msg_lines.extend(prescriptions)
+    report_lines.append("\n⏱️ [48시간 사후검증 추적 결과]")
+    if verified_48h_lines:
+        report_lines.extend(verified_48h_lines[:6])
     else:
-        msg_lines.append("• 최근 48h 손절 특이사항 없음 (현행 방어 필터 유지 권장)")
+        report_lines.append("• 현재 48시간 사후검증 대상 종목들을 추적 중입니다.")
 
-    msg_lines.extend(
-        [
-            "\n[5. Top 5 대장주 + 내 스캐너 코인(오답노트) 로데이터 결합 1·2·3차 익절(TP) 학습 결과]",
-            f"• 실전 고정 손절폭(SL): -{FIXED_SL_PCT}% (급등 전 휩소 방어 & 1R +{FIXED_SL_PCT}% 본전방어 연동)",
-            f"• 파동별 고점 형성 위치 심층 분석 (Top5 5건 + 스캐너 포착 {tp_tuning['pm_sample_cnt']}건 결합 | 최종고점 평균 {avg_hours}h 소요):",
-            f"  - 1차 TP (첫 조정 형성 고점): +{tp1_rec}% (Top5 첫조정 +{tp_tuning['top5_w1_med']}%·스캐너코인 첫조정 +{tp_tuning['pm_w1_med']}% 결합 | Fib {fib1_rec}배 | MA20이격 +{ext1_rec}% | RSI6 {tp_tuning['tp1_rsi6']:.0f})",
-            f"  - 2차 TP (최종고점 전 중간조정 고점): +{tp2_rec}% (Top5 2차고점 +{tp_tuning['top5_w2_med']}%·스캐너코인 2차고점 +{tp_tuning['pm_w2_med']}% 결합 | Fib {fib2_rec}배 | MA20이격 +{ext2_rec}% | RSI6 {tp_tuning['tp2_rsi6']:.0f})",
-            f"  - 3차 TP (최종 클라이맥스 고점): +{tp3_rec}% (Top5 최종고점 +{tp_tuning['top5_w3_med']}%·스캐너코인 최종고점 +{tp_tuning['pm_w3_med']}% 결합 | Fib {fib3_rec}배 | MA20이격 +{ext3_rec}% | RSI6 {tp_tuning['tp3_rsi6']:.0f})",
-        ]
+    report_lines.append("\n🎯 [최근 24시간 스캐너 실전 타점 성적 & 오답노트]")
+    report_lines.extend(scanner_24h_lines)
+
+    report_lines.append(
+        f"\n⚙️ [자율 학습 익절 파라미터]: TP1 +{p1_learn:.1f}% / TP2 +{p2_learn:.1f}% / TP3 +{p3_learn:.1f}%"
     )
 
-    full_report = "\n".join(msg_lines)
-    send_telegram_chunked(full_report)
-    print(f"[{now_str}] 전문가급 Top 5 + 스캐너 코인 3파동 로데이터 심층 분석 브리핑 전송 완료")
+    full_msg = "\n".join(report_lines)
+    print(full_msg)
+    send_telegram_report(full_msg)
 
 
 if __name__ == "__main__":
