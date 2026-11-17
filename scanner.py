@@ -272,8 +272,9 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
     tp1_gain_pct = max(7.0, (tp1_target_p - entry_ref) / entry_ref * 100.0)
     tp2_gain_pct = max(13.0, (tp2_target_p - entry_ref) / entry_ref * 100.0)
+    tp3_gain_pct = max(20.0, (tp3_target_p - entry_ref) / entry_ref * 100.0)
 
-    # 1. 3차 목표가(TP3) 전량 익절 졸업 확인
+    # 1. 3차 목표가(TP3) 전량 익절 완료 확인
     if tp3_target_p > 0 and max_high >= tp3_target_p:
         was_tp3_alerted = bool(t_item.get("tp3_alerted") or t_item.get("tp3_completed") or t_item.get("closed_alerted"))
         t_item["be_armed"] = True
@@ -286,14 +287,15 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
         t_item["closed_alerted"] = True
         t_item["tp3_at"] = now_ts
         if not was_tp3_alerted:
+            total_cum_pct = int(round(tp1_gain_pct)) + int(round(tp2_gain_pct)) + int(round(max(tp3_gain_pct, max_fav_pct)))
             messages.append(
-                f"🎯 [3차 최종 목표가(TP3) 전량 익절 졸업] ${base_coin} ({symbol})\n"
+                f"🎯 [3차 최종 목표가(TP3) 전량 익절 완료] ${base_coin} ({symbol})\n"
                 f"• 진입 기준가: {fmt_price(entry_ref)} → 도달 최고가: {fmt_price(max_high)} (+{max_fav_pct:.1f}%)\n"
-                f"• 학습된 3차 클라이맥스 목표가({fmt_price(tp3_target_p)})를 달성하여 추적을 성공적으로 종료합니다."
+                f"• 💰 [최종 확정 누적 수익률]: +{total_cum_pct}%달성 (1~3차)"
             )
         return {"messages": messages, "sl_record": None}
 
-    # 2. 2차 목표가(TP2) 달성 확인 -> 최고가 대비 -3.5% 고점 트레일링 스탑 가동
+    # 2. 2차 목표가(TP2) 돌파 & 3차 고점 트레일링 가동 확인
     if tp2_target_p > 0 and max_high >= tp2_target_p:
         was_tp2_alerted = bool(t_item.get("tp2_alerted") or t_item.get("tp2_hit"))
         t_item["be_armed"] = True
@@ -348,7 +350,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             f"• 차익 매물 반락에 대비해 손절선을 진입가 위({fmt_price(stop_p)} USDT, +0.4%)로 상향 고정합니다."
         )
 
-    # 5. 보호선(본전/익절/트레일링 보존선) 이탈 확인
+    # 5. 트레일링/방어선 이탈 수익 마감 확인
     is_protected_mode = bool(t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("be_armed"))
 
     if is_protected_mode:
@@ -357,13 +359,19 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
             locked_gain_pct = max(0.4, (stop_p - entry_ref) / entry_ref * 100.0)
-            if just_armed_protection and messages:
-                messages[-1] += f"\n• 🔒 현재가({fmt_price(last_1m_close)})가 보호선 아래로 내려와 안전 익절 마감(+{locked_gain_pct:.1f}%) 처리합니다."
+
+            if t_item.get("tp2_hit"):
+                total_cum_pct = int(round(tp1_gain_pct)) + int(round(tp2_gain_pct)) + int(round(locked_gain_pct))
+            elif t_item.get("tp1_hit"):
+                total_cum_pct = int(round(tp1_gain_pct)) + int(round(locked_gain_pct))
             else:
-                messages.append(
-                    f"🔒 [트레일링/보호선 수익 마감 완료] ${base_coin} ({symbol})\n"
-                    f"• 진입 후 최고 +{max_fav_pct:.1f}% 도달 후 보호선({fmt_price(stop_p)}, +{locked_gain_pct:.1f}%) 이탈로 안전하게 잔여 물량을 익절 마감합니다."
-                )
+                total_cum_pct = max(1, int(round(locked_gain_pct)))
+
+            messages.append(
+                f"🔒 [트레일링/방어선 수익 마감 완료] ${base_coin} ({symbol})\n"
+                f"• 진입 후 최고 +{max_fav_pct:.1f}% 도달 후 방어선 이탈로 안전하게 잔여 물량을 최종 익절 마감합니다.\n"
+                f"• 💰 [최종 확정 누적 수익률]: +{total_cum_pct}%달성 (1~3차)"
+            )
         return {"messages": messages, "sl_record": None}
 
     # 6. 전략적 고정 손절선(-6%, init_stop_p) 이탈 확인
