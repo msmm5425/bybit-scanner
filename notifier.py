@@ -1,4 +1,4 @@
-```python
+python
 import os
 import io
 import sys
@@ -724,4 +724,3 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
             print(f"[텔레그램 차트 사진 전송 재시도 {attempt + 1}/3] {e}")
         time.sleep(1.2)
     return False
-```
