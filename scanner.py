@@ -1,3 +1,4 @@
+```python
 import os
 import json
 import time
@@ -8,7 +9,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import config as cfg
 from config import STATE_FILE, KST, to_float, is_tradfi_ticker
-from api import get_scanner_candidates, fetch_verified_1m_klines, fetch_klines
+from api import (
+    get_scanner_candidates,
+    fetch_verified_1m_klines,
+    fetch_klines,
+    get_valid_bybit_linear_symbols,
+)
 from analyzer import analyze_symbol, get_dynamic_tp_params
 from notifier import (
     build_briefing_message,
@@ -26,6 +32,7 @@ HISTORY_RETENTION_SEC = 259200
 EPISODE_RETENTION_SEC = 864000
 MAX_NEW_ALERTS_PER_SCAN = getattr(cfg, "MAX_NEW_ALERTS_PER_SCAN", 3)
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
+LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
 
 
 def send_telegram_reliable(text, reply_markup=None):
@@ -72,32 +79,95 @@ def send_telegram_reliable(text, reply_markup=None):
     return False
 
 
+def _read_json_dict(path):
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+    return {}
+
+
 def load_state():
-    for path in (STATE_FILE, f"{STATE_FILE}.tmp"):
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if isinstance(data, dict):
-                        for k in ("tracked", "alert_history", "sl_history", "signal_episodes"):
-                            if not isinstance(data.get(k), dict):
-                                data[k] = {}
-                        return data
-            except Exception as e:
-                print(f"[상태 파일 로드 경고] {path}: {e}")
-    return {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
+    """
+    [중복 알림 100% 차단용 스마트 병합 로더]
+    원격 Git의 scanner_state.json과 로컬 컨테이너의 /tmp/scanner_runtime_state.json을
+    병합(Merge)하여 git pull/push 충돌이 나더라도 이미 발송한 종목의 쿨타임이 절대 초기화되지 않도록 보장합니다.
+    """
+    merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
+    sources = [
+        _read_json_dict(STATE_FILE),
+        _read_json_dict(f"{STATE_FILE}.tmp"),
+        _read_json_dict(LOCAL_RUNTIME_CACHE),
+    ]
+
+    for src in sources:
+        if not isinstance(src, dict):
+            continue
+        # 1) alert_history: 가장 최신 타임스탬프 유지
+        for sym, ts_val in (src.get("alert_history") or {}).items():
+            merged["alert_history"][sym] = max(int(merged["alert_history"].get(sym, 0)), int(to_float(ts_val, 0)))
+
+        # 2) sl_history 병합
+        for k, v in (src.get("sl_history") or {}).items():
+            if isinstance(v, dict):
+                merged["sl_history"][k] = v
+
+        # 3) signal_episodes 병합 (플래그 잠금 보존)
+        for ep_k, ep_v in (src.get("signal_episodes") or {}).items():
+            if not isinstance(ep_v, dict):
+                continue
+            prev = merged["signal_episodes"].get(ep_k, {})
+            if not prev:
+                merged["signal_episodes"][ep_k] = dict(ep_v)
+            else:
+                for flag in (
+                    "be_armed", "tp1_hit", "tp2_hit",
+                    "tp1_alerted", "tp2_alerted", "tp3_alerted",
+                    "tp3_completed", "sl_alerted", "closed_alerted",
+                ):
+                    if ep_v.get(flag) or prev.get(flag):
+                        prev[flag] = True
+                prev["max_high_price"] = max(to_float(prev.get("max_high_price")), to_float(ep_v.get("max_high_price")))
+                prev["max_favorable_pct"] = max(to_float(prev.get("max_favorable_pct")), to_float(ep_v.get("max_favorable_pct")))
+                merged["signal_episodes"][ep_k] = prev
+
+        # 4) tracked 병합 (동일 심볼은 최신 created_at 우선 + 알림 플래그 보존)
+        for sym, t_v in (src.get("tracked") or {}).items():
+            if not isinstance(t_v, dict):
+                continue
+            prev_t = merged["tracked"].get(sym)
+            if not prev_t or int(t_v.get("created_at", 0)) > int(prev_t.get("created_at", 0)):
+                merged["tracked"][sym] = dict(t_v)
+            elif int(t_v.get("created_at", 0)) == int(prev_t.get("created_at", 0)):
+                for flag in (
+                    "be_armed", "tp1_hit", "tp2_hit",
+                    "tp1_alerted", "tp2_alerted", "tp3_alerted",
+                    "tp3_completed", "sl_alerted", "closed_alerted",
+                ):
+                    if t_v.get(flag) or prev_t.get(flag):
+                        prev_t[flag] = True
+                prev_t["max_high_price"] = max(to_float(prev_t.get("max_high_price")), to_float(t_v.get("max_high_price")))
+                prev_t["max_favorable_pct"] = max(to_float(prev_t.get("max_favorable_pct")), to_float(t_v.get("max_favorable_pct")))
+                prev_t["stop_price"] = max(to_float(prev_t.get("stop_price")), to_float(t_v.get("stop_price")))
+
+    return merged
 
 
 def save_state(state):
-    tmp_file = f"{STATE_FILE}.tmp"
-    try:
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_file, STATE_FILE)
-    except Exception as e:
-        print(f"[상태 저장 오류] {e}")
+    for target_path in (STATE_FILE, LOCAL_RUNTIME_CACHE):
+        tmp_file = f"{target_path}.tmp"
+        try:
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_file, target_path)
+        except Exception as e:
+            print(f"[상태 저장 오류] {target_path}: {e}")
 
 
 def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
@@ -425,7 +495,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
 
 def _send_signal_notifications_safe(res, now_str):
-    # 1) 상세 분석 브리핑 메시지 전송
     try:
         briefing_msg = build_briefing_message(res, now_str)
     except Exception:
@@ -437,32 +506,33 @@ def _send_signal_notifications_safe(res, now_str):
         )
     send_telegram_reliable(briefing_msg)
 
-    # 2) X(트위터) 양식 생성 후 텔레그램 화면에는 노출하지 않고 인라인 버튼 URL에만 탑재
     try:
         x_msg = build_x_post_message(res)
     except Exception:
+        base_c = res.get("base_coin", "")
+        sym_c = res.get("symbol", "")
         tps = res.get("tps", [0, 0, 0])
-        tp_pcts = res.get("tp_pcts", [8.0, 16.0, 24.0])
+        tp_pcts = res.get("tp_pcts", [8.0, 15.0, 22.0])
         p1 = int(round(to_float(tp_pcts[0], 8.0)))
-        p2 = int(round(to_float(tp_pcts[1], 16.0)))
-        p3 = int(round(to_float(tp_pcts[2], 24.0)))
+        p2 = int(round(to_float(tp_pcts[1], 15.0)))
+        p3 = int(round(to_float(tp_pcts[2], 22.0)))
         x_msg = (
-            "혹시 이 종목을 보유하고 있는 분 계신가요?\n\n"
-            "😎개인 검색기에 포착된 종목😎\n"
-            "⚠️거래량이 살아나면서 전고점 돌파 시도중⚠️\n\n"
-            f"${res.get('base_coin', '')} ({res.get('symbol', '')})\n\n"
-            f"- 진입 구간: {fmt_price(res.get('entry_low', 0))} ~ {fmt_price(res.get('entry_high', 0))} USDT\n\n"
+            "🔺️상승 예상 코인 검색기에 포착된 종목😎\n"
+            "⚠️박스권 에너지 응축 후 거래량 살아나며 추세 전환중⚠️\n\n"
+            f"${base_c} ({sym_c})\n\n"
+            f"- 진입 구간: {fmt_price(res.get('entry_low', 0))} ~ {fmt_price(res.get('entry_high', 0))} USDT\n"
             f"- SL: {fmt_price(res.get('stop_price', 0))} (-{int(round(to_float(res.get('sl_pct'), DEFAULT_FIXED_SL_PCT)))}%)\n"
             f"- tp1: {fmt_price(tps[0])}(+{p1}%)\n"
             f"- tp2: {fmt_price(tps[1])}(+{p2}%)\n"
-            f"- tp3: {fmt_price(tps[2])}(+{p3}%)"
+            f"- tp3: {fmt_price(tps[2])}(+{p3}%)\n\n"
+            f"#{base_c} 어디까지 오를거 같나요?\n"
+            "보유중이신 분들 계신가요?"
         )
 
     x_button_markup = build_x_intent_reply_markup(x_msg)
     base_coin = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
 
-    # 3) 실시간 15분봉 차트 사진 + 하단 [🚀 X(트위터) 앱에 본문 자동 입력하기] 버튼 전송 (캡션 생략)
     chart_bytes = generate_signal_chart_bytes(res)
     if chart_bytes:
         sent_photo = send_telegram_photo_with_caption(
@@ -493,6 +563,7 @@ def main():
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
     tp_params = get_dynamic_tp_params()
+    valid_syms, _ = get_valid_bybit_linear_symbols()
     candidates, pure_crypto_bases, rwa_blocked_bases = get_scanner_candidates()
     sent_count = 0
 
@@ -530,7 +601,7 @@ def main():
         created_at = int(t_item.get("created_at", 0))
         age_sec = now_ts - created_at
 
-        if is_tradfi_ticker(base_c) or base_c in rwa_blocked_bases:
+        if (valid_syms and sym not in valid_syms) or is_tradfi_ticker(base_c) or base_c in rwa_blocked_bases:
             del tracked[sym]
             continue
         if hasattr(cfg, "is_heavy_major_coin") and cfg.is_heavy_major_coin(base_c):
@@ -599,6 +670,8 @@ def main():
     to_analyze = []
     for coin in candidates:
         sym = coin["symbol"]
+        if valid_syms and sym not in valid_syms:
+            continue
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         if is_tradfi_ticker(base_c):
             continue
@@ -718,3 +791,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
