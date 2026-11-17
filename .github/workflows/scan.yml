@@ -1,7 +1,10 @@
 name: Bybit Multi-Timeframe Scanner
 ​on:
+push:
+branches:
+- main
 schedule:
-- cron: '0 * * * *'
+- cron: 0 * * * *
 workflow_dispatch:
 ​concurrency:
 group: bybit-scanner-main
@@ -20,9 +23,11 @@ fetch-depth: 0
 ​- name: Set up Python
 uses: actions/setup-python@v5
 with:
-python-version: '3.11'
-​- name: Install dependencies
-run: pip install --upgrade pip requests pandas numpy playwright && playwright install --with-deps chromium
+python-version: 3.11
+​- name: Install Python packages
+run: pip install --upgrade pip requests pandas numpy playwright
+​- name: Install Chromium browser
+run: playwright install --with-deps chromium
 ​- name: Run Scanner Loop
 env:
 TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
