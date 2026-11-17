@@ -1,3 +1,4 @@
+```python
 import os
 import json
 import time
@@ -104,7 +105,6 @@ def main():
 
     state = load_json_safe(STATE_FILE, {})
     episodes = state.get("signal_episodes", {})
-    sl_history = state.get("sl_history", {})
 
     valid_syms, _ = get_valid_bybit_linear_symbols()
     candidates, _, _ = get_scanner_candidates()
@@ -198,3 +198,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
