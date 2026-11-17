@@ -1,3 +1,4 @@
+```python
 import os
 import io
 import sys
@@ -85,7 +86,6 @@ def fmt_vol(v):
 
 
 def _ensure_playwright():
-    """우분투 리눅스 환경의 브라우저 구동 의존성(--with-deps)을 포함해 Playwright 자동 준비"""
     global _PLAYWRIGHT_READY
     if _PLAYWRIGHT_READY:
         return True
@@ -109,7 +109,6 @@ def _ensure_playwright():
 
 
 def fetch_exact_bybit_klines(symbol, interval="15", limit=130):
-    """api.py의 화이트리스트 검증 및 미국 IP 우회 캔들 로더를 우선 사용"""
     if api_mod is not None and hasattr(api_mod, "fetch_klines"):
         df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
         if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= 30:
@@ -188,7 +187,7 @@ def build_x_hook_line(res):
 
     if "유동성 스윕" in r_text or "Spring" in r_text:
         return "아랫꼬리 개미털기 후 매수세 유입되며 반등 시도중"
-    if "켈트너 스퀴즈" in r_text or "초응축" in r_text:
+    if "켈트너 스퀴즈" in r_text or "초응축" in r_text or "박스응축" in r_text:
         return "박스권 에너지 응축 후 거래량 살아나며 추세 전환중"
     if "음수 펀딩" in r_text:
         return "숏 스퀴즈 수급 유입되며 단기 추세 반등 시도중"
@@ -198,6 +197,22 @@ def build_x_hook_line(res):
 
 
 def build_x_post_message(res):
+    """
+    사용자 요청 신규 X(트위터) 양식 적용:
+    🔺️상승 예상 코인 검색기에 포착된 종목😎
+    ⚠️{핵심사유}⚠️
+
+    $ETHFI (ETHFIUSDT)
+
+    - 진입 구간: 0.47890 ~ 0.48058 USDT
+    - SL: 0.45129 (-6%)
+    - tp1: 0.51899(+8%)
+    - tp2: 0.55356(+15%)
+    - tp3: 0.58764(+22%)
+
+    #ETHFI 어디까지 오를거 같나요?
+    보유중이신 분들 계신가요?
+    """
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
     price = to_float(res.get("price"))
@@ -206,25 +221,26 @@ def build_x_post_message(res):
     sl_p = to_float(res.get("stop_price"))
     sl_pct = int(round(to_float(res.get("sl_pct"), FIXED_SL_PCT)))
 
-    tps = res.get("tps") or [price * 1.08, price * 1.16, price * 1.24]
-    tp_pcts = res.get("tp_pcts") or [8.0, 16.0, 24.0]
+    tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
+    tp_pcts = res.get("tp_pcts") or [8.0, 15.0, 22.0]
 
     p1 = int(round(to_float(tp_pcts[0], 8.0)))
-    p2 = int(round(to_float(tp_pcts[1], 16.0)))
-    p3 = int(round(to_float(tp_pcts[2], 24.0)))
+    p2 = int(round(to_float(tp_pcts[1], 15.0)))
+    p3 = int(round(to_float(tp_pcts[2], 22.0)))
 
     hook_line = build_x_hook_line(res)
 
     return (
-        "혹시 이 종목을 보유하고 있는 분 계신가요?\n\n"
-        "😎개인 검색기에 포착된 종목😎\n"
+        "🔺️상승 예상 코인 검색기에 포착된 종목😎\n"
         f"⚠️{hook_line}⚠️\n\n"
         f"${base} ({symbol})\n\n"
-        f"- 진입 구간: {fmt_price(e_low)} ~ {fmt_price(e_high)} USDT\n\n"
+        f"- 진입 구간: {fmt_price(e_low)} ~ {fmt_price(e_high)} USDT\n"
         f"- SL: {fmt_price(sl_p)} (-{sl_pct}%)\n"
         f"- tp1: {fmt_price(tps[0])}(+{p1}%)\n"
         f"- tp2: {fmt_price(tps[1])}(+{p2}%)\n"
-        f"- tp3: {fmt_price(tps[2])}(+{p3}%)"
+        f"- tp3: {fmt_price(tps[2])}(+{p3}%)\n\n"
+        f"#{base} 어디까지 오를거 같나요?\n"
+        "보유중이신 분들 계신가요?"
     )
 
 
@@ -264,15 +280,15 @@ def _render_tradingview_lightweight_chart(df, res):
 
     sl_pct = int(round(to_float(res.get("sl_pct"), FIXED_SL_PCT)))
     sl_p = to_float(res.get("stop_price"), price * (1.0 - sl_pct / 100.0)) * ratio_adj
-    tps = res.get("tps") or [price * 1.08, price * 1.16, price * 1.24]
-    tp_pcts = res.get("tp_pcts") or [8.0, 16.0, 24.0]
+    tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
+    tp_pcts = res.get("tp_pcts") or [8.0, 15.0, 22.0]
 
     tp1_p = to_float(tps[0]) * ratio_adj
     tp2_p = to_float(tps[1]) * ratio_adj
     tp3_p = to_float(tps[2]) * ratio_adj
     p1 = int(round(to_float(tp_pcts[0], 8.0)))
-    p2 = int(round(to_float(tp_pcts[1], 16.0)))
-    p3 = int(round(to_float(tp_pcts[2], 24.0)))
+    p2 = int(round(to_float(tp_pcts[1], 15.0)))
+    p3 = int(round(to_float(tp_pcts[2], 22.0)))
 
     candle_min_low = to_float(df["low"].min(), price * 0.97)
     candle_max_high = to_float(df["high"].max(), price * 1.02)
@@ -708,3 +724,4 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
             print(f"[텔레그램 차트 사진 전송 재시도 {attempt + 1}/3] {e}")
         time.sleep(1.2)
     return False
+```
