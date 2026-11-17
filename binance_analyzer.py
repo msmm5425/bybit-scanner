@@ -1,3 +1,4 @@
+```python
 import os
 import json
 import time
@@ -151,6 +152,12 @@ def analyze_top_gainer_structure(coin):
         vols = df_15m["volume"]
         rsi_s = calc_rsi(closes, 6)
         rsi15 = to_float(rsi_s.iloc[-1], 50.0)
+
+        # 만약 24h 변동률이 누락되었을 경우 15분봉 96개(24시간) 전 시가 대비로 정확히 계산
+        if abs(chg_24h) < 0.05 and len(df_15m) >= 90:
+            open_24h = to_float(df_15m["open"].iloc[-min(len(df_15m), 96)], price)
+            if open_24h > 0:
+                chg_24h = round(((price - open_24h) / open_24h) * 100.0, 2)
 
         avg_vol = to_float(vols.iloc[-25:-5].mean(), 1.0)
         max_recent_vol = to_float(vols.iloc[-12:].max(), avg_vol)
@@ -383,3 +390,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
