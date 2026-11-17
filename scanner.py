@@ -13,6 +13,7 @@ from analyzer import analyze_symbol, get_dynamic_tp_params
 from notifier import (
     build_briefing_message,
     build_x_post_message,
+    build_x_intent_reply_markup,
     send_telegram_single,
     fmt_price,
     generate_signal_chart_bytes,
@@ -27,7 +28,7 @@ MAX_NEW_ALERTS_PER_SCAN = getattr(cfg, "MAX_NEW_ALERTS_PER_SCAN", 3)
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 
 
-def send_telegram_reliable(text):
+def send_telegram_reliable(text, reply_markup=None):
     if not text:
         return False
     token = getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or os.getenv("TELEGRAM_TOKEN", "")
@@ -35,20 +36,24 @@ def send_telegram_reliable(text):
 
     if not token or not chat_id:
         try:
-            send_telegram_single(text)
+            send_telegram_single(text, reply_markup=reply_markup)
             time.sleep(0.7)
             return True
         except Exception:
             return False
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+
     for attempt in range(3):
         try:
-            resp = requests.post(
-                url,
-                json={"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
-                timeout=12,
-            )
+            resp = requests.post(url, json=payload, timeout=12)
             if resp.status_code == 200:
                 time.sleep(0.7)
                 return True
@@ -96,11 +101,6 @@ def save_state(state):
 
 
 def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
-    """
-    [손절->익절 둔갑 버그 수정 및 기존 데이터 자동 복구]
-    - 손절(sl_alerted)된 종목이 closed_alerted == True 조건 때문에 익절(tp1_hit/tp3_completed)로
-      잘못 덮어써지던 문제를 차단하고, 기존에 잘못 켜진 손절 종목의 익절 플래그를 자동 복구합니다.
-    """
     c_at = int(t_item.get("created_at", 0))
     if c_at <= 0:
         return
@@ -366,7 +366,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 )
         return {"messages": messages, "sl_record": None}
 
-    # 6. 전략적 고정 손절선(-6%, init_stop_p) 이탈 확인 (시간 경과에 따른 손절 축소 없이 -6% 고정 원칙 준수)
+    # 6. 전략적 고정 손절선(-6%, init_stop_p) 이탈 확인
     min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
     min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
 
@@ -421,6 +421,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
 
 def _send_signal_notifications_safe(res, now_str):
+    # 1) 상세 분석 브리핑 메시지 전송
     try:
         briefing_msg = build_briefing_message(res, now_str)
     except Exception:
@@ -432,6 +433,7 @@ def _send_signal_notifications_safe(res, now_str):
         )
     send_telegram_reliable(briefing_msg)
 
+    # 2) X(트위터) 양식 생성 후 텔레그램 화면에는 노출하지 않고 인라인 버튼 URL에만 탑재
     try:
         x_msg = build_x_post_message(res)
     except Exception:
@@ -452,13 +454,28 @@ def _send_signal_notifications_safe(res, now_str):
             f"- tp3: {fmt_price(tps[2])}(+{p3}%)"
         )
 
+    x_button_markup = build_x_intent_reply_markup(x_msg)
+    base_coin = res.get("base_coin") or res.get("base") or ""
+    symbol = res.get("symbol", "")
+
+    # 3) 실시간 15분봉 차트 사진 + 하단 [🚀 X(트위터) 앱에 본문 자동 입력하기] 버튼 전송 (캡션 생략)
     chart_bytes = generate_signal_chart_bytes(res)
     if chart_bytes:
-        sent_photo = send_telegram_photo_with_caption(chart_bytes, x_msg)
+        sent_photo = send_telegram_photo_with_caption(
+            chart_bytes,
+            caption_text="",
+            reply_markup=x_button_markup,
+        )
         if not sent_photo:
-            send_telegram_reliable(x_msg)
+            send_telegram_reliable(
+                f"📲 ${base_coin} ({symbol}) X 포스팅 바로가기",
+                reply_markup=x_button_markup,
+            )
     else:
-        send_telegram_reliable(x_msg)
+        send_telegram_reliable(
+            f"📲 ${base_coin} ({symbol}) X 포스팅 바로가기",
+            reply_markup=x_button_markup,
+        )
 
 
 def main():
