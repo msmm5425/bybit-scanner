@@ -85,7 +85,7 @@ def fmt_vol(v):
 
 
 def _ensure_playwright():
-    """런타임에 playwright 및 chromium이 없으면 1회 자동 설치"""
+    """우분투 리눅스 환경의 브라우저 구동 의존성(--with-deps)을 포함해 Playwright 자동 준비"""
     global _PLAYWRIGHT_READY
     if _PLAYWRIGHT_READY:
         return True
@@ -95,9 +95,12 @@ def _ensure_playwright():
         return True
     except ImportError:
         try:
-            print("[알림] TradingView 엔진 렌더링용 Playwright 설치 중...")
+            print("[알림] TradingView 엔진 렌더링용 Playwright 및 리눅스 의존성 설치 중...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "playwright"])
-            subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+            try:
+                subprocess.check_call([sys.executable, "-m", "playwright", "install", "--with-deps", "chromium"])
+            except Exception:
+                subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
             _PLAYWRIGHT_READY = True
             return True
         except Exception as e:
@@ -106,56 +109,11 @@ def _ensure_playwright():
 
 
 def fetch_exact_bybit_klines(symbol, interval="15", limit=130):
-    """
-    [100% Bybit V5 공식 미러 서버 전용]
-    실제 바이비트 선물에 상장된 코인의 15분봉(OHLC)과 거래량만 가져옵니다.
-    """
+    """api.py의 화이트리스트 검증 및 미국 IP 우회 캔들 로더를 우선 사용"""
     if api_mod is not None and hasattr(api_mod, "fetch_klines"):
         df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
         if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= 30:
             return df
-
-    bybit_params = {
-        "category": "linear",
-        "symbol": str(symbol).upper(),
-        "interval": str(interval),
-        "limit": int(limit),
-    }
-    bybit_hosts = (
-        "https://api.bybit-tr.com",
-        "https://api.bybit.kz",
-        "https://api.bybit.nl",
-        "https://api.bytick.com",
-        "https://api.bybit.com",
-    )
-
-    for host in bybit_hosts:
-        try:
-            resp = requests.get(
-                f"{host}/v5/market/kline",
-                params=bybit_params,
-                headers=BROWSER_HEADERS,
-                timeout=4,
-            )
-            if resp.status_code == 200:
-                rows = resp.json().get("result", {}).get("list", [])
-                if isinstance(rows, list) and len(rows) >= 30:
-                    cols = ["timestamp", "open", "high", "low", "close", "volume", "turnover"][: len(rows[0])]
-                    df = pd.DataFrame(rows, columns=cols)
-                    for c in ("timestamp", "open", "high", "low", "close", "volume"):
-                        df[c] = pd.to_numeric(df[c], errors="coerce")
-                    if df["timestamp"].max() < 1e11:
-                        df["timestamp"] = df["timestamp"] * 1000.0
-                    df = (
-                        df.dropna(subset=["timestamp", "close"])
-                        .sort_values("timestamp", ascending=True)
-                        .reset_index(drop=True)
-                    )
-                    if len(df) >= 30:
-                        return df
-        except Exception:
-            continue
-
     return pd.DataFrame()
 
 
@@ -209,7 +167,6 @@ def build_briefing_message(res, now_str):
 
 
 def build_x_hook_line(res):
-    """포착된 전략과 근거를 분석해 X(트위터)용 짧은 한 줄 핵심 요약 문구 생성"""
     track_type = str(res.get("track_type", "TRACK_A"))
     reasons = res.get("reasons") or []
     r_text = " ".join(str(x) for x in reasons)
@@ -241,7 +198,6 @@ def build_x_hook_line(res):
 
 
 def build_x_post_message(res):
-    """버튼 클릭 시 X(트위터) 작성창에 자동으로 채워질 본문 양식"""
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
     price = to_float(res.get("price"))
@@ -273,10 +229,6 @@ def build_x_post_message(res):
 
 
 def build_x_intent_reply_markup(x_post_text):
-    """
-    X 양식 텍스트를 URL 인코딩하여 텔레그램 인라인 버튼(InlineKeyboardMarkup)으로 변환합니다.
-    버튼을 누르면 X 앱 작성창이 열리며 본문이 자동으로 입력됩니다.
-    """
     encoded_text = urllib.parse.quote(str(x_post_text or ""), safe="")
     intent_url = f"https://x.com/intent/post?text={encoded_text}"
     return {
@@ -292,12 +244,6 @@ def build_x_intent_reply_markup(x_post_text):
 
 
 def _render_tradingview_lightweight_chart(df, res):
-    """
-    [트레이딩뷰 Lightweight Charts 15분봉 24시간(96캔들) 렌더링 엔진]
-    1) 바이비트 실제 15분봉 96개(24시간 흐름) 표시 + 이평선 MA(5), MA(9), MA(20) 적용
-    2) 양방향 비선형 스케일로 SL 하단 빈 여백과 TP 상단 여백을 모두 압축해 캔들 크기 확대
-    3) 거래량 바 높이를 하단 10%로 축소 & 진입한 마지막 캔들 하단에 '▲ ENTRY' 화살표 마커 표시
-    """
     if not _ensure_playwright():
         return None
 
@@ -721,10 +667,6 @@ def send_telegram_single(text, reply_markup=None):
 
 
 def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=None):
-    """
-    차트 사진을 텔레그램으로 전송하며, 하단에 X(트위터) 작성창 자동 입력 인라인 버튼을 부착합니다.
-    (caption_text를 비워두면 채팅방에 X 양식 문구를 노출하지 않고 사진과 버튼만 깔끔하게 전송합니다.)
-    """
     token = (
         TELEGRAM_BOT_TOKEN
         or os.getenv("TELEGRAM_TOKEN")
