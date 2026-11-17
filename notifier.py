@@ -5,6 +5,7 @@ import time
 import json
 import tempfile
 import subprocess
+import urllib.parse
 import requests
 import numpy as np
 import pandas as pd
@@ -107,7 +108,6 @@ def _ensure_playwright():
 def fetch_exact_bybit_klines(symbol, interval="15", limit=130):
     """
     [100% Bybit V5 공식 미러 서버 전용]
-    타 거래소(비트겟·게이트아이오) 폴백을 완전히 제거하여,
     실제 바이비트 선물에 상장된 코인의 15분봉(OHLC)과 거래량만 가져옵니다.
     """
     if api_mod is not None and hasattr(api_mod, "fetch_klines"):
@@ -241,7 +241,7 @@ def build_x_hook_line(res):
 
 
 def build_x_post_message(res):
-    """최신 X(트위터) 전용 양식 (핵심 한 줄 포착 사유 포함)"""
+    """버튼 클릭 시 X(트위터) 작성창에 자동으로 채워질 본문 양식"""
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
     price = to_float(res.get("price"))
@@ -270,6 +270,25 @@ def build_x_post_message(res):
         f"- tp2: {fmt_price(tps[1])}(+{p2}%)\n"
         f"- tp3: {fmt_price(tps[2])}(+{p3}%)"
     )
+
+
+def build_x_intent_reply_markup(x_post_text):
+    """
+    X 양식 텍스트를 URL 인코딩하여 텔레그램 인라인 버튼(InlineKeyboardMarkup)으로 변환합니다.
+    버튼을 누르면 X 앱 작성창이 열리며 본문이 자동으로 입력됩니다.
+    """
+    encoded_text = urllib.parse.quote(str(x_post_text or ""), safe="")
+    intent_url = f"https://x.com/intent/post?text={encoded_text}"
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "🚀 X(트위터) 앱에 본문 자동 입력하기",
+                    "url": intent_url,
+                }
+            ]
+        ]
+    }
 
 
 def _render_tradingview_lightweight_chart(df, res):
@@ -667,23 +686,45 @@ def generate_signal_chart_bytes(res):
     return _render_tradingview_lightweight_chart(df, res)
 
 
-def send_telegram_single(text):
-    if not text or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+def send_telegram_single(text, reply_markup=None):
+    token = (
+        TELEGRAM_BOT_TOKEN
+        or os.getenv("TELEGRAM_TOKEN")
+        or os.getenv("TELEGRAM_BOT_TOKEN")
+        or ""
+    ).strip()
+    chat_id = (
+        TELEGRAM_CHAT_ID
+        or os.getenv("TELEGRAM_CHAT_ID")
+        or os.getenv("CHAT_ID")
+        or ""
+    ).strip()
+
+    if not text or not token or not chat_id:
         return False
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+
     try:
-        r = requests.post(
-            url,
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "disable_web_page_preview": True},
-            timeout=12,
-        )
+        r = requests.post(url, json=payload, timeout=12)
         return r.status_code == 200
     except Exception as e:
         print(f"[텔레그램 전송 오류] {e}")
         return False
 
 
-def send_telegram_photo_with_caption(photo_bytes, caption_text):
+def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=None):
+    """
+    차트 사진을 텔레그램으로 전송하며, 하단에 X(트위터) 작성창 자동 입력 인라인 버튼을 부착합니다.
+    (caption_text를 비워두면 채팅방에 X 양식 문구를 노출하지 않고 사진과 버튼만 깔끔하게 전송합니다.)
+    """
     token = (
         TELEGRAM_BOT_TOKEN
         or os.getenv("TELEGRAM_TOKEN")
@@ -704,7 +745,15 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text):
     for attempt in range(3):
         try:
             files = {"photo": ("tv_signal_chart.png", photo_bytes, "image/png")}
-            data = {"chat_id": chat_id, "caption": caption_text}
+            data = {"chat_id": chat_id}
+            if caption_text:
+                data["caption"] = caption_text
+            if reply_markup:
+                data["reply_markup"] = (
+                    json.dumps(reply_markup, ensure_ascii=False)
+                    if isinstance(reply_markup, dict)
+                    else str(reply_markup)
+                )
             resp = requests.post(url, data=data, files=files, timeout=18)
             if resp.status_code == 200:
                 time.sleep(0.7)
