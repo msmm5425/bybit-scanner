@@ -22,47 +22,11 @@ uses: actions/setup-python@v5
 with:
 python-version: '3.11'
 ​- name: Install dependencies
-run: |
-python -m pip install --upgrade pip
-pip install requests pandas numpy playwright
-playwright install --with-deps chromium
-​- name: Run Multi-Timeframe Scanner Loop
+run: pip install --upgrade pip requests pandas numpy playwright && playwright install --with-deps chromium
+​- name: Run Scanner Loop
 env:
 TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
 TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 CHAT_ID: ${{ secrets.CHAT_ID }}
-run: |
-git config --local user.email "actions@github.com"
-git config --local user.name "GitHub Actions"
-for i in 1 2 3 4 5 6 7 8 9; do
-echo "=== Scan Round $i of 9 ==="
-git fetch origin main || true
-git checkout origin/main -- scanner_state.json 2>/dev/null || true
-python scanner.py || echo "Scanner warning"
-if [ -f /tmp/scanner_runtime_state.json ]; then
-cp /tmp/scanner_runtime_state.json scanner_state.json
-fi
-if [ -f scanner_state.json ]; then
-cp scanner_state.json /tmp/scanner_state_push_ready.json
-for retry in 1 2 3; do
-git fetch origin main || true
-git reset --soft origin/main || true
-cp /tmp/scanner_state_push_ready.json scanner_state.json
-git add scanner_state.json
-if ! git diff --staged --quiet; then
-git commit -m "chore: update scanner state [skip ci]" || true
-if git push origin HEAD:main; then
-break
-fi
-else
-break
-fi
-sleep 2
-done
-fi
-if [ "$i" -lt 9 ]; then
-echo "Waiting 295 seconds..."
-sleep 295
-fi
-done
+run: python scanner.py --loop
