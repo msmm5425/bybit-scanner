@@ -1,7 +1,9 @@
 ```python
 import os
+import sys
 import json
 import time
+import subprocess
 import requests
 import numpy as np
 from datetime import datetime
@@ -92,11 +94,6 @@ def _read_json_dict(path):
 
 
 def load_state():
-    """
-    [중복 알림 100% 차단용 스마트 병합 로더]
-    원격 Git의 scanner_state.json과 로컬 컨테이너의 /tmp/scanner_runtime_state.json을
-    병합(Merge)하여 git pull/push 충돌이 나더라도 이미 발송한 종목의 쿨타임이 절대 초기화되지 않도록 보장합니다.
-    """
     merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
     sources = [
         _read_json_dict(STATE_FILE),
@@ -107,16 +104,13 @@ def load_state():
     for src in sources:
         if not isinstance(src, dict):
             continue
-        # 1) alert_history: 가장 최신 타임스탬프 유지
         for sym, ts_val in (src.get("alert_history") or {}).items():
             merged["alert_history"][sym] = max(int(merged["alert_history"].get(sym, 0)), int(to_float(ts_val, 0)))
 
-        # 2) sl_history 병합
         for k, v in (src.get("sl_history") or {}).items():
             if isinstance(v, dict):
                 merged["sl_history"][k] = v
 
-        # 3) signal_episodes 병합 (플래그 잠금 보존)
         for ep_k, ep_v in (src.get("signal_episodes") or {}).items():
             if not isinstance(ep_v, dict):
                 continue
@@ -135,7 +129,6 @@ def load_state():
                 prev["max_favorable_pct"] = max(to_float(prev.get("max_favorable_pct")), to_float(ep_v.get("max_favorable_pct")))
                 merged["signal_episodes"][ep_k] = prev
 
-        # 4) tracked 병합 (동일 심볼은 최신 created_at 우선 + 알림 플래그 보존)
         for sym, t_v in (src.get("tracked") or {}).items():
             if not isinstance(t_v, dict):
                 continue
@@ -343,7 +336,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     tp2_gain_pct = max(13.0, (tp2_target_p - entry_ref) / entry_ref * 100.0)
     tp3_gain_pct = max(20.0, (tp3_target_p - entry_ref) / entry_ref * 100.0)
 
-    # 1. 3차 목표가(TP3) 전량 익절 완료 확인
     if tp3_target_p > 0 and max_high >= tp3_target_p:
         was_tp3_alerted = bool(t_item.get("tp3_alerted") or t_item.get("tp3_completed") or t_item.get("closed_alerted"))
         t_item["be_armed"] = True
@@ -364,7 +356,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             )
         return {"messages": messages, "sl_record": None}
 
-    # 2. 2차 목표가(TP2) 돌파 & 3차 고점 트레일링 가동 확인
     if tp2_target_p > 0 and max_high >= tp2_target_p:
         was_tp2_alerted = bool(t_item.get("tp2_alerted") or t_item.get("tp2_hit"))
         t_item["be_armed"] = True
@@ -385,7 +376,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 2차 분할 익절(30%) 확정! 남은 30% 물량은 최고가 대비 -3.5% 트레일링 보호선({fmt_price(stop_p)}, +{lock_pct:.1f}%)으로 3차 고점을 끝까지 추적합니다."
             )
 
-    # 3. 1차 목표가(TP1) 달성 확인
     elif tp1_target_p > 0 and max_high >= tp1_target_p:
         was_tp1_alerted = bool(t_item.get("tp1_alerted") or t_item.get("tp1_hit"))
         t_item["be_armed"] = True
@@ -404,7 +394,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 1차 분할 익절(40%) 확정! 남은 물량은 첫 조정 눌림을 견디고 2·3차 파동을 먹기 위해 보호선({fmt_price(stop_p)})으로 홀딩합니다."
             )
 
-    # 4. 초기 손절폭(-6%, 1R)과 동일한 +6.0% 도달 시 본전 방어(Breakeven) 스탑 자동 활성화
     if max_fav_pct >= be_trigger and not t_item.get("be_armed") and not t_item.get("tp1_hit"):
         t_item["be_armed"] = True
         be_stop = max(stop_p, entry_ref * 1.004)
@@ -416,7 +405,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             f"• 차익 매물 반락에 대비해 손절선을 진입가 위({fmt_price(stop_p)} USDT, +0.4%)로 상향 고정합니다."
         )
 
-    # 5. 트레일링/방어선 이탈 수익 마감 확인
     is_protected_mode = bool(t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("be_armed"))
 
     if is_protected_mode:
@@ -440,7 +428,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             )
         return {"messages": messages, "sl_record": None}
 
-    # 6. 전략적 고정 손절선(-6%, init_stop_p) 이탈 확인
     min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
     min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
 
@@ -789,6 +776,57 @@ def main():
         print(f"[{now_str}] 멀티프레임 스캔 완료 ({elapsed:.1f}초 소요) - 총 {sent_count}건 이벤트 전송 (신규 타점 {new_entry_sent}종목).")
 
 
+def _git_sync_state():
+    """파이썬 내부에서 안전하게 원격 scanner_state.json 동기화 및 푸시"""
+    try:
+        subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
+        subprocess.run(["git", "config", "--local", "user.name", "GitHub Actions"], check=False)
+        if not os.path.exists(STATE_FILE):
+            return
+        for _ in range(3):
+            subprocess.run(["git", "fetch", "origin", "main"], check=False)
+            subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
+            if os.path.exists(LOCAL_RUNTIME_CACHE):
+                with open(LOCAL_RUNTIME_CACHE, "r", encoding="utf-8") as src, open(STATE_FILE, "w", encoding="utf-8") as dst:
+                    dst.write(src.read())
+            subprocess.run(["git", "add", STATE_FILE], check=False)
+            diff_res = subprocess.run(["git", "diff", "--staged", "--quiet"], check=False)
+            if diff_res.returncode != 0:
+                subprocess.run(["git", "commit", "-m", "chore: update scanner state [skip ci]"], check=False)
+                push_res = subprocess.run(["git", "push", "origin", "HEAD:main"], check=False)
+                if push_res.returncode == 0:
+                    break
+            else:
+                break
+            time.sleep(2)
+    except Exception as e:
+        print(f"[Git 상태 동기화 경고] {e}")
+
+
+def run_loop_mode(iterations=9, sleep_sec=295):
+    for i in range(1, iterations + 1):
+        print(f"=== [회차 {i}/{iterations}] 5분 주기 스캔 시작 ===")
+        try:
+            subprocess.run(["git", "fetch", "origin", "main"], check=False)
+            subprocess.run(["git", "checkout", "origin/main", "--", STATE_FILE], check=False)
+        except Exception:
+            pass
+
+        try:
+            main()
+        except Exception as e:
+            print(f"[스캔 루프 예외] {e}")
+
+        _git_sync_state()
+
+        if i < iterations:
+            print(f"다음 스캔까지 {sleep_sec}초 대기...")
+            time.sleep(sleep_sec)
+
+
 if __name__ == "__main__":
-    main()
+    if "--loop" in sys.argv:
+        run_loop_mode()
+    else:
+        main()
 ```
