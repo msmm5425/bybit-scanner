@@ -1,4 +1,4 @@
-```python
+python
 import os
 import sys
 import json
@@ -829,4 +829,3 @@ if __name__ == "__main__":
         run_loop_mode()
     else:
         main()
-```
