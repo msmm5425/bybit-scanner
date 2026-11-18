@@ -9,6 +9,7 @@ from api import (
     fetch_verified_1m_klines,
     fetch_klines,
     get_valid_bybit_linear_symbols,
+    is_stock_or_tradfi_symbol,
     clean_url,
 )
 from analyzer import analyze_symbol, get_dynamic_tp_params
@@ -36,6 +37,12 @@ MAX_NEW_ALERTS_PER_SCAN = getattr(cfg, "MAX_NEW_ALERTS_PER_SCAN", 3)
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
 ALL_STATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json", LOCAL_RUNTIME_CACHE]))
+
+ALL_LOCK_FLAGS = (
+    "tp1_hit", "tp2_hit", "tp3_hit",
+    "tp1_alerted", "tp2_alerted", "tp3_alerted",
+    "tp3_completed", "trailing_closed", "sl_alerted", "closed_alerted",
+)
 
 
 def send_telegram_reliable(text, reply_markup=None):
@@ -78,6 +85,7 @@ def _read_json(path):
 
 
 def sanitize_flags_by_mfe(item):
+    """한 번 발송된 알림 플래그(tp1_alerted 등)는 절대 해제하지 않고 MFE 달성 여부만 보완"""
     if not isinstance(item, dict):
         return item
     entry_p = to_float(item.get("entry_price"))
@@ -88,62 +96,65 @@ def sanitize_flags_by_mfe(item):
         item["max_favorable_pct"] = fav
 
     tps = item.get("tps") or []
-    tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 7.5
-    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 14.5
-    tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 21.5
+    tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.2) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 6.8
+    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.2) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 13.0
+    tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.2) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 19.5
 
-    real_tp1 = bool(fav >= max(6.8, tp1_req))
-    real_tp2 = bool(fav >= max(13.0, tp2_req))
-    real_tp3 = bool(fav >= max(19.5, tp3_req))
-
-    item["tp1_hit"] = real_tp1
-    item["tp1_alerted"] = bool(item.get("tp1_alerted") and real_tp1)
-    item["tp2_hit"] = real_tp2
-    item["tp2_alerted"] = bool(item.get("tp2_alerted") and real_tp2)
-    item["tp3_alerted"] = bool(item.get("tp3_alerted") and real_tp3)
-    if item.get("tp3_completed") and not real_tp3 and not item.get("sl_alerted"):
-        item["trailing_closed"] = True
+    if fav >= max(6.5, tp1_req) or item.get("tp1_alerted"):
+        item["tp1_hit"] = True
+    if fav >= max(12.5, tp2_req) or item.get("tp2_alerted"):
+        item["tp2_hit"] = True
+    if fav >= max(19.0, tp3_req) or item.get("tp3_alerted"):
+        item["tp3_hit"] = True
     return item
+
+
+def _merge_state_dicts(base_state, incoming_state):
+    if not isinstance(incoming_state, dict):
+        return base_state
+    for s, ts_v in (incoming_state.get("alert_history") or {}).items():
+        if not is_stock_or_tradfi_symbol(s):
+            base_state["alert_history"][s] = max(int(base_state["alert_history"].get(s, 0)), int(to_float(ts_v, 0)))
+    for k, v in (incoming_state.get("sl_history") or {}).items():
+        if isinstance(v, dict) and not is_stock_or_tradfi_symbol(v.get("symbol", "")):
+            base_state["sl_history"][k] = v
+    for ek, ev in (incoming_state.get("signal_episodes") or {}).items():
+        if not isinstance(ev, dict) or is_stock_or_tradfi_symbol(ev.get("symbol", "")):
+            continue
+        ev = sanitize_flags_by_mfe(dict(ev))
+        p = base_state["signal_episodes"].get(ek, {})
+        if not p:
+            base_state["signal_episodes"][ek] = ev
+        else:
+            p["max_high_price"] = max(to_float(p.get("max_high_price")), to_float(ev.get("max_high_price")))
+            p["max_favorable_pct"] = max(to_float(p.get("max_favorable_pct")), to_float(ev.get("max_favorable_pct")))
+            p["stop_price"] = max(to_float(p.get("stop_price")), to_float(ev.get("stop_price")))
+            for fg in ALL_LOCK_FLAGS:
+                if ev.get(fg) or p.get(fg):
+                    p[fg] = True
+            base_state["signal_episodes"][ek] = sanitize_flags_by_mfe(p)
+    for s, tv in (incoming_state.get("tracked") or {}).items():
+        if not isinstance(tv, dict) or is_stock_or_tradfi_symbol(s):
+            continue
+        tv = sanitize_flags_by_mfe(dict(tv))
+        pt = base_state["tracked"].get(s)
+        if not pt or int(tv.get("created_at", 0)) > int(pt.get("created_at", 0)):
+            base_state["tracked"][s] = tv
+        elif int(tv.get("created_at", 0)) == int(pt.get("created_at", 0)):
+            pt["max_high_price"] = max(to_float(pt.get("max_high_price")), to_float(tv.get("max_high_price")))
+            pt["max_favorable_pct"] = max(to_float(pt.get("max_favorable_pct")), to_float(tv.get("max_favorable_pct")))
+            pt["stop_price"] = max(to_float(pt.get("stop_price")), to_float(tv.get("stop_price")))
+            for fg in ALL_LOCK_FLAGS:
+                if tv.get(fg) or pt.get(fg):
+                    pt[fg] = True
+            base_state["tracked"][s] = sanitize_flags_by_mfe(pt)
+    return base_state
 
 
 def load_state():
     merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
     for path in ALL_STATE_FILES:
-        src = _read_json(path)
-        for s, ts_v in (src.get("alert_history") or {}).items():
-            merged["alert_history"][s] = max(int(merged["alert_history"].get(s, 0)), int(to_float(ts_v, 0)))
-        for k, v in (src.get("sl_history") or {}).items():
-            if isinstance(v, dict):
-                merged["sl_history"][k] = v
-        for ek, ev in (src.get("signal_episodes") or {}).items():
-            if not isinstance(ev, dict):
-                continue
-            ev = sanitize_flags_by_mfe(dict(ev))
-            p = merged["signal_episodes"].get(ek, {})
-            if not p:
-                merged["signal_episodes"][ek] = ev
-            else:
-                p["max_high_price"] = max(to_float(p.get("max_high_price")), to_float(ev.get("max_high_price")))
-                p["max_favorable_pct"] = max(to_float(p.get("max_favorable_pct")), to_float(ev.get("max_favorable_pct")))
-                for fg in ("be_armed", "sl_alerted", "closed_alerted", "tp3_completed", "trailing_closed", "tp3_alerted"):
-                    if ev.get(fg) or p.get(fg):
-                        p[fg] = True
-                merged["signal_episodes"][ek] = sanitize_flags_by_mfe(p)
-        for s, tv in (src.get("tracked") or {}).items():
-            if not isinstance(tv, dict):
-                continue
-            tv = sanitize_flags_by_mfe(dict(tv))
-            pt = merged["tracked"].get(s)
-            if not pt or int(tv.get("created_at", 0)) > int(pt.get("created_at", 0)):
-                merged["tracked"][s] = tv
-            elif int(tv.get("created_at", 0)) == int(pt.get("created_at", 0)):
-                pt["max_high_price"] = max(to_float(pt.get("max_high_price")), to_float(tv.get("max_high_price")))
-                pt["max_favorable_pct"] = max(to_float(pt.get("max_favorable_pct")), to_float(tv.get("max_favorable_pct")))
-                pt["stop_price"] = max(to_float(pt.get("stop_price")), to_float(tv.get("stop_price")))
-                for fg in ("be_armed", "sl_alerted", "closed_alerted", "tp3_completed", "trailing_closed", "tp3_alerted"):
-                    if tv.get(fg) or pt.get(fg):
-                        pt[fg] = True
-                merged["tracked"][s] = sanitize_flags_by_mfe(pt)
+        _merge_state_dicts(merged, _read_json(path))
     return merged
 
 
@@ -162,7 +173,7 @@ def save_state(state):
 
 def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
     c_at = int(t_item.get("created_at", 0))
-    if c_at <= 0:
+    if c_at <= 0 or is_stock_or_tradfi_symbol(symbol):
         return
     ep_key = f"{symbol}_{c_at}"
     prev = signal_episodes.get(ep_key, {})
@@ -170,9 +181,9 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
     max_fav = max(to_float(prev.get("max_favorable_pct")), to_float(t_item.get("max_favorable_pct")))
     t_item["max_high_price"] = max_h
     t_item["max_favorable_pct"] = max_fav
-    if isinstance(sl_history, dict) and ep_key in sl_history and max_fav < 7.0:
-        t_item["sl_alerted"] = True
-        t_item["closed_alerted"] = True
+    for fg in ALL_LOCK_FLAGS:
+        if prev.get(fg) or t_item.get(fg):
+            t_item[fg] = True
     sanitize_flags_by_mfe(t_item)
 
     signal_episodes[ep_key] = {
@@ -180,15 +191,13 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
         "score": int(t_item.get("score", 85)), "entry_price": to_float(t_item.get("entry_price")),
         "initial_stop_price": to_float(t_item.get("initial_stop_price") or t_item.get("stop_price")),
         "stop_price": to_float(t_item.get("stop_price")), "sl_pct": to_float(t_item.get("sl_pct", DEFAULT_FIXED_SL_PCT)),
-        "tps": t_item.get("tps", []), "max_high_price": t_item["max_high_price"],
-        "max_favorable_pct": t_item["max_favorable_pct"], "vol_mult": to_float(t_item.get("vol_mult", 1.0)),
-        "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)), "oi_m": to_float(t_item.get("oi_m", 0.0)),
-        "funding_pct": to_float(t_item.get("funding_pct", 0.0)), "hold_minutes": int(t_item.get("hold_minutes", 0)),
-        "be_armed": bool(t_item.get("be_armed", False)), "tp1_hit": bool(t_item.get("tp1_hit", False)),
-        "tp2_hit": bool(t_item.get("tp2_hit", False)), "tp1_alerted": bool(t_item.get("tp1_alerted", False)),
-        "tp2_alerted": bool(t_item.get("tp2_alerted", False)), "tp3_alerted": bool(t_item.get("tp3_alerted", False)),
-        "tp3_completed": bool(t_item.get("tp3_completed", False)), "trailing_closed": bool(t_item.get("trailing_closed", False)),
-        "sl_alerted": bool(t_item.get("sl_alerted", False)), "closed_alerted": bool(t_item.get("closed_alerted", False)),
+        "tps": t_item.get("tps", []), "tp_pcts": t_item.get("tp_pcts", []),
+        "max_high_price": t_item["max_high_price"], "max_favorable_pct": t_item["max_favorable_pct"],
+        "realized_weighted_pct": to_float(t_item.get("realized_weighted_pct", 0.0)),
+        "vol_mult": to_float(t_item.get("vol_mult", 1.0)), "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
+        "oi_m": to_float(t_item.get("oi_m", 0.0)), "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
+        "hold_minutes": int(t_item.get("hold_minutes", 0)),
+        **{fg: bool(t_item.get(fg, False)) for fg in ALL_LOCK_FLAGS},
         "sl_at": int(t_item.get("sl_at", 0)),
     }
 
@@ -201,7 +210,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
         return None
 
     stop_p = to_float(t_item.get("stop_price"))
-    init_stop_p = to_float(t_item.get("initial_stop_price"), default=stop_p)
+    init_stop_p = to_float(t_item.get("initial_stop_price"), default=entry_ref * (1.0 - DEFAULT_FIXED_SL_PCT / 100.0))
     created_at = int(t_item.get("created_at", now_ts))
     created_ms = created_at * 1000
     prev_max_h = to_float(t_item.get("max_high_price"), default=entry_ref)
@@ -236,10 +245,8 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
         min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
         min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
     else:
-        max_high = max(prev_max_h, entry_ref)
-        peak_ts_ms = prev_peak_ms
-        last_close = entry_ref
-        last_ts_ms = now_ts * 1000
+        max_high, peak_ts_ms = max(prev_max_h, entry_ref), prev_peak_ms
+        last_close, last_ts_ms = entry_ref, now_ts * 1000
         min_1m_low, min_1m_close = hist_min_low, hist_min_close
 
     max_fav = round((max_high - entry_ref) / entry_ref * 100.0, 2)
@@ -254,77 +261,134 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     tp2_p = to_float(tps[1]) if len(tps) > 1 and to_float(tps[1]) > 0 else entry_ref * (1.0 + tp_params["tp2_min_pct"] / 100.0)
     tp3_p = to_float(tps[2]) if len(tps) > 2 and to_float(tps[2]) > 0 else entry_ref * (1.0 + tp_params["tp3_min_pct"] / 100.0)
 
-    g1 = max(7.0, (tp1_p - entry_ref) / entry_ref * 100.0)
-    g2 = max(13.0, (tp2_p - entry_ref) / entry_ref * 100.0)
-    g3 = max(20.0, (tp3_p - entry_ref) / entry_ref * 100.0)
+    g1 = round(max(6.5, (tp1_p - entry_ref) / entry_ref * 100.0), 1)
+    g2 = round(max(12.5, (tp2_p - entry_ref) / entry_ref * 100.0), 1)
+    g3 = round(max(19.5, (tp3_p - entry_ref) / entry_ref * 100.0), 1)
+
+    # 각 구간별 방어선 정의:
+    # 1차 방어선: 1차지점 - 5% (tp1_p * 0.95, 최소 진입가 +1%)
+    # 2차 방어선: 2차지점 - 5% (tp2_p * 0.95, 트레일링 없음)
+    # 3차 트레일링: 3차 돌파 후 잔여 40% 물량에 대해 고점 대비 -3% (max_high * 0.97)
+    def1_p = max(entry_ref * 1.01, tp1_p * 0.95)
+    def2_p = max(def1_p, tp2_p * 0.95)
     msgs = []
 
-    if max_high >= tp3_p:
-        already = bool(t_item.get("tp3_alerted") or t_item.get("closed_alerted"))
-        for fg in ("be_armed", "tp1_hit", "tp2_hit", "tp1_alerted", "tp2_alerted", "tp3_alerted", "tp3_completed", "closed_alerted"):
+    # [3차 돌파]: 30% 익절 확정(누적 60%) + 잔여 40% 고점 대비 -3% 자동 트레일링 스탑 가동
+    if max_high >= tp3_p or t_item.get("tp3_hit"):
+        for fg in ("tp1_hit", "tp2_hit", "tp3_hit", "tp1_alerted", "tp2_alerted"):
             t_item[fg] = True
-        t_item["tp3_at"] = now_ts
-        if not already:
-            cum = int(round(g1)) + int(round(g2)) + int(round(max(g3, max_fav)))
-            msgs.append(
-                f"🎯 [3차 최종 목표가(TP3) 전량 익절 완료] ${base} ({symbol})\n"
-                f"• 진입 기준가: {fmt_price(entry_ref)} → 도달 최고가: {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
-                f"• 💰 [최종 확정 누적 수익률]: +{cum}%달성 (1~3차)"
-            )
-        return {"messages": msgs, "sl_record": None}
-
-    if max_high >= tp2_p:
-        already = bool(t_item.get("tp2_alerted") or t_item.get("tp2_hit"))
-        for fg in ("be_armed", "tp1_hit", "tp2_hit", "tp1_alerted", "tp2_alerted"):
-            t_item[fg] = True
-        stop_p = max(stop_p, entry_ref * (1.0 + (g2 * 0.85) / 100.0), max_high * 0.965)
+        trail3_p = max(def2_p, tp3_p * 0.97, max_high * 0.97)
+        stop_p = max(stop_p, trail3_p)
         t_item["stop_price"] = stop_p
-        if not already:
-            l_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
+
+        if not t_item.get("tp3_alerted"):
+            t_item["tp3_alerted"] = True
+            w1 = round(g1 * 0.30, 2)
+            w3 = round(g3 * 0.30, 2)
+            tr_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
             msgs.append(
-                f"✅ [2차 목표가(TP2) 돌파 & 3차 고점 트레일링 가동] ${base} ({symbol})\n"
+                f"🚀 [3차 목표가(TP3) 돌파! 30% 익절 & 잔여 40% 고점 -3% 트레일링 가동] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
-                f"• 2차 분할 익절(30%) 확정! 남은 물량은 트레일링 보호선({fmt_price(stop_p)}, +{l_pct:.1f}%)으로 3차 고점을 추적합니다."
-            )
-    elif max_high >= tp1_p:
-        already = bool(t_item.get("tp1_alerted") or t_item.get("tp1_hit"))
-        for fg in ("be_armed", "tp1_hit", "tp1_alerted"):
-            t_item[fg] = True
-        stop_p = max(stop_p, entry_ref * 1.006)
-        t_item["stop_price"] = stop_p
-        if not already:
-            msgs.append(
-                f"✅ [1차 목표가(TP1) 달성] ${base} ({symbol})\n"
-                f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
-                f"• 1차 분할 익절(40%) 확정! 남은 물량은 보호선({fmt_price(stop_p)})으로 홀딩합니다."
+                f"• 📊 [누적 60% 분할 익절 확정]\n"
+                f"  - 1차 익절(비중 30%): +{g1:.1f}% (기여 +{w1:.2f}%)\n"
+                f"  - 3차 익절(비중 30%): +{g3:.1f}% (기여 +{w3:.2f}%)\n"
+                f"• 🎯 남은 40% 물량은 고점 대비 -3% 자동 트레일링 스탑(현재 {fmt_price(stop_p)}, +{tr_pct:.1f}%)으로 끝까지 수익을 극대화합니다!"
             )
 
-    if max_fav >= float(DEFAULT_FIXED_SL_PCT) and not t_item.get("be_armed") and not t_item.get("tp1_hit"):
-        t_item["be_armed"] = True
-        stop_p = max(stop_p, entry_ref * 1.004)
-        t_item["stop_price"] = stop_p
-        msgs.append(
-            f"🛡️ [본전 방어(Breakeven·1R) 자동 발동] ${base} ({symbol})\n"
-            f"• 최고 +{max_fav:.1f}% 도달 확인 → 손절선을 진입가 위({fmt_price(stop_p)}, +0.4%)로 상향 고정합니다."
-        )
-
-    if t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("be_armed"):
         if last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
             t_item["tp3_completed"] = True
             t_item["trailing_closed"] = True
             t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
-            lock_g = max(0.4, (stop_p - entry_ref) / entry_ref * 100.0)
-            cum = (int(round(g1)) + int(round(g2)) + int(round(lock_g))) if t_item.get("tp2_hit") else (
-                (int(round(g1)) + int(round(lock_g))) if t_item.get("tp1_hit") else max(1, int(round(lock_g)))
-            )
+            exit_g = round(max(g2 * 0.9, (stop_p - entry_ref) / entry_ref * 100.0), 1)
+            w1 = round(g1 * 0.30, 2)
+            w3 = round(g3 * 0.30, 2)
+            w_rem = round(exit_g * 0.40, 2)
+            total_cum = round(w1 + w3 + w_rem, 2)
+            t_item["realized_weighted_pct"] = total_cum
             msgs.append(
-                f"🔒 [트레일링/방어선 수익 마감 완료] ${base} ({symbol})\n"
-                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 이탈로 잔여 물량을 최종 익절 마감합니다.\n"
-                f"• 💰 [최종 확정 누적 수익률]: +{cum}%달성 (1~3차)"
+                f"🎯 [3차 돌파 후 잔여 40% 트레일링 스탑 최종 익절 완료] ${base} ({symbol})\n"
+                f"• 진입가 {fmt_price(entry_ref)} → 최고가 {fmt_price(max_high)} (+{max_fav:.1f}%) → 마감가 {fmt_price(stop_p)} (+{exit_g:.1f}%)\n"
+                f"• 📊 [구간별 최종 익절 내역]\n"
+                f"  - 1차 익절(비중 30%): +{g1:.1f}% (기여 +{w1:.2f}%)\n"
+                f"  - 3차 익절(비중 30%): +{g3:.1f}% (기여 +{w3:.2f}%)\n"
+                f"  - 잔여 익절(비중 40%): +{exit_g:.1f}% 고점 -3% 트레일링 (기여 +{w_rem:.2f}%)\n"
+                f"• 💰 [최종 합산 확정 수익률]: +{total_cum:.2f}% 달성 (비중 100% 합산)"
             )
         return {"messages": msgs, "sl_record": None}
 
+    # [2차 돌파]: 분할 매도 없음(70% 홀딩) + 2차지점 - 5% 고정 방어선만 설정 (트레일링 스탑 없음)
+    if max_high >= tp2_p or t_item.get("tp2_hit"):
+        for fg in ("tp1_hit", "tp2_hit", "tp1_alerted"):
+            t_item[fg] = True
+        stop_p = max(stop_p, def2_p)
+        t_item["stop_price"] = stop_p
+
+        if not t_item.get("tp2_alerted"):
+            t_item["tp2_alerted"] = True
+            def2_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
+            msgs.append(
+                f"✅ [2차 구간(TP2) 돌파 & 2차 방어선(-5%) 상향 고정] ${base} ({symbol})\n"
+                f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
+                f"• 🛡️ [2차 방어선 설정]: 2차 지점 대비 -5% 아래인 {fmt_price(stop_p)} USDT (+{def2_pct:.1f}%)로 방어선을 고정하고 잔여 70% 물량으로 3차 목표가(+{g3:.1f}%)를 홀딩합니다."
+            )
+
+        if last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
+            t_item["tp3_completed"] = True
+            t_item["trailing_closed"] = True
+            t_item["closed_alerted"] = True
+            t_item["tp3_at"] = now_ts
+            def2_g = round(max(1.0, (stop_p - entry_ref) / entry_ref * 100.0), 1)
+            w1 = round(g1 * 0.30, 2)
+            w_rem = round(def2_g * 0.70, 2)
+            total_cum = round(w1 + w_rem, 2)
+            t_item["realized_weighted_pct"] = total_cum
+            msgs.append(
+                f"🔒 [2차 방어선(-5%) 수익 마감 완료] ${base} ({symbol})\n"
+                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 2차 방어선({fmt_price(stop_p)}) 이탈로 잔여 70% 물량을 익절 마감합니다.\n"
+                f"• 1차 익절(비중 30%): +{g1:.1f}% (기여 +{w1:.2f}%)\n"
+                f"• 잔여 마감(비중 70%): +{def2_g:.1f}% 2차 방어선 익절 (기여 +{w_rem:.2f}%)\n"
+                f"• 💰 [최종 합산 확정 수익률]: +{total_cum:.2f}% 달성 (비중 100% 합산)"
+            )
+        return {"messages": msgs, "sl_record": None}
+
+    # [1차 돌파]: 30% 분할 익절 확정 + 1차지점 - 5% 고정 방어선 설정
+    if max_high >= tp1_p or t_item.get("tp1_hit"):
+        t_item["tp1_hit"] = True
+        stop_p = max(stop_p, def1_p)
+        t_item["stop_price"] = stop_p
+
+        if not t_item.get("tp1_alerted"):
+            t_item["tp1_alerted"] = True
+            w1 = round(g1 * 0.30, 2)
+            def1_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
+            msgs.append(
+                f"✅ [1차 목표가(TP1) 돌파! 30% 익절 & 1차 방어선(-5%) 가동] ${base} ({symbol})\n"
+                f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
+                f"• 📊 1차 분할 익절(비중 30%): +{g1:.1f}% 확정 (기여 +{w1:.2f}%)\n"
+                f"• 🛡️ [1차 방어선 설정]: 남은 70% 물량은 1차 지점 대비 -5% 아래인 {fmt_price(stop_p)} USDT (+{def1_pct:.1f}%)를 방어선으로 설정하여 2·3차 파동을 홀딩합니다."
+            )
+
+        if last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
+            t_item["tp3_completed"] = True
+            t_item["trailing_closed"] = True
+            t_item["closed_alerted"] = True
+            t_item["tp3_at"] = now_ts
+            def1_g = round(max(0.5, (stop_p - entry_ref) / entry_ref * 100.0), 1)
+            w1 = round(g1 * 0.30, 2)
+            w_rem = round(def1_g * 0.70, 2)
+            total_cum = round(w1 + w_rem, 2)
+            t_item["realized_weighted_pct"] = total_cum
+            msgs.append(
+                f"🔒 [1차 방어선(-5%) 수익 마감 완료] ${base} ({symbol})\n"
+                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 1차 방어선({fmt_price(stop_p)}) 이탈로 잔여 70% 물량을 안전하게 익절 마감합니다.\n"
+                f"• 1차 익절(비중 30%): +{g1:.1f}% (기여 +{w1:.2f}%)\n"
+                f"• 잔여 마감(비중 70%): +{def1_g:.1f}% 1차 방어선 익절 (기여 +{w_rem:.2f}%)\n"
+                f"• 💰 [최종 합산 확정 수익률]: +{total_cum:.2f}% 달성 (비중 100% 합산)"
+            )
+        return {"messages": msgs, "sl_record": None}
+
+    # [1차 도달 전]: 고정 손절(-6%) 이탈 감시
     min_low = min(hist_min_low, min_1m_low)
     min_close = min(hist_min_close, min_1m_close)
     if min_low <= init_stop_p and (min_close <= init_stop_p or last_close <= init_stop_p):
@@ -368,6 +432,42 @@ def _send_signal_notifications(res, now_str):
         send_telegram_reliable(f"📲 ${base} ({sym}) X 포스팅 바로가기", reply_markup=markup)
 
 
+def _git_sync_state():
+    """원격 파일로 로컬 메모리를 덮어쓰지 않고, 원격과 로컬을 병합한 뒤 즉시 GitHub에 커밋·푸시"""
+    try:
+        subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
+        subprocess.run(["git", "config", "--local", "user.name", "GitHub Actions"], check=False)
+        for _ in range(3):
+            subprocess.run(["git", "fetch", "origin", "main"], check=False)
+            for rf in ("bot_state.json", "scanner_state.json"):
+                show_res = subprocess.run(["git", "show", f"origin/main:{rf}"], capture_output=True, text=True, check=False)
+                if show_res.returncode == 0 and show_res.stdout:
+                    try:
+                        rem_dict = json.loads(show_res.stdout)
+                        loc_dict = load_state()
+                        merged = _merge_state_dicts(loc_dict, rem_dict)
+                        save_state(merged)
+                    except Exception:
+                        pass
+            subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
+            if os.path.exists(LOCAL_RUNTIME_CACHE):
+                with open(LOCAL_RUNTIME_CACHE, "r", encoding="utf-8") as s:
+                    raw_txt = s.read()
+                for target_f in (STATE_FILE, "bot_state.json", "scanner_state.json"):
+                    with open(target_f, "w", encoding="utf-8") as d:
+                        d.write(raw_txt)
+                    subprocess.run(["git", "add", target_f], check=False)
+            if subprocess.run(["git", "diff", "--staged", "--quiet"], check=False).returncode != 0:
+                subprocess.run(["git", "commit", "-m", "chore: update scanner state [skip ci]"], check=False)
+                if subprocess.run(["git", "push", "origin", "HEAD:main"], check=False).returncode == 0:
+                    break
+            else:
+                break
+            time.sleep(1.5)
+    except Exception:
+        pass
+
+
 def main():
     start_t = time.time()
     state = load_state()
@@ -376,45 +476,25 @@ def main():
     now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
-    # 어제 밤 23:30 KST 포착 후 git push 누락된 $ICNT 복구 등록 (익절 알림 미발송 상태로 복원하여 즉시 3차 익절 알림 유도)
-    icnt_ts = int(datetime(2026, 11, 17, 23, 30, tzinfo=KST).timestamp())
-    has_icnt = any(isinstance(v, dict) and str(v.get("symbol", "")).upper() == "ICNTUSDT" for v in signal_episodes.values())
-    if not has_icnt and "ICNTUSDT" not in tracked and 0 < (now_ts - icnt_ts) <= 259200:
-        entry_p = 0.2305
-        df_icnt = fetch_klines("ICNTUSDT", "15", limit=120)
-        if not df_icnt.empty and "timestamp" in df_icnt.columns:
-            around = df_icnt[df_icnt["timestamp"] <= (icnt_ts * 1000 + 900000)]
-            if not around.empty:
-                entry_p = to_float(around["close"].iloc[-1], 0.2305)
-        tracked["ICNTUSDT"] = {
-            "symbol": "ICNTUSDT", "created_at": icnt_ts, "track_type": "TRACK_B", "score": 91,
-            "entry_price": entry_p, "initial_stop_price": round(entry_p * 0.94, 6),
-            "stop_price": round(entry_p * 0.94, 6), "sl_pct": DEFAULT_FIXED_SL_PCT,
-            "tps": [round(entry_p * 1.08, 6), round(entry_p * 1.15, 6), round(entry_p * 1.22, 6)],
-            "max_high_price": entry_p, "peak_ts_ms": icnt_ts * 1000, "max_favorable_pct": 0.0,
-        }
-        alert_history["ICNTUSDT"] = icnt_ts
-
     tp_params = get_dynamic_tp_params()
     valid_syms, _ = get_valid_bybit_linear_symbols()
     candidates, _, rwa_blocked = get_scanner_candidates()
     sent_count = 0
 
     for h_sym in list(alert_history.keys()):
-        if now_ts - int(alert_history.get(h_sym, 0)) > 86400:
+        if is_stock_or_tradfi_symbol(h_sym) or (now_ts - int(alert_history.get(h_sym, 0)) > 86400):
             del alert_history[h_sym]
     for sl_k in list(sl_history.keys()):
-        if now_ts - int((sl_history.get(sl_k) or {}).get("sl_at", 0)) > HISTORY_RETENTION_SEC:
+        sl_v = sl_history.get(sl_k) or {}
+        if is_stock_or_tradfi_symbol(sl_v.get("symbol", "")) or (now_ts - int(sl_v.get("sl_at", 0)) > HISTORY_RETENTION_SEC):
             del sl_history[sl_k]
     for ep_k in list(signal_episodes.keys()):
         ep = signal_episodes.get(ep_k) or {}
-        if now_ts - int(ep.get("created_at", 0)) > EPISODE_RETENTION_SEC:
-            del signal_episodes[ep_k]
-            continue
         sym_ep = str(ep.get("symbol", "")).upper()
         c_at = int(ep.get("created_at", 0))
-        if sym_ep and (now_ts - c_at) <= 172800 and sym_ep not in tracked and not ep.get("tp3_alerted") and not ep.get("sl_alerted"):
-            tracked[sym_ep] = dict(ep)
+        if is_stock_or_tradfi_symbol(sym_ep) or (now_ts - c_at > EPISODE_RETENTION_SEC):
+            del signal_episodes[ep_k]
+            continue
         signal_episodes[ep_k] = sanitize_flags_by_mfe(ep)
         if sym_ep and c_at > int(alert_history.get(sym_ep, 0)):
             alert_history[sym_ep] = c_at
@@ -425,10 +505,12 @@ def main():
         t_item = tracked[sym]
         c_at = int(t_item.get("created_at", 0))
         age_sec = now_ts - c_at
-        if (valid_syms and sym not in valid_syms) or is_tradfi_ticker(base_c) or base_c in rwa_blocked:
+        if (valid_syms and sym not in valid_syms) or is_stock_or_tradfi_symbol(sym) or is_tradfi_ticker(base_c) or base_c in rwa_blocked:
             del tracked[sym]
             continue
         sync_episode_ledger(signal_episodes, sym, t_item, sl_history)
+        if c_at > int(alert_history.get(sym, 0)):
+            alert_history[sym] = c_at
         is_done = bool(t_item.get("sl_alerted") or t_item.get("tp3_completed") or t_item.get("closed_alerted"))
         done_ts = int(t_item.get("sl_at") or t_item.get("tp3_at") or c_at)
         if (is_done and (now_ts - done_ts) > 86400) or age_sec > 432000:
@@ -438,6 +520,7 @@ def main():
             active_syms.append(sym)
 
     if active_syms:
+        pending_msgs = []
         with ThreadPoolExecutor(max_workers=8) as ex:
             f_map = {ex.submit(evaluate_single_tracked_1m, s, tracked[s], now_ts, tp_params): s for s in active_syms}
             for fut in as_completed(f_map):
@@ -449,11 +532,15 @@ def main():
                         sl_history[k] = v
                     sync_episode_ledger(signal_episodes, s, tracked[s], sl_history)
                     for m in (out or {}).get("messages", []):
-                        send_telegram_reliable(m)
-                        sent_count += 1
+                        pending_msgs.append(m)
                 except Exception as e:
                     print(f"[1분봉 감시 예외] {s}: {e}")
         save_state(state)
+        if pending_msgs:
+            _git_sync_state()
+            for m in pending_msgs:
+                send_telegram_reliable(m)
+                sent_count += 1
 
     if not candidates:
         save_state(state)
@@ -471,7 +558,7 @@ def main():
     to_analyze = []
     for c in candidates:
         sym = c["symbol"]
-        if valid_syms and sym not in valid_syms:
+        if (valid_syms and sym not in valid_syms) or is_stock_or_tradfi_symbol(sym):
             continue
         prev_t = tracked.get(sym)
         if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed") and not prev_t.get("closed_alerted"):
@@ -498,6 +585,8 @@ def main():
         if new_sent >= MAX_NEW_ALERTS_PER_SCAN:
             break
         sym = res["symbol"]
+        if is_stock_or_tradfi_symbol(sym):
+            continue
         prev_t = tracked.get(sym)
         if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed") and not prev_t.get("closed_alerted"):
             continue
@@ -528,6 +617,8 @@ def main():
         alert_history[sym] = now_ts
         sync_episode_ledger(signal_episodes, sym, tracked[sym], sl_history)
         save_state(state)
+        # [중복 알림 원천 차단] 텔레그램 발송 직전에 GitHub 원격 저장소에 먼저 커밋·푸시 완료
+        _git_sync_state()
         _send_signal_notifications(res, now_str)
         new_sent += 1
         sent_count += 1
@@ -536,37 +627,10 @@ def main():
     print(f"[{now_str}] 스캔 완료 ({time.time() - start_t:.1f}초) - 전송 {sent_count}건")
 
 
-def _git_sync_state():
-    try:
-        subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
-        subprocess.run(["git", "config", "--local", "user.name", "GitHub Actions"], check=False)
-        for _ in range(3):
-            subprocess.run(["git", "fetch", "origin", "main"], check=False)
-            subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
-            if os.path.exists(LOCAL_RUNTIME_CACHE):
-                with open(LOCAL_RUNTIME_CACHE, "r", encoding="utf-8") as s:
-                    raw_txt = s.read()
-                for target_f in (STATE_FILE, "bot_state.json", "scanner_state.json"):
-                    with open(target_f, "w", encoding="utf-8") as d:
-                        d.write(raw_txt)
-                    subprocess.run(["git", "add", target_f], check=False)
-            if subprocess.run(["git", "diff", "--staged", "--quiet"], check=False).returncode != 0:
-                subprocess.run(["git", "commit", "-m", "chore: update scanner state [skip ci]"], check=False)
-                if subprocess.run(["git", "push", "origin", "HEAD:main"], check=False).returncode == 0:
-                    break
-            else:
-                break
-            time.sleep(2)
-    except Exception:
-        pass
-
-
 def run_loop_mode(iterations=9, sleep_sec=295):
     for i in range(1, iterations + 1):
         print(f"=== [회차 {i}/{iterations}] 5분 주기 스캔 시작 ===")
-        subprocess.run(["git", "fetch", "origin", "main"], check=False)
-        for tf in (STATE_FILE, "bot_state.json", "scanner_state.json"):
-            subprocess.run(["git", "checkout", "origin/main", "--", tf], check=False)
+        _git_sync_state()
         try:
             main()
         except Exception as e:
