@@ -13,7 +13,7 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
-from api import get_scanner_candidates, get_valid_bybit_linear_symbols, clean_url
+from api import get_scanner_candidates, get_valid_bybit_linear_symbols, fetch_klines, clean_url
 
 SCHEME = "ht" + "tps://"
 
@@ -33,8 +33,30 @@ def fmt_price(price):
     return f"{p:,.2f}" if p >= 1000 else (f"{p:.3f}" if p >= 10 else (f"{p:.4f}" if p >= 1 else (f"{p:.5f}" if p >= 0.01 else f"{p:.6f}")))
 
 
+def backfill_episode_mfe_if_needed(e, now_ts):
+    """
+    [$ICNT 등 누락 복구] 최근 72시간 내 포착된 에피소드 중 스캐너 중단으로
+    최고가(max_high_price)가 갱신되지 못한 종목의 15분봉 고점을 즉시 소급 복구합니다.
+    """
+    sym = str(e.get("symbol", "")).upper()
+    entry_p = to_float(e.get("entry_price"))
+    c_at = int(e.get("created_at", 0))
+    fav = to_float(e.get("max_favorable_pct"))
+    if not sym or entry_p <= 0 or c_at <= 0:
+        return e
+    if (now_ts - c_at) <= 259200 and fav < 15.0:
+        df_15m = fetch_klines(sym, "15", limit=192)
+        if not df_15m.empty and "timestamp" in df_15m.columns:
+            post_df = df_15m[df_15m["timestamp"] >= (c_at * 1000 - 900000)]
+            if not post_df.empty:
+                h_max = to_float(post_df["high"].max(), entry_p)
+                if 0.40 <= (h_max / entry_p) <= 2.80 and h_max > to_float(e.get("max_high_price"), entry_p):
+                    e["max_high_price"] = h_max
+                    e["max_favorable_pct"] = round((h_max - entry_p) / entry_p * 100.0, 2)
+    return e
+
+
 def classify_episode_by_mfe(e):
-    """실제 최고 상승률(max_favorable_pct)을 기준으로 정확한 익절 단계 판정"""
     fav = to_float(e.get("max_favorable_pct"))
     entry_p = to_float(e.get("entry_price"))
     max_h = to_float(e.get("max_high_price"))
@@ -92,21 +114,38 @@ def main():
 
     state = load_json_safe(STATE_FILE, {})
     episodes = state.get("signal_episodes") or {}
+    tracked = state.get("tracked") or {}
+
+    # tracked 에만 있고 signal_episodes 에 누락된 종목도 통합
+    for sym, t_item in tracked.items():
+        if isinstance(t_item, dict):
+            c_at = int(t_item.get("created_at", 0))
+            ep_k = f"{sym}_{c_at}"
+            if c_at > 0 and ep_k not in episodes:
+                episodes[ep_k] = dict(t_item, symbol=sym)
 
     valid_syms, _ = get_valid_bybit_linear_symbols()
     candidates, _, _ = get_scanner_candidates()
-    if valid_syms and candidates:
-        candidates = [c for c in candidates if c.get("symbol") in valid_syms]
 
     weekly_eps = []
-    for ep in episodes.values():
+    for ep_k, ep in episodes.items():
         if not isinstance(ep, dict):
             continue
         c_at = int(ep.get("created_at", 0))
         sym = str(ep.get("symbol", "")).upper()
         base = sym[:-4] if sym.endswith("USDT") else sym
         if c_at >= week_ago_ts and base.isascii() and not getattr(cfg, "is_tradfi_ticker", lambda x: False)(base):
+            ep = backfill_episode_mfe_if_needed(ep, now_ts)
+            episodes[ep_k] = ep
             weekly_eps.append((ep, classify_episode_by_mfe(ep)))
+
+    # 백필된 최고가를 scanner_state.json 에도 저장
+    try:
+        state["signal_episodes"] = episodes
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
     total_signals = len(weekly_eps)
     tp1_hits = sum(1 for _, c in weekly_eps if c["tp1"])
