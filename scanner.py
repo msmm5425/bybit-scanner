@@ -31,12 +31,6 @@ MAX_NEW_ALERTS_PER_SCAN = getattr(cfg, "MAX_NEW_ALERTS_PER_SCAN", 3)
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
 
-LOCK_FLAGS = (
-    "be_armed", "tp1_hit", "tp2_hit",
-    "tp1_alerted", "tp2_alerted", "tp3_alerted",
-    "tp3_completed", "sl_alerted", "closed_alerted",
-)
-
 
 def send_telegram_reliable(text, reply_markup=None):
     if not text:
@@ -77,6 +71,39 @@ def _read_json(path):
     return {}
 
 
+def sanitize_flags_by_mfe(item):
+    """실제 최고 상승률(max_favorable_pct)을 기준으로 잘못 부풀려진 TP1/TP2/TP3 플래그를 정확히 교정"""
+    if not isinstance(item, dict):
+        return item
+    entry_p = to_float(item.get("entry_price"))
+    max_h = max(to_float(item.get("max_high_price")), entry_p)
+    fav = to_float(item.get("max_favorable_pct"))
+    if entry_p > 0 and max_h > entry_p:
+        calc_fav = round((max_h - entry_p) / entry_p * 100.0, 2)
+        fav = max(fav, calc_fav)
+        item["max_favorable_pct"] = fav
+
+    tps = item.get("tps") or []
+    tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 7.5
+    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 14.5
+    tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 21.5
+
+    real_tp1 = bool(fav >= max(6.8, tp1_req))
+    real_tp2 = bool(fav >= max(13.0, tp2_req))
+    real_tp3 = bool(fav >= max(19.5, tp3_req))
+
+    item["tp1_hit"] = real_tp1
+    item["tp1_alerted"] = bool(item.get("tp1_alerted") and real_tp1)
+    item["tp2_hit"] = real_tp2
+    item["tp2_alerted"] = bool(item.get("tp2_alerted") and real_tp2)
+    item["tp3_alerted"] = real_tp3
+
+    # 트레일링 마감(tp3_completed)이더라도 실제 3차 익절가에 도달하지 못했다면 trailing_closed로 분리
+    if item.get("tp3_completed") and not real_tp3 and not item.get("sl_alerted"):
+        item["trailing_closed"] = True
+    return item
+
+
 def load_state():
     merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
     for src in (_read_json(STATE_FILE), _read_json(f"{STATE_FILE}.tmp"), _read_json(LOCAL_RUNTIME_CACHE)):
@@ -88,28 +115,32 @@ def load_state():
         for ek, ev in (src.get("signal_episodes") or {}).items():
             if not isinstance(ev, dict):
                 continue
+            ev = sanitize_flags_by_mfe(dict(ev))
             p = merged["signal_episodes"].get(ek, {})
             if not p:
-                merged["signal_episodes"][ek] = dict(ev)
+                merged["signal_episodes"][ek] = ev
             else:
-                for fg in LOCK_FLAGS:
-                    if ev.get(fg) or p.get(fg):
-                        p[fg] = True
                 p["max_high_price"] = max(to_float(p.get("max_high_price")), to_float(ev.get("max_high_price")))
                 p["max_favorable_pct"] = max(to_float(p.get("max_favorable_pct")), to_float(ev.get("max_favorable_pct")))
+                for fg in ("be_armed", "sl_alerted", "closed_alerted", "tp3_completed", "trailing_closed"):
+                    if ev.get(fg) or p.get(fg):
+                        p[fg] = True
+                merged["signal_episodes"][ek] = sanitize_flags_by_mfe(p)
         for s, tv in (src.get("tracked") or {}).items():
             if not isinstance(tv, dict):
                 continue
+            tv = sanitize_flags_by_mfe(dict(tv))
             pt = merged["tracked"].get(s)
             if not pt or int(tv.get("created_at", 0)) > int(pt.get("created_at", 0)):
-                merged["tracked"][s] = dict(tv)
+                merged["tracked"][s] = tv
             elif int(tv.get("created_at", 0)) == int(pt.get("created_at", 0)):
-                for fg in LOCK_FLAGS:
-                    if tv.get(fg) or pt.get(fg):
-                        pt[fg] = True
                 pt["max_high_price"] = max(to_float(pt.get("max_high_price")), to_float(tv.get("max_high_price")))
                 pt["max_favorable_pct"] = max(to_float(pt.get("max_favorable_pct")), to_float(tv.get("max_favorable_pct")))
                 pt["stop_price"] = max(to_float(pt.get("stop_price")), to_float(tv.get("stop_price")))
+                for fg in ("be_armed", "sl_alerted", "closed_alerted", "tp3_completed", "trailing_closed"):
+                    if tv.get(fg) or pt.get(fg):
+                        pt[fg] = True
+                merged["tracked"][s] = sanitize_flags_by_mfe(pt)
     return merged
 
 
@@ -137,12 +168,11 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
     t_item["max_high_price"] = max_h
     t_item["max_favorable_pct"] = max_fav
 
-    for fg in LOCK_FLAGS:
-        if prev.get(fg) or t_item.get(fg):
-            t_item[fg] = True
     if isinstance(sl_history, dict) and ep_key in sl_history:
         t_item["sl_alerted"] = True
         t_item["closed_alerted"] = True
+
+    sanitize_flags_by_mfe(t_item)
 
     signal_episodes[ep_key] = {
         "symbol": symbol,
@@ -154,14 +184,23 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
         "stop_price": to_float(t_item.get("stop_price")),
         "sl_pct": to_float(t_item.get("sl_pct", DEFAULT_FIXED_SL_PCT)),
         "tps": t_item.get("tps", []),
-        "max_high_price": max_h,
-        "max_favorable_pct": max_fav,
+        "max_high_price": t_item["max_high_price"],
+        "max_favorable_pct": t_item["max_favorable_pct"],
         "vol_mult": to_float(t_item.get("vol_mult", 1.0)),
         "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
         "oi_m": to_float(t_item.get("oi_m", 0.0)),
         "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
         "hold_minutes": int(t_item.get("hold_minutes", 0)),
-        **{fg: bool(t_item.get(fg, False)) for fg in LOCK_FLAGS},
+        "be_armed": bool(t_item.get("be_armed", False)),
+        "tp1_hit": bool(t_item.get("tp1_hit", False)),
+        "tp2_hit": bool(t_item.get("tp2_hit", False)),
+        "tp1_alerted": bool(t_item.get("tp1_alerted", False)),
+        "tp2_alerted": bool(t_item.get("tp2_alerted", False)),
+        "tp3_alerted": bool(t_item.get("tp3_alerted", False)),
+        "tp3_completed": bool(t_item.get("tp3_completed", False)),
+        "trailing_closed": bool(t_item.get("trailing_closed", False)),
+        "sl_alerted": bool(t_item.get("sl_alerted", False)),
+        "closed_alerted": bool(t_item.get("closed_alerted", False)),
         "sl_at": int(t_item.get("sl_at", 0)),
     }
 
@@ -180,8 +219,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     prev_max_h = to_float(t_item.get("max_high_price"), default=entry_ref)
     prev_peak_ms = int(to_float(t_item.get("peak_ts_ms"), default=created_ms))
 
-    # [핵심 복구] 포착 후 10분 이상 경과한 모든 종목은 15분봉(최대 48시간) 전 구간을 매번 소급 스캔하여
-    # 스캐너 중단/지연 중에 터치한 익절가(TP1·TP2·TP3)와 손절가를 100% 잡아냅니다.
     hist_min_low = entry_ref
     hist_min_close = entry_ref
     if (now_ts - created_at) >= 600:
@@ -282,6 +319,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     if t_item.get("tp1_hit") or t_item.get("tp2_hit") or t_item.get("be_armed"):
         if last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
             t_item["tp3_completed"] = True
+            t_item["trailing_closed"] = True
             t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
             lock_g = max(0.4, (stop_p - entry_ref) / entry_ref * 100.0)
@@ -346,12 +384,11 @@ def main():
     candidates, _, rwa_blocked = get_scanner_candidates()
     sent_count = 0
 
-    for ep in signal_episodes.values():
-        if isinstance(ep, dict) and ep.get("symbol"):
-            alert_history[ep["symbol"]] = max(int(alert_history.get(ep["symbol"], 0)), int(ep.get("created_at", 0)))
-    for s, t in tracked.items():
-        if isinstance(t, dict):
-            alert_history[s] = max(int(alert_history.get(s, 0)), int(t.get("created_at", 0)))
+    for ek, ep in list(signal_episodes.items()):
+        if isinstance(ep, dict):
+            signal_episodes[ek] = sanitize_flags_by_mfe(ep)
+            if ep.get("symbol"):
+                alert_history[ep["symbol"]] = max(int(alert_history.get(ep["symbol"], 0)), int(ep.get("created_at", 0)))
 
     active_syms = []
     for sym in list(tracked.keys()):
@@ -361,7 +398,7 @@ def main():
             del tracked[sym]
             continue
         sync_episode_ledger(signal_episodes, sym, t_item, sl_history)
-        if not t_item.get("sl_alerted") and not t_item.get("tp3_completed"):
+        if not t_item.get("sl_alerted") and not t_item.get("tp3_completed") and not t_item.get("closed_alerted"):
             active_syms.append(sym)
 
     if active_syms:
@@ -393,7 +430,7 @@ def main():
         if valid_syms and sym not in valid_syms:
             continue
         prev_t = tracked.get(sym)
-        if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed"):
+        if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed") and not prev_t.get("closed_alerted"):
             continue
         cd = SL_RECOVERY_COOLDOWN_SEC if (prev_t and prev_t.get("sl_alerted")) else RE_ALERT_COOLDOWN_SEC
         if (now_ts - int(alert_history.get(sym, 0))) < cd:
