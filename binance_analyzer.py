@@ -1,7 +1,8 @@
-import os, json, time, requests
+import os, json, time, subprocess, requests
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import config as cfg
@@ -14,22 +15,17 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
-try:
-    import postmortem
-except Exception:
-    postmortem = None
-
-from api import get_scanner_candidates, fetch_klines, get_valid_bybit_linear_symbols, clean_url
-from weekly_report import (
-    load_merged_state,
-    save_merged_state,
-    ensure_missing_icnt_and_backfill,
-    classify_episode_by_mfe,
-    git_push_saved_files,
+from api import (
+    get_scanner_candidates,
+    fetch_klines,
+    get_valid_bybit_linear_symbols,
+    is_stock_or_tradfi_symbol,
+    clean_url,
 )
 
 SCHEME = "ht" + "tps://"
 HISTORY_FILE = "analyzer_history.json"
+STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json"]))
 
 
 def to_float(val, default=0.0):
@@ -57,7 +53,7 @@ def send_telegram_report(text):
         chunk = text[i : i + 3800]
         for _ in range(3):
             try:
-                r = requests.post(url, json={"chat_id": chat_id, "text": chunk, "disable_web_page_preview": True}, timeout=15)
+                r = requests.post(url, json={"chat_id": chat_id, "text": chunk, "disable_web_page_preview": True}, timeout=12)
                 if r.status_code == 200:
                     time.sleep(0.6)
                     break
@@ -95,6 +91,49 @@ def save_json_safe(path, data):
         pass
 
 
+def load_merged_state():
+    merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
+    for path in STATE_CANDIDATE_FILES:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            if not isinstance(d, dict):
+                continue
+            for k in ("tracked", "alert_history", "sl_history", "signal_episodes"):
+                sub = d.get(k)
+                if isinstance(sub, dict):
+                    for sk, sv in sub.items():
+                        sym_chk = sv.get("symbol", sk) if isinstance(sv, dict) else sk
+                        if is_stock_or_tradfi_symbol(sym_chk):
+                            continue
+                        if sk not in merged[k] or (isinstance(sv, dict) and to_float(sv.get("max_favorable_pct")) > to_float((merged[k].get(sk) or {}).get("max_favorable_pct"))):
+                            merged[k][sk] = sv
+        except Exception:
+            pass
+    return merged
+
+
+def classify_episode_by_mfe(e):
+    fav = to_float(e.get("max_favorable_pct"))
+    entry_p = to_float(e.get("entry_price"))
+    max_h = to_float(e.get("max_high_price"))
+    if entry_p > 0 and max_h > entry_p:
+        fav = max(fav, round((max_h - entry_p) / entry_p * 100.0, 2))
+    tps = e.get("tps") or []
+    tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 6.8
+    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 13.0
+    tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 19.5
+
+    tp1 = fav >= max(6.5, tp1_req)
+    tp2 = fav >= max(12.5, tp2_req)
+    tp3 = fav >= max(19.0, tp3_req)
+    is_sl = bool(e.get("sl_alerted")) and not tp1
+    trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and tp1 and not is_sl
+    return {"fav": fav, "tp1": tp1, "tp2": tp2, "tp3": tp3, "be_save": False, "sl": is_sl, "trailing_closed": trailing_closed}
+
+
 def calc_rsi(series, period=6):
     delta = series.diff()
     up = delta.clip(lower=0.0).ewm(com=period - 1, adjust=True, min_periods=period).mean()
@@ -113,8 +152,8 @@ def analyze_top_gainer_structure(coin):
     oi_ratio = round((oi_m / max(turn_m, 0.1)) * 100.0, 1)
     fund_pct = to_float(coin.get("funding_pct"))
 
-    df_15m = fetch_klines(sym, interval="15", limit=100)
-    df_1h = fetch_klines(sym, interval="60", limit=60)
+    df_15m = fetch_klines(sym, interval="15", limit=96)
+    df_1h = fetch_klines(sym, interval="60", limit=48)
 
     vol_spike, rsi15, squeeze_pct = 1.5, 55.0, 3.8
     pattern_note = "수급 집중 돌파"
@@ -160,21 +199,22 @@ def verify_48h_history(history_data, current_map, now_ts):
             continue
         rec_ts = int(rec.get("timestamp", 0))
         age_h = (now_ts - rec_ts) / 3600.0
-        if age_h > 96 or age_h < 0:
-            continue
         sym = str(rec.get("symbol", "")).upper()
         entry_p = to_float(rec.get("price"), 0.0)
-        if not sym or entry_p <= 0:
+        if age_h > 96 or age_h < 0 or not sym or entry_p <= 0 or is_stock_or_tradfi_symbol(sym):
             continue
 
         curr_p = to_float(current_map.get(sym, {}).get("price"), entry_p)
         max_h = max(to_float(rec.get("max_high_48h"), entry_p), curr_p)
-        if 0.2 <= age_h <= 54:
+
+        # 최대 6개 고유 종목만 1시간봉 고점 조회하여 타임아웃(Canceled) 완벽 방지
+        if 0.2 <= age_h <= 54 and sym not in seen_syms and len(seen_syms) < 6:
             df_1h = fetch_klines(sym, interval="60", limit=48)
             if not df_1h.empty and "timestamp" in df_1h.columns:
                 post_df = df_1h[df_1h["timestamp"] >= rec_ts * 1000]
                 if not post_df.empty:
                     max_h = max(max_h, to_float(post_df["high"].max(), entry_p))
+
         rec["max_high_48h"] = max_h
         max_gain = round((max_h - entry_p) / entry_p * 100.0, 1)
         curr_gain = round((curr_p - entry_p) / entry_p * 100.0, 1)
@@ -189,7 +229,7 @@ def verify_48h_history(history_data, current_map, now_ts):
                 f"• ${base} ({age_h:.1f}h 경과 | {status}): 기준 {fmt_price(entry_p)} → 최고 {fmt_price(max_h)} (+{max_gain:.1f}%) | 현재 {curr_gain:+.1f}%"
             )
 
-    history_data["records"] = updated_records[:60]
+    history_data["records"] = updated_records[:50]
     return verified_lines
 
 
@@ -199,18 +239,11 @@ def summarize_scanner_episodes(now_ts):
     tracked = state.get("tracked") or {}
     sl_history = state.get("sl_history") or {}
 
-    ensure_missing_icnt_and_backfill(episodes, tracked, now_ts)
-    state["signal_episodes"] = episodes
-    state["tracked"] = tracked
-    save_merged_state(state)
-
-    eps_list = [e for e in episodes.values() if isinstance(e, dict) and (now_ts - int(e.get("created_at", 0))) <= (7 * 86400)]
-    window_label = "최근 7일(누적)"
-
-    sls_recent = [s for s in sl_history.values() if isinstance(s, dict) and (now_ts - int(s.get("sl_at", 0))) <= (7 * 86400)]
+    eps_list = [e for e in episodes.values() if isinstance(e, dict) and not is_stock_or_tradfi_symbol(e.get("symbol", "")) and (now_ts - int(e.get("created_at", 0))) <= (7 * 86400)]
+    sls_recent = [s for s in sl_history.values() if isinstance(s, dict) and not is_stock_or_tradfi_symbol(s.get("symbol", "")) and (now_ts - int(s.get("sl_at", 0))) <= (7 * 86400)]
     active_list = [
         (sym, t) for sym, t in tracked.items()
-        if isinstance(t, dict) and not t.get("sl_alerted") and not t.get("tp3_completed") and not t.get("closed_alerted")
+        if isinstance(t, dict) and not is_stock_or_tradfi_symbol(sym) and not t.get("sl_alerted") and not t.get("tp3_completed") and not t.get("closed_alerted")
     ]
 
     if not eps_list and not sls_recent and not active_list:
@@ -222,14 +255,13 @@ def summarize_scanner_episodes(now_ts):
     tp2_c = sum(1 for _, c in parsed if c["tp2"])
     tp3_c = sum(1 for _, c in parsed if c["tp3"])
     trail_c = sum(1 for _, c in parsed if c["trailing_closed"])
-    be_c = sum(1 for _, c in parsed if c["be_save"])
     sl_c = sum(1 for _, c in parsed if c["sl"])
-    closed_c = tp1_c + be_c + sl_c
-    win_r = round((tp1_c + be_c) / closed_c * 100.0, 1) if closed_c > 0 else 0.0
+    closed_c = tp1_c + sl_c
+    win_r = round((tp1_c / closed_c) * 100.0, 1) if closed_c > 0 else 0.0
 
     lines = [
-        f"• [{window_label} 성적]: 총 {tot}건 포착 | 실전 방어 승률 {win_r:.1f}%",
-        f"• 단계별 실제 달성: 1차익절(TP1) {tp1_c}건 | 2차익절(TP2) {tp2_c}건 | 3차졸업(TP3) {tp3_c}건 | 트레일링마감 {trail_c}건 | 본전방어 {be_c}건 | 손절 {sl_c}건",
+        f"• [최근 7일 누적 성적]: 총 {tot}건 포착 | 실전 익절 승률 {win_r:.1f}%",
+        f"• 단계별 실제 달성: 1차익절(TP1·30%) {tp1_c}건 | 2차돌파(방어선) {tp2_c}건 | 3차돌파(TP3·30%+트레일링) {tp3_c}건 | 방어선/트레일링마감 {trail_c}건 | 손절 {sl_c}건",
     ]
 
     best_eps = sorted(parsed, key=lambda x: x[1]["fav"], reverse=True)[:4]
@@ -238,7 +270,7 @@ def summarize_scanner_episodes(now_ts):
         fav = c["fav"]
         ep_p = to_float(b.get("entry_price"))
         mh_p = to_float(b.get("max_high_price"))
-        tag = "3차졸업(TP3)" if c["tp3"] else ("2차돌파(TP2)" if c["tp2"] else ("1차돌파(TP1)" if c["tp1"] else "추적중"))
+        tag = "3차돌파(TP3)" if c["tp3"] else ("2차방어선(TP2)" if c["tp2"] else ("1차익절(TP1)" if c["tp1"] else "추적중"))
         if fav > 0:
             lines.append(f"  ↳ 🏆 베스트 타점: ${sym} 진입 {fmt_price(ep_p)} → 최고 {fmt_price(mh_p)} (+{fav:.1f}% | {tag})")
 
@@ -247,7 +279,7 @@ def summarize_scanner_episodes(now_ts):
         for sym, t in active_list[:4]:
             base = sym.replace("USDT", "")
             c = classify_episode_by_mfe(t)
-            st = "TP2돌파·트레일링" if c["tp2"] else ("TP1돌파·홀딩" if c["tp1"] else ("본전방어가동" if c["be_save"] else "초입추적중"))
+            st = "3차돌파·트레일링" if c["tp3"] else ("2차방어선홀딩" if c["tp2"] else ("1차방어선홀딩" if c["tp1"] else "초입추적중"))
             lines.append(f"  ↳ 🟢 ${base}: 진입 {fmt_price(t.get('entry_price'))} | 최고 +{c['fav']:.1f}% ({st})")
 
     if sls_recent:
@@ -270,7 +302,7 @@ def main():
     candidates, _, _ = get_scanner_candidates()
     valid_syms, _ = get_valid_bybit_linear_symbols()
     if valid_syms:
-        candidates = [c for c in candidates if c.get("symbol") in valid_syms]
+        candidates = [c for c in candidates if c.get("symbol") in valid_syms and not is_stock_or_tradfi_symbol(c.get("symbol", ""))]
 
     history_data = load_history_safe()
     current_map = {c["symbol"]: c for c in candidates}
@@ -278,9 +310,18 @@ def main():
 
     top5 = sorted(candidates, key=lambda x: to_float(x.get("change_24h")), reverse=True)[:5]
     analyzed_top5 = []
-    for c in top5:
-        info = analyze_top_gainer_structure(c)
-        analyzed_top5.append(info)
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        f_map = {ex.submit(analyze_top_gainer_structure, c): idx for idx, c in enumerate(top5)}
+        temp_list = [None] * len(top5)
+        for fut in as_completed(f_map):
+            idx = f_map[fut]
+            try:
+                temp_list[idx] = fut.result()
+            except Exception:
+                pass
+        analyzed_top5 = [x for x in temp_list if x is not None]
+
+    for info in analyzed_top5:
         history_data["records"].insert(0, {
             "symbol": info["symbol"], "price": info["price"], "change_24h": info["change_24h"],
             "max_high_48h": info["price"], "max_gain_pct": 0.0, "timestamp": now_ts,
@@ -335,12 +376,11 @@ def main():
 
     report.append("\n🎯 [스캐너 실전 타점 성적표 & 오답노트 해부]")
     report.extend(scanner_lines)
-    report.append(f"\n⚙️ [자율 학습 익절 파라미터]: TP1 +{p1_l:.1f}% / TP2 +{p2_l:.1f}% / TP3 +{p3_l:.1f}%")
+    report.append(f"\n⚙️ [자율 학습 기준 파라미터]: TP1 +{p1_l:.1f}% / TP2 +{p2_l:.1f}% / TP3 +{p3_l:.1f}% (실전 타점은 개별 차트 저항선 적용)")
 
     full_msg = "\n".join(report)
     print(full_msg)
     send_telegram_report(full_msg)
-    git_push_saved_files(extra_files=[HISTORY_FILE])
 
 
 if __name__ == "__main__":
