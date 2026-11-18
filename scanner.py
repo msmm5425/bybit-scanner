@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import time
@@ -15,6 +16,7 @@ from api import (
     fetch_verified_1m_klines,
     fetch_klines,
     get_valid_bybit_linear_symbols,
+    clean_url,
 )
 from analyzer import analyze_symbol, get_dynamic_tp_params
 from notifier import (
@@ -27,6 +29,7 @@ from notifier import (
     send_telegram_photo_with_caption,
 )
 
+SCHEME = "ht" + "tps://"
 RE_ALERT_COOLDOWN_SEC = 43200
 SL_RECOVERY_COOLDOWN_SEC = getattr(cfg, "SL_RECOVERY_COOLDOWN_SEC", 14400)
 HISTORY_RETENTION_SEC = 259200
@@ -39,8 +42,16 @@ LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
 def send_telegram_reliable(text, reply_markup=None):
     if not text:
         return False
-    token = getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or os.getenv("TELEGRAM_TOKEN", "")
-    chat_id = getattr(cfg, "TELEGRAM_CHAT_ID", "") or os.getenv("TELEGRAM_CHAT_ID", "")
+    token = (
+        getattr(cfg, "TELEGRAM_BOT_TOKEN", "")
+        or os.getenv("TELEGRAM_TOKEN", "")
+        or os.getenv("TELEGRAM_BOT_TOKEN", "")
+    ).strip()
+    chat_id = (
+        getattr(cfg, "TELEGRAM_CHAT_ID", "")
+        or os.getenv("TELEGRAM_CHAT_ID", "")
+        or os.getenv("CHAT_ID", "")
+    ).strip()
 
     if not token or not chat_id:
         try:
@@ -50,7 +61,7 @@ def send_telegram_reliable(text, reply_markup=None):
         except Exception:
             return False
 
-    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){token}/sendMessage"
+    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendMessage")
     payload = {
         "chat_id": chat_id,
         "text": text,
@@ -646,185 +657,4 @@ def main():
 
     if not candidates:
         print("[알림] 조건을 만족하는 순수 암호화폐 후보군 데이터를 가져오지 못했습니다.")
-        state["tracked"] = tracked
-        state["alert_history"] = alert_history
-        state["sl_history"] = sl_history
-        state["signal_episodes"] = signal_episodes
-        save_state(state)
-        return
-
-    to_analyze = []
-    for coin in candidates:
-        sym = coin["symbol"]
-        if valid_syms and sym not in valid_syms:
-            continue
-        base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
-        if is_tradfi_ticker(base_c):
-            continue
-        if hasattr(cfg, "is_heavy_major_coin") and cfg.is_heavy_major_coin(base_c):
-            continue
-
-        last_alert_ts = int(alert_history.get(sym, 0))
-        prev_t = tracked.get(sym)
-
-        if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed"):
-            continue
-
-        was_stopped = bool(prev_t and prev_t.get("sl_alerted"))
-        cooldown = SL_RECOVERY_COOLDOWN_SEC if was_stopped else RE_ALERT_COOLDOWN_SEC
-        if (now_ts - last_alert_ts) < cooldown:
-            continue
-
-        to_analyze.append(coin)
-
-    results = []
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        future_map = {executor.submit(analyze_symbol, c): c["symbol"] for c in to_analyze}
-        for future in as_completed(future_map):
-            sym = future_map[future]
-            try:
-                res = future.result()
-                if res:
-                    results.append(res)
-            except Exception as e:
-                print(f"[스캔 예외] {sym}: {e}")
-
-    results.sort(key=lambda x: x["score"], reverse=True)
-
-    new_entry_sent = 0
-    for res in results:
-        if new_entry_sent >= MAX_NEW_ALERTS_PER_SCAN:
-            break
-
-        symbol = res["symbol"]
-        last_alert_ts = int(alert_history.get(symbol, 0))
-        prev_t = tracked.get(symbol)
-
-        if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed"):
-            continue
-
-        was_stopped = bool(prev_t and prev_t.get("sl_alerted"))
-        if was_stopped and (now_ts - last_alert_ts) < RE_ALERT_COOLDOWN_SEC:
-            prev_entry_p = to_float(prev_t.get("entry_price"), 0.0)
-            if res["score"] < 88 or (prev_entry_p > 0 and res["price"] < prev_entry_p * 0.998):
-                continue
-            res["track_title"] = "🔄 [스탑헌팅 후 V자 탈환 재진입 타점]"
-            res["reasons"].insert(0, "스탑헌팅 바닥 확인 후 진입가 V자 재탈환")
-            res["reason_str"] = " / ".join(res["reasons"])
-        elif (now_ts - last_alert_ts) < RE_ALERT_COOLDOWN_SEC:
-            continue
-
-        tracked[symbol] = {
-            "created_at": now_ts,
-            "track_type": res["track_type"],
-            "score": res["score"],
-            "entry_price": res["price"],
-            "swing_high_line": res["swing_high_line"],
-            "entry_low": res["entry_low"],
-            "entry_high": res["entry_high"],
-            "initial_stop_price": res["stop_price"],
-            "stop_price": res["stop_price"],
-            "sl_pct": res["sl_pct"],
-            "tps": res["tps"],
-            "tp_pcts": res["tp_pcts"],
-            "vol_mult": res.get("vol_mult", 1.0),
-            "rsi6_15m": res.get("rsi6_15m", 50.0),
-            "kdj_j_15m": res.get("kdj_j_15m", 50.0),
-            "oi_m": res.get("oi_m", 0.0),
-            "turnover_m": res.get("turnover_m", 0.0),
-            "funding_pct": res.get("funding_pct", 0.0),
-            "reasons": res.get("reasons", []),
-            "max_high_price": res["price"],
-            "peak_ts_ms": now_ts * 1000,
-            "max_favorable_pct": 0.0,
-            "history_backfilled": True,
-            "be_armed": False,
-            "tp1_hit": False,
-            "tp2_hit": False,
-            "tp1_alerted": False,
-            "tp2_alerted": False,
-            "tp3_alerted": False,
-            "breakout_alerted": True,
-            "sl_alerted": False,
-            "tp3_completed": False,
-            "closed_alerted": False,
-        }
-        alert_history[symbol] = now_ts
-        sync_episode_ledger(signal_episodes, symbol, tracked[symbol], sl_history)
-
-        state["tracked"] = tracked
-        state["alert_history"] = alert_history
-        state["sl_history"] = sl_history
-        state["signal_episodes"] = signal_episodes
-        save_state(state)
-
-        _send_signal_notifications_safe(res, now_str)
-        new_entry_sent += 1
-        sent_count += 1
-
-    state["tracked"] = tracked
-    state["alert_history"] = alert_history
-    state["sl_history"] = sl_history
-    state["signal_episodes"] = signal_episodes
-    save_state(state)
-
-    elapsed = time.time() - start_t
-    if sent_count == 0:
-        print(f"[{now_str}] 멀티프레임 스캔 완료 ({elapsed:.1f}초 소요) - 신규 초입 종목 없음.")
-    else:
-        print(f"[{now_str}] 멀티프레임 스캔 완료 ({elapsed:.1f}초 소요) - 총 {sent_count}건 이벤트 전송 (신규 타점 {new_entry_sent}종목).")
-
-
-def _git_sync_state():
-    """파이썬 내부에서 안전하게 원격 scanner_state.json 동기화 및 푸시"""
-    try:
-        subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
-        subprocess.run(["git", "config", "--local", "user.name", "GitHub Actions"], check=False)
-        if not os.path.exists(STATE_FILE):
-            return
-        for _ in range(3):
-            subprocess.run(["git", "fetch", "origin", "main"], check=False)
-            subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
-            if os.path.exists(LOCAL_RUNTIME_CACHE):
-                with open(LOCAL_RUNTIME_CACHE, "r", encoding="utf-8") as src, open(STATE_FILE, "w", encoding="utf-8") as dst:
-                    dst.write(src.read())
-            subprocess.run(["git", "add", STATE_FILE], check=False)
-            diff_res = subprocess.run(["git", "diff", "--staged", "--quiet"], check=False)
-            if diff_res.returncode != 0:
-                subprocess.run(["git", "commit", "-m", "chore: update scanner state [skip ci]"], check=False)
-                push_res = subprocess.run(["git", "push", "origin", "HEAD:main"], check=False)
-                if push_res.returncode == 0:
-                    break
-            else:
-                break
-            time.sleep(2)
-    except Exception as e:
-        print(f"[Git 상태 동기화 경고] {e}")
-
-
-def run_loop_mode(iterations=9, sleep_sec=295):
-    for i in range(1, iterations + 1):
-        print(f"=== [회차 {i}/{iterations}] 5분 주기 스캔 시작 ===")
-        try:
-            subprocess.run(["git", "fetch", "origin", "main"], check=False)
-            subprocess.run(["git", "checkout", "origin/main", "--", STATE_FILE], check=False)
-        except Exception:
-            pass
-
-        try:
-            main()
-        except Exception as e:
-            print(f"[스캔 루프 예외] {e}")
-
-        _git_sync_state()
-
-        if i < iterations:
-            print(f"다음 스캔까지 {sleep_sec}초 대기...")
-            time.sleep(sleep_sec)
-
-
-if __name__ == "__main__":
-    if "--loop" in sys.argv:
-        run_loop_mode()
-    else:
-        main()
+        state["
