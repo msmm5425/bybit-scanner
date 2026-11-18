@@ -20,7 +20,13 @@ except Exception:
     postmortem = None
 
 from api import get_scanner_candidates, fetch_klines, get_valid_bybit_linear_symbols, clean_url
-from weekly_report import load_merged_state, save_merged_state, ensure_missing_icnt_and_backfill, classify_episode_by_mfe
+from weekly_report import (
+    load_merged_state,
+    save_merged_state,
+    ensure_missing_icnt_and_backfill,
+    classify_episode_by_mfe,
+    git_push_saved_files,
+)
 
 SCHEME = "ht" + "tps://"
 HISTORY_FILE = "analyzer_history.json"
@@ -82,6 +88,8 @@ def save_json_safe(path, data):
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, path)
     except Exception:
         pass
@@ -193,6 +201,7 @@ def summarize_scanner_episodes(now_ts):
 
     ensure_missing_icnt_and_backfill(episodes, tracked, now_ts)
     state["signal_episodes"] = episodes
+    state["tracked"] = tracked
     save_merged_state(state)
 
     eps_list = [e for e in episodes.values() if isinstance(e, dict) and (now_ts - int(e.get("created_at", 0))) <= (7 * 86400)]
@@ -331,6 +340,7 @@ def main():
     full_msg = "\n".join(report)
     print(full_msg)
     send_telegram_report(full_msg)
+    git_push_saved_files(extra_files=[HISTORY_FILE])
 
 
 if __name__ == "__main__":
