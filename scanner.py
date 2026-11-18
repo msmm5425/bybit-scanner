@@ -22,11 +22,16 @@ from notifier import (
     send_telegram_photo_with_caption,
 )
 
+try:
+    import postmortem
+except Exception:
+    postmortem = None
+
 SCHEME = "ht" + "tps://"
 RE_ALERT_COOLDOWN_SEC = 43200
 SL_RECOVERY_COOLDOWN_SEC = getattr(cfg, "SL_RECOVERY_COOLDOWN_SEC", 14400)
 HISTORY_RETENTION_SEC = 259200
-EPISODE_RETENTION_SEC = 864000
+EPISODE_RETENTION_SEC = 604800
 MAX_NEW_ALERTS_PER_SCAN = getattr(cfg, "MAX_NEW_ALERTS_PER_SCAN", 3)
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
@@ -72,15 +77,13 @@ def _read_json(path):
 
 
 def sanitize_flags_by_mfe(item):
-    """실제 최고 상승률(max_favorable_pct)을 기준으로 잘못 부풀려진 TP1/TP2/TP3 플래그를 정확히 교정"""
     if not isinstance(item, dict):
         return item
     entry_p = to_float(item.get("entry_price"))
     max_h = max(to_float(item.get("max_high_price")), entry_p)
     fav = to_float(item.get("max_favorable_pct"))
     if entry_p > 0 and max_h > entry_p:
-        calc_fav = round((max_h - entry_p) / entry_p * 100.0, 2)
-        fav = max(fav, calc_fav)
+        fav = max(fav, round((max_h - entry_p) / entry_p * 100.0, 2))
         item["max_favorable_pct"] = fav
 
     tps = item.get("tps") or []
@@ -97,8 +100,10 @@ def sanitize_flags_by_mfe(item):
     item["tp2_hit"] = real_tp2
     item["tp2_alerted"] = bool(item.get("tp2_alerted") and real_tp2)
     item["tp3_alerted"] = real_tp3
-
-    # 트레일링 마감(tp3_completed)이더라도 실제 3차 익절가에 도달하지 못했다면 trailing_closed로 분리
+    if real_tp3:
+        item["tp3_completed"] = True
+        item["closed_alerted"] = True
+        item["sl_alerted"] = False
     if item.get("tp3_completed") and not real_tp3 and not item.get("sl_alerted"):
         item["trailing_closed"] = True
     return item
@@ -167,40 +172,25 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
     max_fav = max(to_float(prev.get("max_favorable_pct")), to_float(t_item.get("max_favorable_pct")))
     t_item["max_high_price"] = max_h
     t_item["max_favorable_pct"] = max_fav
-
-    if isinstance(sl_history, dict) and ep_key in sl_history:
+    if isinstance(sl_history, dict) and ep_key in sl_history and max_fav < 7.0:
         t_item["sl_alerted"] = True
         t_item["closed_alerted"] = True
-
     sanitize_flags_by_mfe(t_item)
 
     signal_episodes[ep_key] = {
-        "symbol": symbol,
-        "created_at": c_at,
-        "track_type": t_item.get("track_type", "TRACK_A"),
-        "score": int(t_item.get("score", 85)),
-        "entry_price": to_float(t_item.get("entry_price")),
+        "symbol": symbol, "created_at": c_at, "track_type": t_item.get("track_type", "TRACK_A"),
+        "score": int(t_item.get("score", 85)), "entry_price": to_float(t_item.get("entry_price")),
         "initial_stop_price": to_float(t_item.get("initial_stop_price") or t_item.get("stop_price")),
-        "stop_price": to_float(t_item.get("stop_price")),
-        "sl_pct": to_float(t_item.get("sl_pct", DEFAULT_FIXED_SL_PCT)),
-        "tps": t_item.get("tps", []),
-        "max_high_price": t_item["max_high_price"],
-        "max_favorable_pct": t_item["max_favorable_pct"],
-        "vol_mult": to_float(t_item.get("vol_mult", 1.0)),
-        "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
-        "oi_m": to_float(t_item.get("oi_m", 0.0)),
-        "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
-        "hold_minutes": int(t_item.get("hold_minutes", 0)),
-        "be_armed": bool(t_item.get("be_armed", False)),
-        "tp1_hit": bool(t_item.get("tp1_hit", False)),
-        "tp2_hit": bool(t_item.get("tp2_hit", False)),
-        "tp1_alerted": bool(t_item.get("tp1_alerted", False)),
-        "tp2_alerted": bool(t_item.get("tp2_alerted", False)),
-        "tp3_alerted": bool(t_item.get("tp3_alerted", False)),
-        "tp3_completed": bool(t_item.get("tp3_completed", False)),
-        "trailing_closed": bool(t_item.get("trailing_closed", False)),
-        "sl_alerted": bool(t_item.get("sl_alerted", False)),
-        "closed_alerted": bool(t_item.get("closed_alerted", False)),
+        "stop_price": to_float(t_item.get("stop_price")), "sl_pct": to_float(t_item.get("sl_pct", DEFAULT_FIXED_SL_PCT)),
+        "tps": t_item.get("tps", []), "max_high_price": t_item["max_high_price"],
+        "max_favorable_pct": t_item["max_favorable_pct"], "vol_mult": to_float(t_item.get("vol_mult", 1.0)),
+        "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)), "oi_m": to_float(t_item.get("oi_m", 0.0)),
+        "funding_pct": to_float(t_item.get("funding_pct", 0.0)), "hold_minutes": int(t_item.get("hold_minutes", 0)),
+        "be_armed": bool(t_item.get("be_armed", False)), "tp1_hit": bool(t_item.get("tp1_hit", False)),
+        "tp2_hit": bool(t_item.get("tp2_hit", False)), "tp1_alerted": bool(t_item.get("tp1_alerted", False)),
+        "tp2_alerted": bool(t_item.get("tp2_alerted", False)), "tp3_alerted": bool(t_item.get("tp3_alerted", False)),
+        "tp3_completed": bool(t_item.get("tp3_completed", False)), "trailing_closed": bool(t_item.get("trailing_closed", False)),
+        "sl_alerted": bool(t_item.get("sl_alerted", False)), "closed_alerted": bool(t_item.get("closed_alerted", False)),
         "sl_at": int(t_item.get("sl_at", 0)),
     }
 
@@ -219,12 +209,11 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     prev_max_h = to_float(t_item.get("max_high_price"), default=entry_ref)
     prev_peak_ms = int(to_float(t_item.get("peak_ts_ms"), default=created_ms))
 
-    hist_min_low = entry_ref
-    hist_min_close = entry_ref
-    if (now_ts - created_at) >= 600:
+    hist_min_low, hist_min_close = entry_ref, entry_ref
+    if (now_ts - created_at) >= 300:
         df_15m = fetch_klines(symbol, "15", limit=192)
         if not df_15m.empty and "timestamp" in df_15m.columns:
-            post_15m = df_15m[df_15m["timestamp"] >= created_ms]
+            post_15m = df_15m[df_15m["timestamp"] >= (created_ms - 900000)]
             if not post_15m.empty:
                 p_idx = post_15m["high"].idxmax()
                 h_15m = to_float(post_15m.loc[p_idx, "high"], default=entry_ref)
@@ -235,25 +224,30 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 hist_min_close = min(hist_min_close, to_float(post_15m["close"].min(), default=entry_ref))
 
     df_1m = fetch_verified_1m_klines(symbol, entry_ref=entry_ref, limit=60)
-    if df_1m.empty:
-        return None
-    post_1m = df_1m[df_1m["timestamp"] >= created_ms].copy()
-    if post_1m.empty:
-        return None
+    post_1m = df_1m[df_1m["timestamp"] >= created_ms].copy() if not df_1m.empty else df_1m
 
     base = symbol.replace("USDT", "")
-    w_idx = post_1m["high"].idxmax()
-    w_high = to_float(post_1m.loc[w_idx, "high"], default=entry_ref)
-    w_ts = int(to_float(post_1m.loc[w_idx, "timestamp"], default=created_ms))
-    max_high = max(w_high, prev_max_h, entry_ref)
-    peak_ts_ms = w_ts if w_high >= prev_max_h else prev_peak_ms
-    max_fav = round((max_high - entry_ref) / entry_ref * 100.0, 2)
+    if not post_1m.empty:
+        w_idx = post_1m["high"].idxmax()
+        w_high = to_float(post_1m.loc[w_idx, "high"], default=entry_ref)
+        w_ts = int(to_float(post_1m.loc[w_idx, "timestamp"], default=created_ms))
+        max_high = max(w_high, prev_max_h, entry_ref)
+        peak_ts_ms = w_ts if w_high >= prev_max_h else prev_peak_ms
+        last_close = to_float(post_1m["close"].iloc[-1], default=entry_ref)
+        last_ts_ms = int(to_float(post_1m["timestamp"].iloc[-1], default=now_ts * 1000))
+        min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
+        min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
+    else:
+        max_high = max(prev_max_h, entry_ref)
+        peak_ts_ms = prev_peak_ms
+        last_close = entry_ref
+        last_ts_ms = now_ts * 1000
+        min_1m_low, min_1m_close = hist_min_low, hist_min_close
 
+    max_fav = round((max_high - entry_ref) / entry_ref * 100.0, 2)
     t_item["max_high_price"] = max_high
     t_item["peak_ts_ms"] = peak_ts_ms
     t_item["max_favorable_pct"] = max_fav
-    last_close = to_float(post_1m["close"].iloc[-1], default=entry_ref)
-    last_ts_ms = int(to_float(post_1m["timestamp"].iloc[-1], default=now_ts * 1000))
     hold_min = max(1, int((now_ts - created_at) // 60))
     t_item["hold_minutes"] = hold_min
 
@@ -333,14 +327,14 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             )
         return {"messages": msgs, "sl_record": None}
 
-    min_low = min(hist_min_low, to_float(post_1m["low"].min(), default=entry_ref))
-    min_close = min(hist_min_close, to_float(post_1m["close"].min(), default=entry_ref))
+    min_low = min(hist_min_low, min_1m_low)
+    min_close = min(hist_min_close, min_1m_close)
     if min_low <= init_stop_p and (min_close <= init_stop_p or last_close <= init_stop_p):
         trig = min(min_close, last_close)
         t_item["sl_alerted"] = True
         t_item["closed_alerted"] = True
         t_item["sl_at"] = now_ts
-        sl_rec = (f"{symbol}_{created_at}", {
+        sl_payload = {
             "symbol": symbol, "track_type": t_item.get("track_type", "TRACK_A"),
             "score": int(t_item.get("score", 85)), "entry_price": entry_ref,
             "stop_price": init_stop_p, "sl_trigger_price": trig,
@@ -349,13 +343,18 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             "vol_mult": to_float(t_item.get("vol_mult", 1.0)), "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
             "oi_m": to_float(t_item.get("oi_m", 0.0)), "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
             "reasons": t_item.get("reasons", []),
-        })
+        }
+        if postmortem is not None and hasattr(postmortem, "record_sl_postmortem"):
+            try:
+                postmortem.record_sl_postmortem(sl_payload)
+            except Exception:
+                pass
         msgs.append(
             f"⚠️ [손절 기준가 이탈] ${base} ({symbol})\n"
             f"• 이탈 확인가: {fmt_price(trig)} USDT (고정 손절선 {fmt_price(init_stop_p)}, -{DEFAULT_FIXED_SL_PCT}% 이탈)\n"
             f"• 진입 후 최고 상승폭: +{max_fav:.1f}% (보유 {hold_min}분)"
         )
-        return {"messages": msgs, "sl_record": sl_rec}
+        return {"messages": msgs, "sl_record": (f"{symbol}_{created_at}", sl_payload)}
 
     return {"messages": msgs, "sl_record": None}
 
@@ -384,21 +383,43 @@ def main():
     candidates, _, rwa_blocked = get_scanner_candidates()
     sent_count = 0
 
-    for ek, ep in list(signal_episodes.items()):
-        if isinstance(ep, dict):
-            signal_episodes[ek] = sanitize_flags_by_mfe(ep)
-            if ep.get("symbol"):
-                alert_history[ep["symbol"]] = max(int(alert_history.get(ep["symbol"], 0)), int(ep.get("created_at", 0)))
+    # [데이터 비대화 방지: 오래된 히스토리 자동 정리]
+    for h_sym in list(alert_history.keys()):
+        if now_ts - int(alert_history.get(h_sym, 0)) > 86400:
+            del alert_history[h_sym]
+    for sl_k in list(sl_history.keys()):
+        if now_ts - int((sl_history.get(sl_k) or {}).get("sl_at", 0)) > HISTORY_RETENTION_SEC:
+            del sl_history[sl_k]
+    for ep_k in list(signal_episodes.keys()):
+        ep = signal_episodes.get(ep_k) or {}
+        if now_ts - int(ep.get("created_at", 0)) > EPISODE_RETENTION_SEC:
+            del signal_episodes[ep_k]
+            continue
+        # ICNT 등 과거 포착 에피소드 중 tracked에서 누락된 종목을 복구하여 최고가 소급 추적
+        sym_ep = str(ep.get("symbol", "")).upper()
+        c_at = int(ep.get("created_at", 0))
+        if sym_ep and (now_ts - c_at) <= 172800 and sym_ep not in tracked and not ep.get("tp3_alerted") and not ep.get("sl_alerted"):
+            tracked[sym_ep] = dict(ep)
+        signal_episodes[ep_k] = sanitize_flags_by_mfe(ep)
+        if sym_ep and c_at > int(alert_history.get(sym_ep, 0)):
+            alert_history[sym_ep] = c_at
 
     active_syms = []
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         t_item = tracked[sym]
+        c_at = int(t_item.get("created_at", 0))
+        age_sec = now_ts - c_at
         if (valid_syms and sym not in valid_syms) or is_tradfi_ticker(base_c) or base_c in rwa_blocked:
             del tracked[sym]
             continue
         sync_episode_ledger(signal_episodes, sym, t_item, sl_history)
-        if not t_item.get("sl_alerted") and not t_item.get("tp3_completed") and not t_item.get("closed_alerted"):
+        is_done = bool(t_item.get("sl_alerted") or t_item.get("tp3_completed") or t_item.get("closed_alerted"))
+        done_ts = int(t_item.get("sl_at") or t_item.get("tp3_at") or c_at)
+        if (is_done and (now_ts - done_ts) > 86400) or age_sec > 432000:
+            del tracked[sym]
+            continue
+        if not is_done:
             active_syms.append(sym)
 
     if active_syms:
@@ -420,9 +441,17 @@ def main():
         save_state(state)
 
     if not candidates:
-        print("[알림] 후보군 데이터 없음.")
         save_state(state)
         return
+
+    def _was_stopped_recently(sym_check):
+        pt = tracked.get(sym_check)
+        if pt and pt.get("sl_alerted"):
+            return True
+        return any(
+            isinstance(v, dict) and v.get("symbol") == sym_check and (now_ts - int(v.get("sl_at", 0))) < RE_ALERT_COOLDOWN_SEC
+            for v in sl_history.values()
+        )
 
     to_analyze = []
     for c in candidates:
@@ -432,7 +461,7 @@ def main():
         prev_t = tracked.get(sym)
         if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed") and not prev_t.get("closed_alerted"):
             continue
-        cd = SL_RECOVERY_COOLDOWN_SEC if (prev_t and prev_t.get("sl_alerted")) else RE_ALERT_COOLDOWN_SEC
+        cd = SL_RECOVERY_COOLDOWN_SEC if _was_stopped_recently(sym) else RE_ALERT_COOLDOWN_SEC
         if (now_ts - int(alert_history.get(sym, 0))) < cd:
             continue
         to_analyze.append(c)
@@ -454,8 +483,23 @@ def main():
         if new_sent >= MAX_NEW_ALERTS_PER_SCAN:
             break
         sym = res["symbol"]
-        if (now_ts - int(alert_history.get(sym, 0))) < RE_ALERT_COOLDOWN_SEC:
+        prev_t = tracked.get(sym)
+        if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed") and not prev_t.get("closed_alerted"):
             continue
+
+        # [Critical #2 해결: 손절 후 4~12시간 사이 V자 재진입 타점이 12시간 쿨다운에 버려지지 않도록 복원]
+        elapsed_alert = now_ts - int(alert_history.get(sym, 0))
+        was_sl = _was_stopped_recently(sym)
+        if was_sl and elapsed_alert < RE_ALERT_COOLDOWN_SEC:
+            if elapsed_alert < SL_RECOVERY_COOLDOWN_SEC or res["score"] < 87:
+                continue
+            res["track_title"] = "🔄 [스탑헌팅 후 V자 탈환 재진입 타점]"
+            if "스탑헌팅 바닥 확인 후 V자 재탈환" not in res["reasons"]:
+                res["reasons"].insert(0, "스탑헌팅 바닥 확인 후 V자 재탈환")
+            res["reason_str"] = " / ".join(res["reasons"])
+        elif elapsed_alert < RE_ALERT_COOLDOWN_SEC:
+            continue
+
         tracked[sym] = {
             "created_at": now_ts, "track_type": res["track_type"], "score": res["score"],
             "entry_price": res["price"], "swing_high_line": res["swing_high_line"],
