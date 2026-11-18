@@ -35,6 +35,27 @@ def fmt_price(price):
     return f"{p:,.2f}" if p >= 1000 else (f"{p:.3f}" if p >= 10 else (f"{p:.4f}" if p >= 1 else (f"{p:.5f}" if p >= 0.01 else f"{p:.6f}")))
 
 
+def classify_episode_by_mfe(e):
+    """실제 최고 상승률(max_favorable_pct)을 기준으로 정확한 익절 단계 판정"""
+    fav = to_float(e.get("max_favorable_pct"))
+    entry_p = to_float(e.get("entry_price"))
+    max_h = to_float(e.get("max_high_price"))
+    if entry_p > 0 and max_h > entry_p:
+        fav = max(fav, round((max_h - entry_p) / entry_p * 100.0, 2))
+    tps = e.get("tps") or []
+    tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 7.5
+    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 14.5
+    tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 21.5
+
+    tp1 = fav >= max(6.8, tp1_req)
+    tp2 = fav >= max(13.0, tp2_req)
+    tp3 = fav >= max(19.5, tp3_req)
+    is_sl = bool(e.get("sl_alerted")) and not tp1
+    be_save = (not tp1) and (not is_sl) and (fav >= 5.8 or bool(e.get("be_armed")))
+    trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and (tp1 or be_save) and not tp3 and not is_sl
+    return {"fav": fav, "tp1": tp1, "tp2": tp2, "tp3": tp3, "be_save": be_save, "sl": is_sl, "trailing_closed": trailing_closed}
+
+
 def send_telegram_report(text):
     token = (os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or "").strip()
     chat_id = (os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or getattr(cfg, "TELEGRAM_CHAT_ID", "") or "").strip()
@@ -192,51 +213,54 @@ def summarize_scanner_episodes(now_ts):
     tracked = state.get("tracked") or {}
     sl_history = state.get("sl_history") or {}
 
-    eps_24h = [e for e in episodes.values() if isinstance(e, dict) and (now_ts - int(e.get("created_at", 0))) <= 86400]
+    eps_list = [e for e in episodes.values() if isinstance(e, dict) and (now_ts - int(e.get("created_at", 0))) <= 86400]
     window_label = "최근 24시간"
-    if not eps_24h:
-        eps_24h = [e for e in episodes.values() if isinstance(e, dict) and (now_ts - int(e.get("created_at", 0))) <= 259200]
-        window_label = "최근 72시간(누적)"
+    if not eps_list:
+        eps_list = [e for e in episodes.values() if isinstance(e, dict) and (now_ts - int(e.get("created_at", 0))) <= (7 * 86400)]
+        window_label = "최근 7일(누적)"
 
-    sls_recent = [s for s in sl_history.values() if isinstance(s, dict) and (now_ts - int(s.get("sl_at", 0))) <= 259200]
+    sls_recent = [s for s in sl_history.values() if isinstance(s, dict) and (now_ts - int(s.get("sl_at", 0))) <= (7 * 86400)]
     active_list = [
         (sym, t) for sym, t in tracked.items()
-        if isinstance(t, dict) and not t.get("sl_alerted") and not t.get("tp3_completed")
+        if isinstance(t, dict) and not t.get("sl_alerted") and not t.get("tp3_completed") and not t.get("closed_alerted")
     ]
 
-    if not eps_24h and not sls_recent and not active_list:
+    if not eps_list and not sls_recent and not active_list:
         return ["• 현재 기록된 스캐너 타점 에피소드가 없습니다."]
 
-    tot = len(eps_24h)
-    tp1_c = sum(1 for e in eps_24h if e.get("tp1_hit"))
-    tp2_c = sum(1 for e in eps_24h if e.get("tp2_hit"))
-    tp3_c = sum(1 for e in eps_24h if e.get("tp3_alerted") or e.get("tp3_completed"))
-    be_c = sum(1 for e in eps_24h if e.get("be_armed") and not e.get("tp1_hit") and not e.get("sl_alerted"))
-    sl_c = sum(1 for e in eps_24h if e.get("sl_alerted"))
+    parsed = [(e, classify_episode_by_mfe(e)) for e in eps_list]
+    tot = len(parsed)
+    tp1_c = sum(1 for _, c in parsed if c["tp1"])
+    tp2_c = sum(1 for _, c in parsed if c["tp2"])
+    tp3_c = sum(1 for _, c in parsed if c["tp3"])
+    trail_c = sum(1 for _, c in parsed if c["trailing_closed"])
+    be_c = sum(1 for _, c in parsed if c["be_save"])
+    sl_c = sum(1 for _, c in parsed if c["sl"])
     closed_c = tp1_c + be_c + sl_c
     win_r = round((tp1_c + be_c) / closed_c * 100.0, 1) if closed_c > 0 else 0.0
 
     lines = [
         f"• [{window_label} 성적]: 총 {tot}건 포착 | 실전 방어 승률 {win_r:.1f}%",
-        f"• 단계별 도달: 1차익절(TP1) {tp1_c}건 | 2차익절(TP2) {tp2_c}건 | 3차졸업 {tp3_c}건 | 본전방어 {be_c}건 | 손절 {sl_c}건",
+        f"• 단계별 실제 달성: 1차익절(TP1) {tp1_c}건 | 2차익절(TP2) {tp2_c}건 | 3차졸업(TP3) {tp3_c}건 | 트레일링마감 {trail_c}건 | 본전방어 {be_c}건 | 손절 {sl_c}건",
     ]
 
-    best_eps = sorted(eps_24h, key=lambda x: to_float(x.get("max_favorable_pct")), reverse=True)[:3]
-    for b in best_eps:
+    best_eps = sorted(parsed, key=lambda x: x[1]["fav"], reverse=True)[:3]
+    for b, c in best_eps:
         sym = b.get("symbol", "").replace("USDT", "")
-        fav = to_float(b.get("max_favorable_pct"))
+        fav = c["fav"]
         ep_p = to_float(b.get("entry_price"))
         mh_p = to_float(b.get("max_high_price"))
+        tag = "3차졸업(TP3)" if c["tp3"] else ("2차돌파(TP2)" if c["tp2"] else ("1차돌파(TP1)" if c["tp1"] else "추적중"))
         if fav > 0:
-            lines.append(f"  ↳ 🏆 베스트 타점: ${sym} 진입 {fmt_price(ep_p)} → 최고 {fmt_price(mh_p)} (+{fav:.1f}%)")
+            lines.append(f"  ↳ 🏆 베스트 타점: ${sym} 진입 {fmt_price(ep_p)} → 최고 {fmt_price(mh_p)} (+{fav:.1f}% | {tag})")
 
     if active_list:
         lines.append(f"• 🔄 [현재 실시간 감시/보유 중 ({len(active_list)}종목)]:")
         for sym, t in active_list[:4]:
             base = sym.replace("USDT", "")
-            fav = to_float(t.get("max_favorable_pct"))
-            st = "TP2트레일링" if t.get("tp2_hit") else ("TP1돌파홀딩" if t.get("tp1_hit") else ("본전방어가동" if t.get("be_armed") else "초입추적중"))
-            lines.append(f"  ↳ 🟢 ${base}: 진입 {fmt_price(t.get('entry_price'))} | 최고 +{fav:.1f}% ({st})")
+            c = classify_episode_by_mfe(t)
+            st = "TP2돌파·트레일링" if c["tp2"] else ("TP1돌파·홀딩" if c["tp1"] else ("본전방어가동" if c["be_save"] else "초입추적중"))
+            lines.append(f"  ↳ 🟢 ${base}: 진입 {fmt_price(t.get('entry_price'))} | 최고 +{c['fav']:.1f}% ({st})")
 
     if sls_recent:
         lines.append(f"• 📓 [손절(SL) 오답 노트 & 원인 해부 ({len(sls_recent)}건)]:")
