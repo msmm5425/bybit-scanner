@@ -32,10 +32,10 @@
         "1H 상단 추세 동조",
         "OBV 전고점 선행 돌파"
       ],
-      "max_high_price": 0.05568,
-      "peak_ts_ms": 1795044420000,
-      "max_favorable_pct": 0.22,
-      "hold_minutes": 17
+      "max_high_price": 0.05577,
+      "peak_ts_ms": 1795044960000,
+      "max_favorable_pct": 0.38,
+      "hold_minutes": 30
     },
     "VVVUSDT": {
       "created_at": 1794732102,
@@ -88,7 +88,7 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false,
-      "hold_minutes": 5205
+      "hold_minutes": 5218
     },
     "PYTHUSDT": {
       "created_at": 1794987363,
@@ -130,7 +130,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 951
+      "hold_minutes": 964
     },
     "PONSUSDT": {
       "created_at": 1794984239,
@@ -172,7 +172,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1003
+      "hold_minutes": 1016
     },
     "GRAMUSDT": {
       "created_at": 1794741572,
@@ -225,7 +225,7 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false,
-      "hold_minutes": 5047
+      "hold_minutes": 5060
     },
     "XPLUSDT": {
       "created_at": 1794741572,
@@ -278,7 +278,7 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false,
-      "hold_minutes": 5047
+      "hold_minutes": 5060
     },
     "TRUMPUSDT": {
       "created_at": 1794743038,
@@ -331,7 +331,7 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false,
-      "hold_minutes": 5023
+      "hold_minutes": 5036
     },
     "HYPEUSDT": {
       "created_at": 1794744726,
@@ -384,7 +384,7 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false,
-      "hold_minutes": 4995
+      "hold_minutes": 5008
     },
     "PENGUUSDT": {
       "created_at": 1794985550,
@@ -425,7 +425,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 981
+      "hold_minutes": 994
     },
     "VIRTUALUSDT": {
       "created_at": 1794989979,
@@ -467,7 +467,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 907
+      "hold_minutes": 920
     },
     "HUSDT": {
       "created_at": 1795044096,
@@ -503,7 +503,7 @@
       "max_high_price": 0.01523,
       "peak_ts_ms": 1795043700000,
       "max_favorable_pct": 0.2,
-      "hold_minutes": 5
+      "hold_minutes": 18
     },
     "INITUSDT": {
       "created_at": 1794976466,
@@ -548,7 +548,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1132
+      "hold_minutes": 1145
     },
     "SOONUSDT": {
       "created_at": 1795021799,
@@ -585,7 +585,7 @@
       "max_high_price": 0.2822,
       "peak_ts_ms": 1795035600000,
       "max_favorable_pct": 8.21,
-      "hold_minutes": 377
+      "hold_minutes": 390
     },
     "JTOUSDT": {
       "created_at": 1794979334,
@@ -631,7 +631,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1085
+      "hold_minutes": 1098
     },
     "BEUSDT": {
       "created_at": 1794979334,
@@ -761,10 +761,10 @@
         "응축 돌파 거래량 10.2배 유입",
         "OBV 바닥 다이버전스 매집"
       ],
-      "max_high_price": 0.01072,
-      "peak_ts_ms": 1795043700000,
-      "max_favorable_pct": 2.58,
-      "hold_minutes": 104
+      "max_high_price": 0.01073,
+      "peak_ts_ms": 1795044840000,
+      "max_favorable_pct": 2.68,
+      "hold_minutes": 117
     },
     "ALLOUSDT": {
       "created_at": 1794980736,
@@ -806,7 +806,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1061
+      "hold_minutes": 1074
     },
     "ZAMAUSDT": {
       "created_at": 1794980736,
@@ -848,7 +848,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1061
+      "hold_minutes": 1074
     },
     "BTWUSDT": {
       "created_at": 1795024453,
@@ -932,7 +932,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1054
+      "hold_minutes": 1067
     },
     "GRVTUSDT": {
       "created_at": 1794981155,
@@ -1019,7 +1019,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1034,
+      "hold_minutes": 1046,
       "be_armed": true
     },
     "KAVAUSDT": {
@@ -1056,7 +1056,7 @@
       "max_high_price": 0.02964,
       "peak_ts_ms": 1795029300000,
       "max_favorable_pct": 3.38,
-      "hold_minutes": 293
+      "hold_minutes": 306
     },
     "MUBARAKUSDT": {
       "created_at": 1794982396,
@@ -1143,7 +1143,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1023
+      "hold_minutes": 1036
     },
     "ASTSUSDT": {
       "created_at": 1794983030,
@@ -1230,7 +1230,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1023
+      "hold_minutes": 1036
     },
     "WUSDT": {
       "created_at": 1794983642,
@@ -1272,7 +1272,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1013
+      "hold_minutes": 1026
     },
     "DRAMUSDT": {
       "created_at": 1794983642,
@@ -1313,7 +1313,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1013
+      "hold_minutes": 1026
     },
     "WDCUSDT": {
       "created_at": 1794983642,
@@ -1355,7 +1355,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1013
+      "hold_minutes": 1026
     },
     "SKHYUSDT": {
       "created_at": 1794984239,
@@ -1396,7 +1396,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1003
+      "hold_minutes": 1016
     },
     "FLUIDUSDT": {
       "created_at": 1794984239,
@@ -1437,7 +1437,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1003
+      "hold_minutes": 1016
     },
     "DGAIUSDT": {
       "created_at": 1794984957,
@@ -1478,7 +1478,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 991,
+      "hold_minutes": 1004,
       "be_armed": true
     },
     "MAGMAUSDT": {
@@ -1515,7 +1515,7 @@
       "max_high_price": 0.24545,
       "peak_ts_ms": 1795029300000,
       "max_favorable_pct": 0.57,
-      "hold_minutes": 262
+      "hold_minutes": 275
     },
     "SOPHUSDT": {
       "created_at": 1795028323,
@@ -1552,7 +1552,7 @@
       "max_high_price": 0.001091,
       "peak_ts_ms": 1795035600000,
       "max_favorable_pct": 6.54,
-      "hold_minutes": 268
+      "hold_minutes": 281
     },
     "TTWOUSDT": {
       "created_at": 1794985550,
@@ -1594,7 +1594,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 981
+      "hold_minutes": 994
     },
     "ERAUSDT": {
       "created_at": 1795041691,
@@ -1628,10 +1628,10 @@
         "볼린저/켈트너 초응축(2.9%) 후 확산",
         "응축 돌파 거래량 5.2배 유입"
       ],
-      "max_high_price": 0.06963,
-      "peak_ts_ms": 1795044120000,
-      "max_favorable_pct": 0.68,
-      "hold_minutes": 45
+      "max_high_price": 0.07011,
+      "peak_ts_ms": 1795045080000,
+      "max_favorable_pct": 1.37,
+      "hold_minutes": 58
     },
     "BARDUSDT": {
       "created_at": 1795018256,
@@ -1669,7 +1669,7 @@
       "max_high_price": 0.0873,
       "peak_ts_ms": 1795022100000,
       "max_favorable_pct": 0.58,
-      "hold_minutes": 436
+      "hold_minutes": 449
     },
     "BLESSUSDT": {
       "created_at": 1795017210,
@@ -1798,7 +1798,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 961
+      "hold_minutes": 973
     },
     "ZILUSDT": {
       "created_at": 1795030040,
@@ -1878,7 +1878,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 951
+      "hold_minutes": 964
     },
     "SKRUSDT": {
       "created_at": 1794987363,
@@ -1920,7 +1920,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 951
+      "hold_minutes": 964
     },
     "ZKPUSDT": {
       "created_at": 1795020755,
@@ -1958,7 +1958,7 @@
       "max_high_price": 0.03445,
       "peak_ts_ms": 1795021200000,
       "max_favorable_pct": 1.44,
-      "hold_minutes": 394
+      "hold_minutes": 407
     },
     "CCUSDT": {
       "created_at": 1794989338,
@@ -2000,7 +2000,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 918
+      "hold_minutes": 931
     },
     "GRASSUSDT": {
       "created_at": 1794989338,
@@ -2042,7 +2042,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 918
+      "hold_minutes": 931
     },
     "PURRUSDT": {
       "created_at": 1794989979,
@@ -2083,7 +2083,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 907
+      "hold_minutes": 920
     },
     "PIEVERSEUSDT": {
       "created_at": 1795039202,
@@ -2117,9 +2117,9 @@
         "OBV 전고점 선행 돌파"
       ],
       "max_high_price": 3.63635,
-      "peak_ts_ms": 1795041600000,
+      "peak_ts_ms": 1795041000000,
       "max_favorable_pct": 4.27,
-      "hold_minutes": 87
+      "hold_minutes": 100
     },
     "OPGUSDT": {
       "created_at": 1795044443,
@@ -2153,9 +2153,10 @@
         "응축 돌파 거래량 2.1배 유입",
         "OBV 바닥 다이버전스 매집"
       ],
-      "max_high_price": 0.136,
-      "peak_ts_ms": 1795044443000,
-      "max_favorable_pct": 0.0
+      "max_high_price": 0.1367,
+      "peak_ts_ms": 1795044780000,
+      "max_favorable_pct": 0.51,
+      "hold_minutes": 12
     },
     "LITUSDT": {
       "created_at": 1794990586,
@@ -2242,7 +2243,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 897
+      "hold_minutes": 910
     },
     "SENTUSDT": {
       "created_at": 1794991208,
@@ -2276,15 +2277,15 @@
         "박스권 에너지 응축(5.6%)",
         "응축 돌파 거래량 1.7배 유입"
       ],
-      "max_high_price": 0.02066,
-      "peak_ts_ms": 1795040100000,
-      "max_favorable_pct": 6.0,
+      "max_high_price": 0.02067,
+      "peak_ts_ms": 1795045140000,
+      "max_favorable_pct": 6.05,
       "tp1_hit": false,
       "tp1_alerted": false,
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 887
+      "hold_minutes": 900
     },
     "NIGHTUSDT": {
       "created_at": 1794991208,
@@ -2326,7 +2327,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 887
+      "hold_minutes": 900
     },
     "ARIAUSDT": {
       "created_at": 1795025812,
@@ -2363,7 +2364,7 @@
       "max_high_price": 0.24733,
       "peak_ts_ms": 1795028400000,
       "max_favorable_pct": 5.18,
-      "hold_minutes": 310
+      "hold_minutes": 323
     },
     "TEMUSDT": {
       "created_at": 1794991832,
@@ -2404,7 +2405,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 876
+      "hold_minutes": 889
     },
     "PIPPINUSDT": {
       "created_at": 1795036739,
@@ -2441,7 +2442,7 @@
       "max_high_price": 0.01851,
       "peak_ts_ms": 1795036500000,
       "max_favorable_pct": 0.27,
-      "hold_minutes": 128
+      "hold_minutes": 141
     },
     "ZKUSDT": {
       "created_at": 1794991832,
@@ -2523,7 +2524,7 @@
       "max_high_price": 0.03075,
       "peak_ts_ms": 1795036500000,
       "max_favorable_pct": 4.66,
-      "hold_minutes": 145
+      "hold_minutes": 158
     },
     "LITEUSDT": {
       "created_at": 1794995418,
@@ -2609,7 +2610,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 817
+      "hold_minutes": 829
     },
     "ZORAUSDT": {
       "created_at": 1794996051,
@@ -2688,9 +2689,10 @@
         "볼린저/켈트너 초응축(1.9%) 후 확산",
         "응축 돌파 거래량 1.9배 유입"
       ],
-      "max_high_price": 0.01421,
-      "peak_ts_ms": 1795044443000,
-      "max_favorable_pct": 0.0
+      "max_high_price": 0.01425,
+      "peak_ts_ms": 1795044600000,
+      "max_favorable_pct": 0.28,
+      "hold_minutes": 12
     },
     "IRYSUSDT": {
       "created_at": 1794996051,
@@ -2732,7 +2734,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 806,
+      "hold_minutes": 819,
       "be_armed": true
     },
     "OKTAUSDT": {
@@ -2774,7 +2776,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 796
+      "hold_minutes": 809
     },
     "MMTUSDT": {
       "created_at": 1794996673,
@@ -2858,7 +2860,7 @@
       "max_high_price": 0.1275,
       "peak_ts_ms": 1795034700000,
       "max_favorable_pct": 0.08,
-      "hold_minutes": 151
+      "hold_minutes": 164
     },
     "MELANIAUSDT": {
       "created_at": 1795002600,
@@ -2894,7 +2896,7 @@
       "max_high_price": 0.05031,
       "peak_ts_ms": 1795027500000,
       "max_favorable_pct": 3.39,
-      "hold_minutes": 697
+      "hold_minutes": 710
     },
     "ASTERUSDT": {
       "created_at": 1795002600,
@@ -2931,7 +2933,7 @@
       "max_high_price": 0.5596,
       "peak_ts_ms": 1795015800000,
       "max_favorable_pct": 1.34,
-      "hold_minutes": 697
+      "hold_minutes": 710
     },
     "ETHFIUSDT": {
       "created_at": 1795003662,
@@ -2965,10 +2967,10 @@
         "응축 돌파 거래량 2.5배 유입",
         "OBV 바닥 다이버전스 매집"
       ],
-      "max_high_price": 0.4794,
-      "peak_ts_ms": 1795044120000,
-      "max_favorable_pct": 1.61,
-      "hold_minutes": 679
+      "max_high_price": 0.4834,
+      "peak_ts_ms": 1795045200000,
+      "max_favorable_pct": 2.46,
+      "hold_minutes": 692
     },
     "CAPUSDT": {
       "created_at": 1795004016,
@@ -3005,7 +3007,7 @@
       "max_high_price": 0.10299,
       "peak_ts_ms": 1795009500000,
       "max_favorable_pct": 1.33,
-      "hold_minutes": 673
+      "hold_minutes": 686
     },
     "CROSSUSDT": {
       "created_at": 1795004016,
@@ -3040,7 +3042,7 @@
       "max_high_price": 0.16605,
       "peak_ts_ms": 1795004100000,
       "max_favorable_pct": 1.45,
-      "hold_minutes": 673
+      "hold_minutes": 686
     },
     "TAIKOUSDT": {
       "created_at": 1795004016,
@@ -3075,7 +3077,7 @@
       "max_high_price": 0.05955,
       "peak_ts_ms": 1795005000000,
       "max_favorable_pct": 0.13,
-      "hold_minutes": 673
+      "hold_minutes": 686
     },
     "LAUSDT": {
       "created_at": 1795004377,
@@ -3112,7 +3114,7 @@
       "max_high_price": 0.04562,
       "peak_ts_ms": 1795011300000,
       "max_favorable_pct": 2.15,
-      "hold_minutes": 667
+      "hold_minutes": 680
     },
     "RUNEUSDT": {
       "created_at": 1795022486,
@@ -3147,10 +3149,10 @@
         "응축 돌파 거래량 1.9배 유입",
         "OBV 바닥 다이버전스 매집"
       ],
-      "max_high_price": 0.5291,
-      "peak_ts_ms": 1795027500000,
-      "max_favorable_pct": 1.05,
-      "hold_minutes": 365
+      "max_high_price": 0.53,
+      "peak_ts_ms": 1795045140000,
+      "max_favorable_pct": 1.22,
+      "hold_minutes": 378
     },
     "HUMAUSDT": {
       "created_at": 1795004730,
@@ -3233,7 +3235,7 @@
       "max_high_price": 0.10336,
       "peak_ts_ms": 1795008600000,
       "max_favorable_pct": 2.29,
-      "hold_minutes": 634
+      "hold_minutes": 647
     },
     "MOCAUSDT": {
       "created_at": 1795025127,
@@ -3270,7 +3272,7 @@
       "max_high_price": 0.006732,
       "peak_ts_ms": 1795026600000,
       "max_favorable_pct": 2.06,
-      "hold_minutes": 321
+      "hold_minutes": 334
     },
     "EVAAUSDT": {
       "created_at": 1795008446,
@@ -3350,7 +3352,7 @@
       "max_high_price": 0.002079,
       "peak_ts_ms": 1795015800000,
       "max_favorable_pct": 2.62,
-      "hold_minutes": 559
+      "hold_minutes": 572
     },
     "AKEUSDT": {
       "created_at": 1795010848,
@@ -3386,7 +3388,7 @@
       "max_high_price": 0.0112747,
       "peak_ts_ms": 1795025700000,
       "max_favorable_pct": 9.4,
-      "hold_minutes": 559
+      "hold_minutes": 572
     },
     "AEROUSDT": {
       "created_at": 1795012246,
@@ -3423,7 +3425,7 @@
       "max_high_price": 0.439,
       "peak_ts_ms": 1795012200000,
       "max_favorable_pct": 0.09,
-      "hold_minutes": 536
+      "hold_minutes": 549
     },
     "BEAMUSDT": {
       "created_at": 1795013627,
@@ -3460,7 +3462,7 @@
       "max_high_price": 0.003774,
       "peak_ts_ms": 1795014000000,
       "max_favorable_pct": 0.08,
-      "hold_minutes": 513
+      "hold_minutes": 526
     },
     "RAREUSDT": {
       "created_at": 1795017559,
@@ -3497,7 +3499,7 @@
       "max_high_price": 0.01166,
       "peak_ts_ms": 1795024800000,
       "max_favorable_pct": 1.75,
-      "hold_minutes": 448
+      "hold_minutes": 460
     },
     "SYRUPUSDT": {
       "created_at": 1795021453,
@@ -3534,7 +3536,7 @@
       "max_high_price": 0.0965,
       "peak_ts_ms": 1795031100000,
       "max_favorable_pct": 1.15,
-      "hold_minutes": 383
+      "hold_minutes": 396
     },
     "2ZUSDT": {
       "created_at": 1795034658,
@@ -3570,7 +3572,7 @@
       "max_high_price": 0.01713,
       "peak_ts_ms": 1795033800000,
       "max_favorable_pct": 0.0,
-      "hold_minutes": 163
+      "hold_minutes": 175
     },
     "AXISUSDT": {
       "created_at": 1795034658,
@@ -3604,9 +3606,9 @@
         "OBV 바닥 다이버전스 매집"
       ],
       "max_high_price": 0.09113,
-      "peak_ts_ms": 1795041420000,
+      "peak_ts_ms": 1795041000000,
       "max_favorable_pct": 3.62,
-      "hold_minutes": 163
+      "hold_minutes": 175
     },
     "CHIPUSDT": {
       "created_at": 1795043745,
@@ -3639,10 +3641,10 @@
         "볼린저/켈트너 초응축(2.9%) 후 확산",
         "OBV 바닥 다이버전스 매집"
       ],
-      "max_high_price": 0.02962,
-      "peak_ts_ms": 1795044420000,
-      "max_favorable_pct": 0.75,
-      "hold_minutes": 11
+      "max_high_price": 0.02964,
+      "peak_ts_ms": 1795044780000,
+      "max_favorable_pct": 0.82,
+      "hold_minutes": 24
     }
   },
   "alert_history": {
@@ -4888,6 +4890,7 @@
       "symbol": "VVVUSDT",
       "created_at": 1794732102,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 98,
       "entry_price": 19.293,
       "initial_stop_price": 18.13542,
@@ -4910,7 +4913,7 @@
       "rsi6_15m": 53.1,
       "oi_m": 3.0559285526399997,
       "funding_pct": 0.005,
-      "hold_minutes": 5205,
+      "hold_minutes": 5218,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5141,6 +5144,7 @@
       "symbol": "GRAMUSDT",
       "created_at": 1794741572,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 100,
       "entry_price": 1.0649,
       "initial_stop_price": 1.0010059999999998,
@@ -5163,7 +5167,7 @@
       "rsi6_15m": 57.4,
       "oi_m": 4.209949558869995,
       "funding_pct": -0.0036,
-      "hold_minutes": 5047,
+      "hold_minutes": 5060,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5207,6 +5211,7 @@
       "symbol": "XPLUSDT",
       "created_at": 1794741572,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 97,
       "entry_price": 0.04443,
       "initial_stop_price": 0.041764199999999994,
@@ -5229,7 +5234,7 @@
       "rsi6_15m": 61.5,
       "oi_m": 3.76968672462,
       "funding_pct": -0.0107,
-      "hold_minutes": 5047,
+      "hold_minutes": 5060,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5246,6 +5251,7 @@
       "symbol": "TRUMPUSDT",
       "created_at": 1794743038,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 100,
       "entry_price": 0.968,
       "initial_stop_price": 0.90992,
@@ -5268,7 +5274,7 @@
       "rsi6_15m": 73.2,
       "oi_m": 4.303778045600001,
       "funding_pct": -0.034999999999999996,
-      "hold_minutes": 5023,
+      "hold_minutes": 5036,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5312,6 +5318,7 @@
       "symbol": "HYPEUSDT",
       "created_at": 1794744726,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 95,
       "entry_price": 67.861,
       "initial_stop_price": 63.78934,
@@ -5334,7 +5341,7 @@
       "rsi6_15m": 57.3,
       "oi_m": 162.1003088369601,
       "funding_pct": 0.0025,
-      "hold_minutes": 4995,
+      "hold_minutes": 5008,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5659,6 +5666,7 @@
       "symbol": "INITUSDT",
       "created_at": 1794976466,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 88,
       "entry_price": 0.10146,
       "initial_stop_price": 0.0953724,
@@ -5681,7 +5689,7 @@
       "rsi6_15m": 56.0,
       "oi_m": 2.13657729042,
       "funding_pct": -0.053,
-      "hold_minutes": 1132,
+      "hold_minutes": 1145,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5737,6 +5745,7 @@
       "symbol": "JTOUSDT",
       "created_at": 1794979334,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 98,
       "entry_price": 0.2608,
       "initial_stop_price": 0.24515199999999995,
@@ -5759,7 +5768,7 @@
       "rsi6_15m": 62.5,
       "oi_m": 1.42024054095,
       "funding_pct": 0.005,
-      "hold_minutes": 1085,
+      "hold_minutes": 1098,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5776,6 +5785,7 @@
       "symbol": "BEUSDT",
       "created_at": 1794979334,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 92,
       "entry_price": 180.18,
       "initial_stop_price": 169.3692,
@@ -5815,6 +5825,7 @@
       "symbol": "CRDOUSDT",
       "created_at": 1794979334,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 85,
       "entry_price": 130.0,
       "initial_stop_price": 122.19999999999999,
@@ -5893,6 +5904,7 @@
       "symbol": "ALLOUSDT",
       "created_at": 1794980736,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.14589,
       "initial_stop_price": 0.137137,
@@ -5915,7 +5927,7 @@
       "rsi6_15m": 73.0,
       "oi_m": 0.6,
       "funding_pct": 0.005,
-      "hold_minutes": 1061,
+      "hold_minutes": 1074,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5932,6 +5944,7 @@
       "symbol": "ZAMAUSDT",
       "created_at": 1794980736,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.06194,
       "initial_stop_price": 0.058224,
@@ -5954,7 +5967,7 @@
       "rsi6_15m": 76.2,
       "oi_m": 1.1,
       "funding_pct": 0.004699999999999999,
-      "hold_minutes": 1061,
+      "hold_minutes": 1074,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6010,6 +6023,7 @@
       "symbol": "STXUSDT",
       "created_at": 1794981155,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.2775,
       "initial_stop_price": 0.26085,
@@ -6032,7 +6046,7 @@
       "rsi6_15m": 65.3,
       "oi_m": 2.9,
       "funding_pct": -0.013200000000000002,
-      "hold_minutes": 1054,
+      "hold_minutes": 1067,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6049,6 +6063,7 @@
       "symbol": "GRVTUSDT",
       "created_at": 1794981155,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.16974,
       "initial_stop_price": 0.159556,
@@ -6122,6 +6137,7 @@
       "symbol": "ICNTUSDT",
       "created_at": 1794982396,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.2903,
       "initial_stop_price": 0.272882,
@@ -6144,7 +6160,7 @@
       "rsi6_15m": 68.0,
       "oi_m": 2.9,
       "funding_pct": 0.005,
-      "hold_minutes": 1034,
+      "hold_minutes": 1046,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6200,6 +6216,7 @@
       "symbol": "MUBARAKUSDT",
       "created_at": 1794982396,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.0287,
       "initial_stop_price": 0.026978,
@@ -6239,6 +6256,7 @@
       "symbol": "USELESSUSDT",
       "created_at": 1794983030,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.09497,
       "initial_stop_price": 0.089272,
@@ -6261,7 +6279,7 @@
       "rsi6_15m": 55.0,
       "oi_m": 3.9,
       "funding_pct": 0.005,
-      "hold_minutes": 1023,
+      "hold_minutes": 1036,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6278,6 +6296,7 @@
       "symbol": "ASTSUSDT",
       "created_at": 1794983030,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 28.37,
       "initial_stop_price": 26.6678,
@@ -6317,6 +6336,7 @@
       "symbol": "WLFIUSDT",
       "created_at": 1794983030,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.04597,
       "initial_stop_price": 0.043212,
@@ -6339,7 +6359,7 @@
       "rsi6_15m": 59.5,
       "oi_m": 10.1,
       "funding_pct": -0.0028,
-      "hold_minutes": 1023,
+      "hold_minutes": 1036,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6356,6 +6376,7 @@
       "symbol": "WUSDT",
       "created_at": 1794983642,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.00882,
       "initial_stop_price": 0.008291,
@@ -6378,7 +6399,7 @@
       "rsi6_15m": 74.0,
       "oi_m": 1.4,
       "funding_pct": -0.0021,
-      "hold_minutes": 1013,
+      "hold_minutes": 1026,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6395,6 +6416,7 @@
       "symbol": "DRAMUSDT",
       "created_at": 1794983642,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 40.16,
       "initial_stop_price": 37.7504,
@@ -6417,7 +6439,7 @@
       "rsi6_15m": 61.0,
       "oi_m": 3.0,
       "funding_pct": 0.011000000000000001,
-      "hold_minutes": 1013,
+      "hold_minutes": 1026,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6434,6 +6456,7 @@
       "symbol": "WDCUSDT",
       "created_at": 1794983642,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 290.69,
       "initial_stop_price": 273.2486,
@@ -6456,7 +6479,7 @@
       "rsi6_15m": 56.7,
       "oi_m": 0.9,
       "funding_pct": -0.0011,
-      "hold_minutes": 1013,
+      "hold_minutes": 1026,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6473,6 +6496,7 @@
       "symbol": "SKHYUSDT",
       "created_at": 1794984239,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 127.02,
       "initial_stop_price": 119.3988,
@@ -6495,7 +6519,7 @@
       "rsi6_15m": 52.6,
       "oi_m": 4.7,
       "funding_pct": 0.0,
-      "hold_minutes": 1003,
+      "hold_minutes": 1016,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6512,6 +6536,7 @@
       "symbol": "FLUIDUSDT",
       "created_at": 1794984239,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 1.807,
       "initial_stop_price": 1.69858,
@@ -6534,7 +6559,7 @@
       "rsi6_15m": 69.6,
       "oi_m": 0.7,
       "funding_pct": 0.005,
-      "hold_minutes": 1003,
+      "hold_minutes": 1016,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6551,6 +6576,7 @@
       "symbol": "PONSUSDT",
       "created_at": 1794984239,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.11431,
       "initial_stop_price": 0.107451,
@@ -6573,7 +6599,7 @@
       "rsi6_15m": 61.9,
       "oi_m": 3.8,
       "funding_pct": 0.005,
-      "hold_minutes": 1003,
+      "hold_minutes": 1016,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6590,6 +6616,7 @@
       "symbol": "DGAIUSDT",
       "created_at": 1794984957,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.6887,
       "initial_stop_price": 0.647378,
@@ -6612,7 +6639,7 @@
       "rsi6_15m": 64.6,
       "oi_m": 0.6,
       "funding_pct": 0.005,
-      "hold_minutes": 991,
+      "hold_minutes": 1004,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6707,6 +6734,7 @@
       "symbol": "PENGUUSDT",
       "created_at": 1794985550,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.004737,
       "initial_stop_price": 0.004453,
@@ -6729,7 +6757,7 @@
       "rsi6_15m": 55.3,
       "oi_m": 4.8,
       "funding_pct": 0.005,
-      "hold_minutes": 981,
+      "hold_minutes": 994,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6746,6 +6774,7 @@
       "symbol": "TTWOUSDT",
       "created_at": 1794985550,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 208.62,
       "initial_stop_price": 196.1028,
@@ -6768,7 +6797,7 @@
       "rsi6_15m": 68.6,
       "oi_m": 1.1,
       "funding_pct": 0.0,
-      "hold_minutes": 981,
+      "hold_minutes": 994,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6902,6 +6931,7 @@
       "symbol": "PHAUSDT",
       "created_at": 1794986780,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.03156,
       "initial_stop_price": 0.029666,
@@ -6941,6 +6971,7 @@
       "symbol": "BLURUSDT",
       "created_at": 1794986780,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 93,
       "entry_price": 0.00622,
       "initial_stop_price": 0.005847,
@@ -6963,7 +6994,7 @@
       "rsi6_15m": 48.8,
       "oi_m": 1.0,
       "funding_pct": -0.0007999999999999999,
-      "hold_minutes": 961,
+      "hold_minutes": 973,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7019,6 +7050,7 @@
       "symbol": "PYTHUSDT",
       "created_at": 1794987363,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.05322,
       "initial_stop_price": 0.050027,
@@ -7041,7 +7073,7 @@
       "rsi6_15m": 70.2,
       "oi_m": 2.4,
       "funding_pct": 0.0026999999999999997,
-      "hold_minutes": 951,
+      "hold_minutes": 964,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7058,6 +7090,7 @@
       "symbol": "TRUSTUSDT",
       "created_at": 1794987363,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 95,
       "entry_price": 0.04766,
       "initial_stop_price": 0.0448,
@@ -7080,7 +7113,7 @@
       "rsi6_15m": 71.3,
       "oi_m": 0.2,
       "funding_pct": 0.005,
-      "hold_minutes": 951,
+      "hold_minutes": 964,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7097,6 +7130,7 @@
       "symbol": "SKRUSDT",
       "created_at": 1794987363,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.009751,
       "initial_stop_price": 0.009166,
@@ -7119,7 +7153,7 @@
       "rsi6_15m": 42.4,
       "oi_m": 1.4,
       "funding_pct": -0.025500000000000002,
-      "hold_minutes": 951,
+      "hold_minutes": 964,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7175,6 +7209,7 @@
       "symbol": "CCUSDT",
       "created_at": 1794989338,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.08469,
       "initial_stop_price": 0.079609,
@@ -7197,7 +7232,7 @@
       "rsi6_15m": 61.8,
       "oi_m": 6.2,
       "funding_pct": -0.007600000000000001,
-      "hold_minutes": 918,
+      "hold_minutes": 931,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7214,6 +7249,7 @@
       "symbol": "GRASSUSDT",
       "created_at": 1794989338,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.40318,
       "initial_stop_price": 0.378989,
@@ -7236,7 +7272,7 @@
       "rsi6_15m": 51.7,
       "oi_m": 9.0,
       "funding_pct": 0.005,
-      "hold_minutes": 918,
+      "hold_minutes": 931,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7253,6 +7289,7 @@
       "symbol": "VIRTUALUSDT",
       "created_at": 1794989979,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.4417,
       "initial_stop_price": 0.415198,
@@ -7275,7 +7312,7 @@
       "rsi6_15m": 55.1,
       "oi_m": 2.9,
       "funding_pct": 0.005,
-      "hold_minutes": 907,
+      "hold_minutes": 920,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7292,6 +7329,7 @@
       "symbol": "PURRUSDT",
       "created_at": 1794989979,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 8.07,
       "initial_stop_price": 7.5858,
@@ -7314,7 +7352,7 @@
       "rsi6_15m": 51.4,
       "oi_m": 0.3,
       "funding_pct": 0.0,
-      "hold_minutes": 907,
+      "hold_minutes": 920,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7409,6 +7447,7 @@
       "symbol": "LITUSDT",
       "created_at": 1794990586,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 2.844,
       "initial_stop_price": 2.67336,
@@ -7448,6 +7487,7 @@
       "symbol": "SPACEUSDT",
       "created_at": 1794990586,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.003245,
       "initial_stop_price": 0.00305,
@@ -7470,7 +7510,7 @@
       "rsi6_15m": 61.1,
       "oi_m": 0.5,
       "funding_pct": 0.005,
-      "hold_minutes": 897,
+      "hold_minutes": 910,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7487,6 +7527,7 @@
       "symbol": "SENTUSDT",
       "created_at": 1794991208,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.01949,
       "initial_stop_price": 0.018321,
@@ -7502,14 +7543,14 @@
         21.0,
         34.0
       ],
-      "max_high_price": 0.02066,
-      "max_favorable_pct": 6.0,
+      "max_high_price": 0.02067,
+      "max_favorable_pct": 6.05,
       "realized_weighted_pct": 0.0,
       "vol_mult": 1.74,
       "rsi6_15m": 59.8,
       "oi_m": 1.1,
       "funding_pct": -0.009600000000000001,
-      "hold_minutes": 887,
+      "hold_minutes": 900,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7526,6 +7567,7 @@
       "symbol": "NIGHTUSDT",
       "created_at": 1794991208,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.04485,
       "initial_stop_price": 0.042159,
@@ -7548,7 +7590,7 @@
       "rsi6_15m": 69.8,
       "oi_m": 1.5,
       "funding_pct": -0.010799999999999999,
-      "hold_minutes": 887,
+      "hold_minutes": 900,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7604,6 +7646,7 @@
       "symbol": "TEMUSDT",
       "created_at": 1794991832,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 64.52,
       "initial_stop_price": 60.6488,
@@ -7626,7 +7669,7 @@
       "rsi6_15m": 66.8,
       "oi_m": 0.1,
       "funding_pct": 0.0,
-      "hold_minutes": 876,
+      "hold_minutes": 889,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7682,6 +7725,7 @@
       "symbol": "ZKUSDT",
       "created_at": 1794991832,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 95,
       "entry_price": 0.00822,
       "initial_stop_price": 0.007727,
@@ -7760,6 +7804,7 @@
       "symbol": "LITEUSDT",
       "created_at": 1794995418,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 96,
       "entry_price": 590.71,
       "initial_stop_price": 555.2674,
@@ -7799,6 +7844,7 @@
       "symbol": "STABLEUSDT",
       "created_at": 1794995418,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 96,
       "entry_price": 0.02222,
       "initial_stop_price": 0.020887,
@@ -7821,7 +7867,7 @@
       "rsi6_15m": 91.0,
       "oi_m": 0.9,
       "funding_pct": 0.005,
-      "hold_minutes": 817,
+      "hold_minutes": 829,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7838,6 +7884,7 @@
       "symbol": "ZORAUSDT",
       "created_at": 1794996051,
       "track_type": "TRACK_C",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.005023,
       "initial_stop_price": 0.004722,
@@ -7916,6 +7963,7 @@
       "symbol": "IRYSUSDT",
       "created_at": 1794996051,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 98,
       "entry_price": 0.01711,
       "initial_stop_price": 0.016083,
@@ -7938,7 +7986,7 @@
       "rsi6_15m": 84.0,
       "oi_m": 1.1,
       "funding_pct": -0.09,
-      "hold_minutes": 806,
+      "hold_minutes": 819,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7955,6 +8003,7 @@
       "symbol": "OKTAUSDT",
       "created_at": 1794996673,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 90,
       "entry_price": 176.59,
       "initial_stop_price": 165.9946,
@@ -7977,7 +8026,7 @@
       "rsi6_15m": 82.5,
       "oi_m": 0.3,
       "funding_pct": 0.0,
-      "hold_minutes": 796,
+      "hold_minutes": 809,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7994,6 +8043,7 @@
       "symbol": "MMTUSDT",
       "created_at": 1794996673,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 89,
       "entry_price": 0.2415,
       "initial_stop_price": 0.22701,
@@ -8072,6 +8122,7 @@
       "symbol": "MELANIAUSDT",
       "created_at": 1795002600,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.04866,
       "initial_stop_price": 0.04574,
@@ -8094,7 +8145,7 @@
       "rsi6_15m": 64.1,
       "oi_m": 0.4,
       "funding_pct": -0.0018,
-      "hold_minutes": 697,
+      "hold_minutes": 710,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8111,6 +8162,7 @@
       "symbol": "ASTERUSDT",
       "created_at": 1795002600,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.5522,
       "initial_stop_price": 0.519068,
@@ -8133,7 +8185,7 @@
       "rsi6_15m": 59.7,
       "oi_m": 17.2,
       "funding_pct": 0.0015999999999999999,
-      "hold_minutes": 697,
+      "hold_minutes": 710,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8150,6 +8202,7 @@
       "symbol": "ETHFIUSDT",
       "created_at": 1795003662,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.4718,
       "initial_stop_price": 0.443492,
@@ -8165,14 +8218,14 @@
         13.7,
         21.8
       ],
-      "max_high_price": 0.4794,
-      "max_favorable_pct": 1.61,
+      "max_high_price": 0.4834,
+      "max_favorable_pct": 2.46,
       "realized_weighted_pct": 0.0,
       "vol_mult": 2.47,
       "rsi6_15m": 61.1,
       "oi_m": 5.3,
       "funding_pct": 0.0018,
-      "hold_minutes": 679,
+      "hold_minutes": 692,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8189,6 +8242,7 @@
       "symbol": "CAPUSDT",
       "created_at": 1795004016,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.10164,
       "initial_stop_price": 0.095542,
@@ -8211,7 +8265,7 @@
       "rsi6_15m": 60.8,
       "oi_m": 5.0,
       "funding_pct": 0.005,
-      "hold_minutes": 673,
+      "hold_minutes": 686,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8228,6 +8282,7 @@
       "symbol": "CROSSUSDT",
       "created_at": 1795004016,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.16368,
       "initial_stop_price": 0.153859,
@@ -8250,7 +8305,7 @@
       "rsi6_15m": 56.0,
       "oi_m": 0.6,
       "funding_pct": 0.005,
-      "hold_minutes": 673,
+      "hold_minutes": 686,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8267,6 +8322,7 @@
       "symbol": "TAIKOUSDT",
       "created_at": 1795004016,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.05947,
       "initial_stop_price": 0.055902,
@@ -8289,7 +8345,7 @@
       "rsi6_15m": 47.5,
       "oi_m": 0.3,
       "funding_pct": 0.005,
-      "hold_minutes": 673,
+      "hold_minutes": 686,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8306,6 +8362,7 @@
       "symbol": "LAUSDT",
       "created_at": 1795004377,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 85,
       "entry_price": 0.04466,
       "initial_stop_price": 0.04198,
@@ -8328,7 +8385,7 @@
       "rsi6_15m": 52.9,
       "oi_m": 0.7,
       "funding_pct": -0.065,
-      "hold_minutes": 667,
+      "hold_minutes": 680,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8384,6 +8441,7 @@
       "symbol": "HUMAUSDT",
       "created_at": 1795004730,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.00716,
       "initial_stop_price": 0.00673,
@@ -8423,6 +8481,7 @@
       "symbol": "FFUSDT",
       "created_at": 1795006367,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.10105,
       "initial_stop_price": 0.094987,
@@ -8445,7 +8504,7 @@
       "rsi6_15m": 70.2,
       "oi_m": 5.0,
       "funding_pct": 0.005,
-      "hold_minutes": 634,
+      "hold_minutes": 647,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8540,6 +8599,7 @@
       "symbol": "EVAAUSDT",
       "created_at": 1795008446,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 92,
       "entry_price": 3.5087,
       "initial_stop_price": 3.298178,
@@ -8579,6 +8639,7 @@
       "symbol": "JCTUSDT",
       "created_at": 1795010848,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.002026,
       "initial_stop_price": 0.001904,
@@ -8601,7 +8662,7 @@
       "rsi6_15m": 71.6,
       "oi_m": 2.8,
       "funding_pct": 0.005,
-      "hold_minutes": 559,
+      "hold_minutes": 572,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8657,6 +8718,7 @@
       "symbol": "AKEUSDT",
       "created_at": 1795010848,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.0103064,
       "initial_stop_price": 0.009688,
@@ -8679,7 +8741,7 @@
       "rsi6_15m": 71.2,
       "oi_m": 5.6,
       "funding_pct": 0.005,
-      "hold_minutes": 559,
+      "hold_minutes": 572,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8696,6 +8758,7 @@
       "symbol": "AEROUSDT",
       "created_at": 1795012246,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.4386,
       "initial_stop_price": 0.412284,
@@ -8718,7 +8781,7 @@
       "rsi6_15m": 68.2,
       "oi_m": 6.2,
       "funding_pct": 0.005,
-      "hold_minutes": 536,
+      "hold_minutes": 549,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8735,6 +8798,7 @@
       "symbol": "BEAMUSDT",
       "created_at": 1795013627,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.003771,
       "initial_stop_price": 0.003545,
@@ -8757,7 +8821,7 @@
       "rsi6_15m": 38.6,
       "oi_m": 2.2,
       "funding_pct": 0.0022,
-      "hold_minutes": 513,
+      "hold_minutes": 526,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8774,6 +8838,7 @@
       "symbol": "BLESSUSDT",
       "created_at": 1795017210,
       "track_type": "TRACK_C",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.011119,
       "initial_stop_price": 0.010452,
@@ -8813,6 +8878,7 @@
       "symbol": "RAREUSDT",
       "created_at": 1795017559,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.01146,
       "initial_stop_price": 0.010772,
@@ -8835,7 +8901,7 @@
       "rsi6_15m": 41.5,
       "oi_m": 1.2,
       "funding_pct": -0.10269999999999999,
-      "hold_minutes": 448,
+      "hold_minutes": 460,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8852,6 +8918,7 @@
       "symbol": "BARDUSDT",
       "created_at": 1795018256,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.0868,
       "initial_stop_price": 0.081592,
@@ -8874,7 +8941,7 @@
       "rsi6_15m": 40.9,
       "oi_m": 1.7,
       "funding_pct": -0.0173,
-      "hold_minutes": 436,
+      "hold_minutes": 449,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8891,6 +8958,7 @@
       "symbol": "ZKPUSDT",
       "created_at": 1795020755,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.03396,
       "initial_stop_price": 0.031922,
@@ -8913,7 +8981,7 @@
       "rsi6_15m": 57.1,
       "oi_m": 0.7,
       "funding_pct": -0.007552,
-      "hold_minutes": 394,
+      "hold_minutes": 407,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8930,6 +8998,7 @@
       "symbol": "SYRUPUSDT",
       "created_at": 1795021453,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.0954,
       "initial_stop_price": 0.089676,
@@ -8952,7 +9021,7 @@
       "rsi6_15m": 43.1,
       "oi_m": 0.7,
       "funding_pct": 0.005,
-      "hold_minutes": 383,
+      "hold_minutes": 396,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8969,6 +9038,7 @@
       "symbol": "SOONUSDT",
       "created_at": 1795021799,
       "track_type": "TRACK_C",
+      "is_long_term": false,
       "score": 97,
       "entry_price": 0.2608,
       "initial_stop_price": 0.245152,
@@ -8991,7 +9061,7 @@
       "rsi6_15m": 45.0,
       "oi_m": 2.4,
       "funding_pct": 0.005,
-      "hold_minutes": 377,
+      "hold_minutes": 390,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9047,6 +9117,7 @@
       "symbol": "RUNEUSDT",
       "created_at": 1795022486,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.5236,
       "initial_stop_price": 0.492184,
@@ -9062,14 +9133,14 @@
         20.3,
         31.6
       ],
-      "max_high_price": 0.5291,
-      "max_favorable_pct": 1.05,
+      "max_high_price": 0.53,
+      "max_favorable_pct": 1.22,
       "realized_weighted_pct": 0.0,
       "vol_mult": 1.85,
       "rsi6_15m": 53.3,
       "oi_m": 1.5,
       "funding_pct": 0.01,
-      "hold_minutes": 365,
+      "hold_minutes": 378,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9086,6 +9157,7 @@
       "symbol": "BTWUSDT",
       "created_at": 1795024453,
       "track_type": "TRACK_C",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.48755,
       "initial_stop_price": 0.458297,
@@ -9125,6 +9197,7 @@
       "symbol": "MOCAUSDT",
       "created_at": 1795025127,
       "track_type": "TRACK_C",
+      "is_long_term": false,
       "score": 99,
       "entry_price": 0.006596,
       "initial_stop_price": 0.0062,
@@ -9147,7 +9220,7 @@
       "rsi6_15m": 57.3,
       "oi_m": 0.6,
       "funding_pct": 0.005,
-      "hold_minutes": 321,
+      "hold_minutes": 334,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9164,6 +9237,7 @@
       "symbol": "ARIAUSDT",
       "created_at": 1795025812,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 88,
       "entry_price": 0.23515,
       "initial_stop_price": 0.221041,
@@ -9186,7 +9260,7 @@
       "rsi6_15m": 70.2,
       "oi_m": 4.3,
       "funding_pct": 0.005,
-      "hold_minutes": 310,
+      "hold_minutes": 323,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9203,6 +9277,7 @@
       "symbol": "KAVAUSDT",
       "created_at": 1795026830,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.02867,
       "initial_stop_price": 0.02695,
@@ -9225,7 +9300,7 @@
       "rsi6_15m": 67.8,
       "oi_m": 1.1,
       "funding_pct": -0.002044,
-      "hold_minutes": 293,
+      "hold_minutes": 306,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9242,6 +9317,7 @@
       "symbol": "SOPHUSDT",
       "created_at": 1795028323,
       "track_type": "TRACK_C",
+      "is_long_term": false,
       "score": 96,
       "entry_price": 0.001024,
       "initial_stop_price": 0.000963,
@@ -9264,7 +9340,7 @@
       "rsi6_15m": 71.4,
       "oi_m": 1.2,
       "funding_pct": 0.0013,
-      "hold_minutes": 268,
+      "hold_minutes": 281,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9281,6 +9357,7 @@
       "symbol": "MAGMAUSDT",
       "created_at": 1795028677,
       "track_type": "TRACK_C",
+      "is_long_term": false,
       "score": 97,
       "entry_price": 0.24405,
       "initial_stop_price": 0.229407,
@@ -9303,7 +9380,7 @@
       "rsi6_15m": 45.6,
       "oi_m": 0.9,
       "funding_pct": 0.005,
-      "hold_minutes": 262,
+      "hold_minutes": 275,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9320,6 +9397,7 @@
       "symbol": "ZILUSDT",
       "created_at": 1795030040,
       "track_type": "TRACK_C",
+      "is_long_term": false,
       "score": 92,
       "entry_price": 0.001082,
       "initial_stop_price": 0.001017,
@@ -9359,6 +9437,7 @@
       "symbol": "2ZUSDT",
       "created_at": 1795034658,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 88,
       "entry_price": 0.01713,
       "initial_stop_price": 0.016102,
@@ -9381,7 +9460,7 @@
       "rsi6_15m": 43.8,
       "oi_m": 0.4,
       "funding_pct": 0.005,
-      "hold_minutes": 163,
+      "hold_minutes": 175,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9398,6 +9477,7 @@
       "symbol": "AXISUSDT",
       "created_at": 1795034658,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 88,
       "entry_price": 0.08795,
       "initial_stop_price": 0.082673,
@@ -9420,7 +9500,7 @@
       "rsi6_15m": 58.3,
       "oi_m": 0.5,
       "funding_pct": -0.0018520000000000001,
-      "hold_minutes": 163,
+      "hold_minutes": 175,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9437,6 +9517,7 @@
       "symbol": "0GUSDT",
       "created_at": 1795035359,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.1274,
       "initial_stop_price": 0.119756,
@@ -9459,7 +9540,7 @@
       "rsi6_15m": 50.3,
       "oi_m": 0.8,
       "funding_pct": 0.005,
-      "hold_minutes": 151,
+      "hold_minutes": 164,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9476,6 +9557,7 @@
       "symbol": "ZKCUSDT",
       "created_at": 1795035698,
       "track_type": "TRACK_C",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.02938,
       "initial_stop_price": 0.027617,
@@ -9498,7 +9580,7 @@
       "rsi6_15m": 42.8,
       "oi_m": 1.4,
       "funding_pct": -0.007052,
-      "hold_minutes": 145,
+      "hold_minutes": 158,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9515,6 +9597,7 @@
       "symbol": "PIPPINUSDT",
       "created_at": 1795036739,
       "track_type": "TRACK_C",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.01846,
       "initial_stop_price": 0.017352,
@@ -9537,7 +9620,7 @@
       "rsi6_15m": 42.5,
       "oi_m": 2.7,
       "funding_pct": 0.005,
-      "hold_minutes": 128,
+      "hold_minutes": 141,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9554,6 +9637,7 @@
       "symbol": "USUALUSDT",
       "created_at": 1795038187,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 85,
       "entry_price": 0.01045,
       "initial_stop_price": 0.009823,
@@ -9569,14 +9653,14 @@
         21.4,
         31.0
       ],
-      "max_high_price": 0.01072,
-      "max_favorable_pct": 2.58,
+      "max_high_price": 0.01073,
+      "max_favorable_pct": 2.68,
       "realized_weighted_pct": 0.0,
       "vol_mult": 10.17,
       "rsi6_15m": 41.5,
       "oi_m": 0.3,
       "funding_pct": 0.005,
-      "hold_minutes": 104,
+      "hold_minutes": 117,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9593,6 +9677,7 @@
       "symbol": "PIEVERSEUSDT",
       "created_at": 1795039202,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 96,
       "entry_price": 3.48731,
       "initial_stop_price": 3.278071,
@@ -9615,7 +9700,7 @@
       "rsi6_15m": 78.0,
       "oi_m": 11.3,
       "funding_pct": 0.0419,
-      "hold_minutes": 87,
+      "hold_minutes": 100,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9632,6 +9717,7 @@
       "symbol": "ERAUSDT",
       "created_at": 1795041691,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.06916,
       "initial_stop_price": 0.06501,
@@ -9647,14 +9733,14 @@
         16.9,
         25.0
       ],
-      "max_high_price": 0.06963,
-      "max_favorable_pct": 0.68,
+      "max_high_price": 0.07011,
+      "max_favorable_pct": 1.37,
       "realized_weighted_pct": 0.0,
       "vol_mult": 5.19,
       "rsi6_15m": 40.6,
       "oi_m": 1.3,
       "funding_pct": -0.0274,
-      "hold_minutes": 45,
+      "hold_minutes": 58,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9671,6 +9757,7 @@
       "symbol": "MEGAUSDT",
       "created_at": 1795043393,
       "track_type": "TRACK_B",
+      "is_long_term": false,
       "score": 90,
       "entry_price": 0.05556,
       "initial_stop_price": 0.052226,
@@ -9686,14 +9773,14 @@
         20.8,
         32.3
       ],
-      "max_high_price": 0.05568,
-      "max_favorable_pct": 0.22,
+      "max_high_price": 0.05577,
+      "max_favorable_pct": 0.38,
       "realized_weighted_pct": 0.0,
       "vol_mult": 2.07,
       "rsi6_15m": 85.7,
       "oi_m": 2.2,
       "funding_pct": 0.005,
-      "hold_minutes": 17,
+      "hold_minutes": 30,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9710,6 +9797,7 @@
       "symbol": "CHIPUSDT",
       "created_at": 1795043745,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 88,
       "entry_price": 0.0294,
       "initial_stop_price": 0.027636,
@@ -9725,14 +9813,14 @@
         19.8,
         30.9
       ],
-      "max_high_price": 0.02962,
-      "max_favorable_pct": 0.75,
+      "max_high_price": 0.02964,
+      "max_favorable_pct": 0.82,
       "realized_weighted_pct": 0.0,
       "vol_mult": 2.36,
       "rsi6_15m": 59.8,
       "oi_m": 1.8,
       "funding_pct": 0.005,
-      "hold_minutes": 11,
+      "hold_minutes": 24,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9749,6 +9837,7 @@
       "symbol": "HUSDT",
       "created_at": 1795044096,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 85,
       "entry_price": 0.0152,
       "initial_stop_price": 0.014288,
@@ -9771,7 +9860,7 @@
       "rsi6_15m": 57.3,
       "oi_m": 1.5,
       "funding_pct": 0.005,
-      "hold_minutes": 5,
+      "hold_minutes": 18,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9788,6 +9877,7 @@
       "symbol": "MONUSDT",
       "created_at": 1795044443,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 94,
       "entry_price": 0.01421,
       "initial_stop_price": 0.013357,
@@ -9803,14 +9893,14 @@
         15.3,
         23.5
       ],
-      "max_high_price": 0.01421,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 0.01425,
+      "max_favorable_pct": 0.28,
       "realized_weighted_pct": 0.0,
       "vol_mult": 1.95,
       "rsi6_15m": 47.6,
       "oi_m": 4.1,
       "funding_pct": -0.0178,
-      "hold_minutes": 0,
+      "hold_minutes": 12,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9827,6 +9917,7 @@
       "symbol": "OPGUSDT",
       "created_at": 1795044443,
       "track_type": "TRACK_A",
+      "is_long_term": false,
       "score": 91,
       "entry_price": 0.136,
       "initial_stop_price": 0.12784,
@@ -9842,14 +9933,14 @@
         19.5,
         30.4
       ],
-      "max_high_price": 0.136,
-      "max_favorable_pct": 0.0,
+      "max_high_price": 0.1367,
+      "max_favorable_pct": 0.51,
       "realized_weighted_pct": 0.0,
       "vol_mult": 2.15,
       "rsi6_15m": 50.6,
       "oi_m": 1.2,
       "funding_pct": 0.005,
-      "hold_minutes": 0,
+      "hold_minutes": 12,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
