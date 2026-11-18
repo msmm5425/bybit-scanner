@@ -4165,7 +4165,8 @@
       "tp3_completed": true,
       "sl_alerted": false,
       "closed_alerted": true,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_hit": true
     },
     "PUMPUSDT_1794778487": {
       "symbol": "PUMPUSDT",
@@ -4276,8 +4277,8 @@
       "funding_pct": 0.005,
       "hold_minutes": 65,
       "be_armed": false,
-      "tp1_hit": false,
-      "tp2_hit": false,
+      "tp1_hit": true,
+      "tp2_hit": true,
       "tp1_alerted": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
@@ -4285,7 +4286,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1794800742
+      "sl_at": 1794800742,
+      "tp3_hit": true
     },
     "UNITASUSDT_1794821652": {
       "symbol": "UNITASUSDT",
@@ -4741,7 +4743,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": true,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_hit": true
     },
     "ICNTUSDT_1794982396": {
       "symbol": "ICNTUSDT",
@@ -5788,7 +5791,7 @@
       "funding_pct": 0.005,
       "hold_minutes": 130,
       "be_armed": true,
-      "tp1_hit": false,
+      "tp1_hit": true,
       "tp2_hit": false,
       "tp1_alerted": false,
       "tp2_alerted": false,
@@ -6052,8 +6055,8 @@
       "funding_pct": 0.005,
       "hold_minutes": 59,
       "be_armed": false,
-      "tp1_hit": false,
-      "tp2_hit": false,
+      "tp1_hit": true,
+      "tp2_hit": true,
       "tp1_alerted": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
