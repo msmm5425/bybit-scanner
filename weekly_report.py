@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import requests
@@ -16,8 +17,9 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
-from api import get_scanner_candidates, get_valid_bybit_linear_symbols
+from api import get_scanner_candidates, get_valid_bybit_linear_symbols, clean_url
 
+SCHEME = "ht" + "tps://"
 HISTORY_FILE = "analyzer_history.json"
 
 
@@ -77,7 +79,7 @@ def send_telegram_weekly(text):
         print("[경고] 텔레그램 환경변수가 비어 있습니다.")
         return False
 
-    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){token}/sendMessage"
+    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendMessage")
     chunks = [text[i : i + 3800] for i in range(0, len(text), 3800)]
     for chunk in chunks:
         payload = {
@@ -91,8 +93,8 @@ def send_telegram_weekly(text):
                 if r.status_code == 200:
                     time.sleep(0.6)
                     break
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[주간 리포트 전송 재시도] {e}")
             time.sleep(1.0)
     return True
 
