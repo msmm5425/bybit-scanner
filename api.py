@@ -1,4 +1,3 @@
-python
 import os
 import json
 import time
@@ -19,11 +18,11 @@ from config import (
 
 # 바이비트 공식 글로벌 V5 도메인
 BYBIT_HOSTS = (
-    "https://api.bybit-tr.com",
-    "https://api.bybit.kz",
-    "https://api.bybit.nl",
-    "https://api.bytick.com",
-    "https://api.bybit.com",
+    "[https://api.bybit-tr.com](https://api.bybit-tr.com)",
+    "[https://api.bybit.kz](https://api.bybit.kz)",
+    "[https://api.bybit.nl](https://api.bybit.nl)",
+    "[https://api.bytick.com](https://api.bytick.com)",
+    "[https://api.bybit.com](https://api.bybit.com)",
 )
 
 _VALID_BYBIT_SYMBOLS_CACHE = {"ts": 0, "symbols": set(), "bases": set()}
@@ -34,13 +33,13 @@ def _fetch_bybit_json_via_proxy(path_and_query, timeout=7):
     깃허브 액션(미국 IP)에서 바이비트 직접 접속이 403으로 막힐 때
     글로벌 다중 프록시를 통해 오직 바이비트 본사 공식 V5 JSON만 가져옵니다.
     """
-    target_url = f"https://api.bybit.com{path_and_query}"
+    target_url = f"[https://api.bybit.com](https://api.bybit.com){path_and_query}"
     encoded = urllib.parse.quote(target_url, safe="")
     proxy_urls = (
-        f"https://api.codetabs.com/v1/proxy?quest={encoded}",
-        f"https://api.allorigins.win/raw?url={encoded}",
-        f"https://corsproxy.io/?{encoded}",
-        f"https://thingproxy.freeboard.io/fetch/{target_url}",
+        f"[https://api.codetabs.com/v1/proxy?quest=](https://api.codetabs.com/v1/proxy?quest=){encoded}",
+        f"[https://api.allorigins.win/raw?url=](https://api.allorigins.win/raw?url=){encoded}",
+        f"[https://corsproxy.io/](https://corsproxy.io/)?{encoded}",
+        f"[https://thingproxy.freeboard.io/fetch/](https://thingproxy.freeboard.io/fetch/){target_url}",
     )
     for purl in proxy_urls:
         try:
@@ -233,7 +232,7 @@ def get_scanner_candidates():
     if not candidates:
         try:
             cg_resp = requests.get(
-                "https://api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=all",
+                "[https://api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=all](https://api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=all)",
                 headers=BROWSER_HEADERS,
                 timeout=8,
             )
@@ -334,7 +333,7 @@ def fetch_klines(symbol, interval="5", limit=150):
         bg_gran = bg_gran_map.get(iv_str, "5m")
         try:
             bg_resp = requests.get(
-                "https://api.bitget.com/api/v2/mix/market/candles",
+                "[https://api.bitget.com/api/v2/mix/market/candles](https://api.bitget.com/api/v2/mix/market/candles)",
                 params={"symbol": sym, "productType": "USDT-FUTURES", "granularity": bg_gran, "limit": str(lim)},
                 headers=BROWSER_HEADERS,
                 timeout=4,
