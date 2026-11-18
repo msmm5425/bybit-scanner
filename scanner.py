@@ -180,7 +180,24 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     prev_max_h = to_float(t_item.get("max_high_price"), default=entry_ref)
     prev_peak_ms = int(to_float(t_item.get("peak_ts_ms"), default=created_ms))
 
-    df_1m = fetch_verified_1m_klines(symbol, entry_ref=entry_ref, limit=25)
+    # [핵심 복구] 포착 후 10분 이상 경과한 모든 종목은 15분봉(최대 48시간) 전 구간을 매번 소급 스캔하여
+    # 스캐너 중단/지연 중에 터치한 익절가(TP1·TP2·TP3)와 손절가를 100% 잡아냅니다.
+    hist_min_low = entry_ref
+    hist_min_close = entry_ref
+    if (now_ts - created_at) >= 600:
+        df_15m = fetch_klines(symbol, "15", limit=192)
+        if not df_15m.empty and "timestamp" in df_15m.columns:
+            post_15m = df_15m[df_15m["timestamp"] >= created_ms]
+            if not post_15m.empty:
+                p_idx = post_15m["high"].idxmax()
+                h_15m = to_float(post_15m.loc[p_idx, "high"], default=entry_ref)
+                if 0.40 <= (h_15m / entry_ref) <= 2.60 and h_15m >= prev_max_h:
+                    prev_max_h = h_15m
+                    prev_peak_ms = int(to_float(post_15m.loc[p_idx, "timestamp"], default=created_ms))
+                hist_min_low = min(hist_min_low, to_float(post_15m["low"].min(), default=entry_ref))
+                hist_min_close = min(hist_min_close, to_float(post_15m["close"].min(), default=entry_ref))
+
+    df_1m = fetch_verified_1m_klines(symbol, entry_ref=entry_ref, limit=60)
     if df_1m.empty:
         return None
     post_1m = df_1m[df_1m["timestamp"] >= created_ms].copy()
@@ -278,8 +295,8 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             )
         return {"messages": msgs, "sl_record": None}
 
-    min_low = to_float(post_1m["low"].min(), default=entry_ref)
-    min_close = to_float(post_1m["close"].min(), default=entry_ref)
+    min_low = min(hist_min_low, to_float(post_1m["low"].min(), default=entry_ref))
+    min_close = min(hist_min_close, to_float(post_1m["close"].min(), default=entry_ref))
     if min_low <= init_stop_p and (min_close <= init_stop_p or last_close <= init_stop_p):
         trig = min(min_close, last_close)
         t_item["sl_alerted"] = True
@@ -340,7 +357,6 @@ def main():
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         t_item = tracked[sym]
-        c_at = int(t_item.get("created_at", 0))
         if (valid_syms and sym not in valid_syms) or is_tradfi_ticker(base_c) or base_c in rwa_blocked:
             del tracked[sym]
             continue
