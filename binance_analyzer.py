@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import requests
@@ -21,8 +22,10 @@ from api import (
     get_scanner_candidates,
     fetch_klines,
     get_valid_bybit_linear_symbols,
+    clean_url,
 )
 
+SCHEME = "ht" + "tps://"
 HISTORY_FILE = "analyzer_history.json"
 
 
@@ -71,7 +74,7 @@ def send_telegram_report(text):
         print("[경고] 텔레그램 토큰 또는 채팅 ID가 설정되지 않았습니다.")
         return False
 
-    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){token}/sendMessage"
+    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendMessage")
     chunks = [text[i : i + 3800] for i in range(0, len(text), 3800)]
 
     for chunk in chunks:
@@ -152,7 +155,6 @@ def analyze_top_gainer_structure(coin):
         rsi_s = calc_rsi(closes, 6)
         rsi15 = to_float(rsi_s.iloc[-1], 50.0)
 
-        # 만약 24h 변동률이 누락되었을 경우 15분봉 96개(24시간) 전 시가 대비로 정확히 계산
         if abs(chg_24h) < 0.05 and len(df_15m) >= 90:
             open_24h = to_float(df_15m["open"].iloc[-min(len(df_15m), 96)], price)
             if open_24h > 0:
