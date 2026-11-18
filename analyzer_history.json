@@ -97,96 +97,11 @@
   "updated_at": "2026-11-16 14:23 KST",
   "records": [
     {
-      "symbol": "FHEUSDT",
-      "price": 0.015,
-      "change_24h": 12.86,
-      "max_high_48h": 0.015,
-      "max_gain_pct": 0.0,
-      "timestamp": 1794975047
-    },
-    {
-      "symbol": "ICNTUSDT",
-      "price": 0.278,
-      "change_24h": 19.08,
-      "max_high_48h": 0.278,
-      "max_gain_pct": 0.0,
-      "timestamp": 1794975047
-    },
-    {
-      "symbol": "BTWUSDT",
-      "price": 0.444,
-      "change_24h": 29.2,
-      "max_high_48h": 0.444,
-      "max_gain_pct": 0.0,
-      "timestamp": 1794975047
-    },
-    {
-      "symbol": "MMTUSDT",
-      "price": 0.154,
-      "change_24h": 33.71,
-      "max_high_48h": 0.154,
-      "max_gain_pct": 0.0,
-      "timestamp": 1794975047
-    },
-    {
-      "symbol": "BREVUSDT",
-      "price": 0.11,
-      "change_24h": 91.22,
-      "max_high_48h": 0.11,
-      "max_gain_pct": 0.0,
-      "timestamp": 1794975047
-    },
-    {
-      "symbol": "BREVUSDT",
-      "price": 0.114,
-      "change_24h": 99.32,
-      "max_high_48h": 0.114,
-      "max_gain_pct": 0.0,
-      "timestamp": 1794972818,
-      "verified_reported": false
-    },
-    {
-      "symbol": "BTWUSDT",
-      "price": 0.463,
-      "change_24h": 36.69,
-      "max_high_48h": 0.463,
-      "max_gain_pct": 0.0,
-      "timestamp": 1794972818,
-      "verified_reported": false
-    },
-    {
-      "symbol": "MMTUSDT",
-      "price": 0.146,
-      "change_24h": 27.53,
-      "max_high_48h": 0.1582,
-      "max_gain_pct": 8.4,
-      "timestamp": 1794972818,
-      "verified_reported": false
-    },
-    {
-      "symbol": "ICNTUSDT",
-      "price": 0.284,
-      "change_24h": 23.47,
-      "max_high_48h": 0.2842,
-      "max_gain_pct": 0.1,
-      "timestamp": 1794972818,
-      "verified_reported": false
-    },
-    {
-      "symbol": "FHEUSDT",
-      "price": 0.015,
-      "change_24h": 11.7,
-      "max_high_48h": 0.015,
-      "max_gain_pct": 0.0,
-      "timestamp": 1794972818,
-      "verified_reported": false
-    },
-    {
       "symbol": "0GUSDT",
       "price": 0.125,
       "change_24h": 0.0,
-      "max_high_48h": 0.1327,
-      "max_gain_pct": 6.2,
+      "max_high_48h": 0.1321,
+      "max_gain_pct": 5.7,
       "timestamp": 1794912977,
       "verified_reported": false
     },
@@ -225,12 +140,57 @@
       "max_gain_pct": 14.4,
       "timestamp": 1794912977,
       "verified_reported": false
+    },
+    {
+      "symbol": "BREVUSDT",
+      "price": 0.114,
+      "change_24h": 99.32,
+      "max_high_48h": 0.114,
+      "max_gain_pct": 0.0,
+      "timestamp": 1794972818,
+      "verified_reported": false
+    },
+    {
+      "symbol": "BTWUSDT",
+      "price": 0.463,
+      "change_24h": 36.69,
+      "max_high_48h": 0.463,
+      "max_gain_pct": 0.0,
+      "timestamp": 1794972818,
+      "verified_reported": false
+    },
+    {
+      "symbol": "MMTUSDT",
+      "price": 0.146,
+      "change_24h": 27.53,
+      "max_high_48h": 0.146,
+      "max_gain_pct": 0.0,
+      "timestamp": 1794972818,
+      "verified_reported": false
+    },
+    {
+      "symbol": "ICNTUSDT",
+      "price": 0.284,
+      "change_24h": 23.47,
+      "max_high_48h": 0.284,
+      "max_gain_pct": 0.0,
+      "timestamp": 1794972818,
+      "verified_reported": false
+    },
+    {
+      "symbol": "FHEUSDT",
+      "price": 0.015,
+      "change_24h": 11.7,
+      "max_high_48h": 0.015,
+      "max_gain_pct": 0.0,
+      "timestamp": 1794972818,
+      "verified_reported": false
     }
   ],
   "learned_tp_params": {
     "tp1_min_pct": 8.0,
     "tp2_min_pct": 16.0,
     "tp3_min_pct": 24.0,
-    "updated_at": 1794975047
+    "updated_at": 1794972818
   }
 }
