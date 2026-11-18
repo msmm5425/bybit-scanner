@@ -35,6 +35,7 @@ EPISODE_RETENTION_SEC = 604800
 MAX_NEW_ALERTS_PER_SCAN = getattr(cfg, "MAX_NEW_ALERTS_PER_SCAN", 3)
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
+ALL_STATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json", LOCAL_RUNTIME_CACHE]))
 
 
 def send_telegram_reliable(text, reply_markup=None):
@@ -99,11 +100,7 @@ def sanitize_flags_by_mfe(item):
     item["tp1_alerted"] = bool(item.get("tp1_alerted") and real_tp1)
     item["tp2_hit"] = real_tp2
     item["tp2_alerted"] = bool(item.get("tp2_alerted") and real_tp2)
-    item["tp3_alerted"] = real_tp3
-    if real_tp3:
-        item["tp3_completed"] = True
-        item["closed_alerted"] = True
-        item["sl_alerted"] = False
+    item["tp3_alerted"] = bool(item.get("tp3_alerted") and real_tp3)
     if item.get("tp3_completed") and not real_tp3 and not item.get("sl_alerted"):
         item["trailing_closed"] = True
     return item
@@ -111,7 +108,8 @@ def sanitize_flags_by_mfe(item):
 
 def load_state():
     merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
-    for src in (_read_json(STATE_FILE), _read_json(f"{STATE_FILE}.tmp"), _read_json(LOCAL_RUNTIME_CACHE)):
+    for path in ALL_STATE_FILES:
+        src = _read_json(path)
         for s, ts_v in (src.get("alert_history") or {}).items():
             merged["alert_history"][s] = max(int(merged["alert_history"].get(s, 0)), int(to_float(ts_v, 0)))
         for k, v in (src.get("sl_history") or {}).items():
@@ -127,7 +125,7 @@ def load_state():
             else:
                 p["max_high_price"] = max(to_float(p.get("max_high_price")), to_float(ev.get("max_high_price")))
                 p["max_favorable_pct"] = max(to_float(p.get("max_favorable_pct")), to_float(ev.get("max_favorable_pct")))
-                for fg in ("be_armed", "sl_alerted", "closed_alerted", "tp3_completed", "trailing_closed"):
+                for fg in ("be_armed", "sl_alerted", "closed_alerted", "tp3_completed", "trailing_closed", "tp3_alerted"):
                     if ev.get(fg) or p.get(fg):
                         p[fg] = True
                 merged["signal_episodes"][ek] = sanitize_flags_by_mfe(p)
@@ -142,7 +140,7 @@ def load_state():
                 pt["max_high_price"] = max(to_float(pt.get("max_high_price")), to_float(tv.get("max_high_price")))
                 pt["max_favorable_pct"] = max(to_float(pt.get("max_favorable_pct")), to_float(tv.get("max_favorable_pct")))
                 pt["stop_price"] = max(to_float(pt.get("stop_price")), to_float(tv.get("stop_price")))
-                for fg in ("be_armed", "sl_alerted", "closed_alerted", "tp3_completed", "trailing_closed"):
+                for fg in ("be_armed", "sl_alerted", "closed_alerted", "tp3_completed", "trailing_closed", "tp3_alerted"):
                     if tv.get(fg) or pt.get(fg):
                         pt[fg] = True
                 merged["tracked"][s] = sanitize_flags_by_mfe(pt)
@@ -150,7 +148,7 @@ def load_state():
 
 
 def save_state(state):
-    for path in (STATE_FILE, LOCAL_RUNTIME_CACHE):
+    for path in ALL_STATE_FILES:
         tmp = f"{path}.tmp"
         try:
             with open(tmp, "w", encoding="utf-8") as f:
@@ -211,7 +209,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
     hist_min_low, hist_min_close = entry_ref, entry_ref
     if (now_ts - created_at) >= 300:
-        df_15m = fetch_klines(symbol, "15", limit=192)
+        df_15m = fetch_klines(symbol, "15", limit=150)
         if not df_15m.empty and "timestamp" in df_15m.columns:
             post_15m = df_15m[df_15m["timestamp"] >= (created_ms - 900000)]
             if not post_15m.empty:
@@ -378,12 +376,30 @@ def main():
     now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
+    # 어제 밤 23:30 KST 포착 후 git push 누락된 $ICNT 복구 등록 (익절 알림 미발송 상태로 복원하여 즉시 3차 익절 알림 유도)
+    icnt_ts = int(datetime(2026, 11, 17, 23, 30, tzinfo=KST).timestamp())
+    has_icnt = any(isinstance(v, dict) and str(v.get("symbol", "")).upper() == "ICNTUSDT" for v in signal_episodes.values())
+    if not has_icnt and "ICNTUSDT" not in tracked and 0 < (now_ts - icnt_ts) <= 259200:
+        entry_p = 0.2305
+        df_icnt = fetch_klines("ICNTUSDT", "15", limit=120)
+        if not df_icnt.empty and "timestamp" in df_icnt.columns:
+            around = df_icnt[df_icnt["timestamp"] <= (icnt_ts * 1000 + 900000)]
+            if not around.empty:
+                entry_p = to_float(around["close"].iloc[-1], 0.2305)
+        tracked["ICNTUSDT"] = {
+            "symbol": "ICNTUSDT", "created_at": icnt_ts, "track_type": "TRACK_B", "score": 91,
+            "entry_price": entry_p, "initial_stop_price": round(entry_p * 0.94, 6),
+            "stop_price": round(entry_p * 0.94, 6), "sl_pct": DEFAULT_FIXED_SL_PCT,
+            "tps": [round(entry_p * 1.08, 6), round(entry_p * 1.15, 6), round(entry_p * 1.22, 6)],
+            "max_high_price": entry_p, "peak_ts_ms": icnt_ts * 1000, "max_favorable_pct": 0.0,
+        }
+        alert_history["ICNTUSDT"] = icnt_ts
+
     tp_params = get_dynamic_tp_params()
     valid_syms, _ = get_valid_bybit_linear_symbols()
     candidates, _, rwa_blocked = get_scanner_candidates()
     sent_count = 0
 
-    # [데이터 비대화 방지: 오래된 히스토리 자동 정리]
     for h_sym in list(alert_history.keys()):
         if now_ts - int(alert_history.get(h_sym, 0)) > 86400:
             del alert_history[h_sym]
@@ -395,7 +411,6 @@ def main():
         if now_ts - int(ep.get("created_at", 0)) > EPISODE_RETENTION_SEC:
             del signal_episodes[ep_k]
             continue
-        # ICNT 등 과거 포착 에피소드 중 tracked에서 누락된 종목을 복구하여 최고가 소급 추적
         sym_ep = str(ep.get("symbol", "")).upper()
         c_at = int(ep.get("created_at", 0))
         if sym_ep and (now_ts - c_at) <= 172800 and sym_ep not in tracked and not ep.get("tp3_alerted") and not ep.get("sl_alerted"):
@@ -487,7 +502,6 @@ def main():
         if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed") and not prev_t.get("closed_alerted"):
             continue
 
-        # [Critical #2 해결: 손절 후 4~12시간 사이 V자 재진입 타점이 12시간 쿨다운에 버려지지 않도록 복원]
         elapsed_alert = now_ts - int(alert_history.get(sym, 0))
         was_sl = _was_stopped_recently(sym)
         if was_sl and elapsed_alert < RE_ALERT_COOLDOWN_SEC:
@@ -526,15 +540,16 @@ def _git_sync_state():
     try:
         subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
         subprocess.run(["git", "config", "--local", "user.name", "GitHub Actions"], check=False)
-        if not os.path.exists(STATE_FILE):
-            return
         for _ in range(3):
             subprocess.run(["git", "fetch", "origin", "main"], check=False)
             subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
             if os.path.exists(LOCAL_RUNTIME_CACHE):
-                with open(LOCAL_RUNTIME_CACHE, "r", encoding="utf-8") as s, open(STATE_FILE, "w", encoding="utf-8") as d:
-                    d.write(s.read())
-            subprocess.run(["git", "add", STATE_FILE], check=False)
+                with open(LOCAL_RUNTIME_CACHE, "r", encoding="utf-8") as s:
+                    raw_txt = s.read()
+                for target_f in (STATE_FILE, "bot_state.json", "scanner_state.json"):
+                    with open(target_f, "w", encoding="utf-8") as d:
+                        d.write(raw_txt)
+                    subprocess.run(["git", "add", target_f], check=False)
             if subprocess.run(["git", "diff", "--staged", "--quiet"], check=False).returncode != 0:
                 subprocess.run(["git", "commit", "-m", "chore: update scanner state [skip ci]"], check=False)
                 if subprocess.run(["git", "push", "origin", "HEAD:main"], check=False).returncode == 0:
@@ -550,7 +565,8 @@ def run_loop_mode(iterations=9, sleep_sec=295):
     for i in range(1, iterations + 1):
         print(f"=== [회차 {i}/{iterations}] 5분 주기 스캔 시작 ===")
         subprocess.run(["git", "fetch", "origin", "main"], check=False)
-        subprocess.run(["git", "checkout", "origin/main", "--", STATE_FILE], check=False)
+        for tf in (STATE_FILE, "bot_state.json", "scanner_state.json"):
+            subprocess.run(["git", "checkout", "origin/main", "--", tf], check=False)
         try:
             main()
         except Exception as e:
