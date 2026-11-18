@@ -2,18 +2,16 @@ name: Weekly Performance Report
 
 on:
   schedule:
-    # 매주 월요일 00:00 UTC (한국 시간 월요일 오전 09:00 KST)
     - cron: '0 0 * * 1'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  weekly_report:
+  report:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: 1. 저장소 전체 히스토리 불러오기 (7일 로그 분석용)
         uses: actions/checkout@v4
@@ -24,18 +22,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
       - name: 3. 필수 라이브러리 설치
-        run: |
-          pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install requests pandas numpy; fi
+        run: pip install --upgrade pip requests pandas numpy
 
-      - name: 4. 주간 실전 성과 및 3파동 심층 리포트 전송
+      - name: 4. 주간 실전 성과 및 3파동 심층 리포트 전송 및 상태 저장
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: |
-          python weekly_report.py
+        run: python weekly_report.py
