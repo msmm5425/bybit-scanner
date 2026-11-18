@@ -5,12 +5,12 @@ from datetime import datetime, timedelta, timezone
 
 try:
     import config as cfg
-    STATE_FILE = getattr(cfg, "STATE_FILE", "scanner_state.json")
+    STATE_FILE = getattr(cfg, "STATE_FILE", "bot_state.json")
     KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
     FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 except Exception:
     cfg = None
-    STATE_FILE = "scanner_state.json"
+    STATE_FILE = "bot_state.json"
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
@@ -19,12 +19,8 @@ try:
 except Exception:
     postmortem = None
 
-try:
-    import wave_engine
-except Exception:
-    wave_engine = None
-
 from api import get_scanner_candidates, fetch_klines, get_valid_bybit_linear_symbols, clean_url
+from weekly_report import load_merged_state, save_merged_state, ensure_missing_icnt_and_backfill, classify_episode_by_mfe
 
 SCHEME = "ht" + "tps://"
 HISTORY_FILE = "analyzer_history.json"
@@ -43,26 +39,6 @@ def fmt_price(price):
     if p <= 0:
         return "0.0000"
     return f"{p:,.2f}" if p >= 1000 else (f"{p:.3f}" if p >= 10 else (f"{p:.4f}" if p >= 1 else (f"{p:.5f}" if p >= 0.01 else f"{p:.6f}")))
-
-
-def classify_episode_by_mfe(e):
-    fav = to_float(e.get("max_favorable_pct"))
-    entry_p = to_float(e.get("entry_price"))
-    max_h = to_float(e.get("max_high_price"))
-    if entry_p > 0 and max_h > entry_p:
-        fav = max(fav, round((max_h - entry_p) / entry_p * 100.0, 2))
-    tps = e.get("tps") or []
-    tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 7.5
-    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 14.5
-    tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 21.5
-
-    tp1 = fav >= max(6.8, tp1_req)
-    tp2 = fav >= max(13.0, tp2_req)
-    tp3 = fav >= max(19.5, tp3_req)
-    is_sl = bool(e.get("sl_alerted")) and not tp1
-    be_save = (not tp1) and (not is_sl) and (fav >= 5.8 or bool(e.get("be_armed")))
-    trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and (tp1 or be_save) and not tp3 and not is_sl
-    return {"fav": fav, "tp1": tp1, "tp2": tp2, "tp3": tp3, "be_save": be_save, "sl": is_sl, "trailing_closed": trailing_closed}
 
 
 def send_telegram_report(text):
@@ -210,23 +186,17 @@ def verify_48h_history(history_data, current_map, now_ts):
 
 
 def summarize_scanner_episodes(now_ts):
-    state = {}
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
-                state = json.load(f)
-        except Exception:
-            pass
-
+    state = load_merged_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
     sl_history = state.get("sl_history") or {}
 
-    eps_list = [e for e in episodes.values() if isinstance(e, dict) and (now_ts - int(e.get("created_at", 0))) <= 86400]
-    window_label = "최근 24시간"
-    if not eps_list:
-        eps_list = [e for e in episodes.values() if isinstance(e, dict) and (now_ts - int(e.get("created_at", 0))) <= (7 * 86400)]
-        window_label = "최근 7일(누적)"
+    ensure_missing_icnt_and_backfill(episodes, tracked, now_ts)
+    state["signal_episodes"] = episodes
+    save_merged_state(state)
+
+    eps_list = [e for e in episodes.values() if isinstance(e, dict) and (now_ts - int(e.get("created_at", 0))) <= (7 * 86400)]
+    window_label = "최근 7일(누적)"
 
     sls_recent = [s for s in sl_history.values() if isinstance(s, dict) and (now_ts - int(s.get("sl_at", 0))) <= (7 * 86400)]
     active_list = [
@@ -253,7 +223,7 @@ def summarize_scanner_episodes(now_ts):
         f"• 단계별 실제 달성: 1차익절(TP1) {tp1_c}건 | 2차익절(TP2) {tp2_c}건 | 3차졸업(TP3) {tp3_c}건 | 트레일링마감 {trail_c}건 | 본전방어 {be_c}건 | 손절 {sl_c}건",
     ]
 
-    best_eps = sorted(parsed, key=lambda x: x[1]["fav"], reverse=True)[:3]
+    best_eps = sorted(parsed, key=lambda x: x[1]["fav"], reverse=True)[:4]
     for b, c in best_eps:
         sym = b.get("symbol", "").replace("USDT", "")
         fav = c["fav"]
@@ -281,14 +251,6 @@ def summarize_scanner_episodes(now_ts):
             vol_m = to_float(s.get("vol_mult", 1.0))
             cause = "단기 고점 RSI 과열 추격" if rsi_v >= 70 else ("돌파 거래량 부족" if vol_m < 2.0 else "비트에 연동된 급격한 스탑헌팅")
             lines.append(f"  ↳ ⚠️ ${sym}: 보유 {hold_m}분 후 -{FIXED_SL_PCT}% 손절 (최고 +{max_f:.1f}% 반등 | 원인: {cause})")
-
-    if postmortem is not None and hasattr(postmortem, "build_daily_postmortem_summary"):
-        try:
-            pm_lines = postmortem.build_daily_postmortem_summary(sls_recent)
-            if isinstance(pm_lines, list):
-                lines.extend(pm_lines[:3])
-        except Exception:
-            pass
 
     return lines
 
@@ -327,7 +289,6 @@ def main():
         "tp1_min_pct": round(p1_l, 1), "tp2_min_pct": round(p2_l, 1),
         "tp3_min_pct": round(p3_l, 1), "updated_at": now_ts,
     }
-    # [Critical #3 해결] learned_tp_params 와 dynamic_tp_tuning 두 키에 모두 동시 저장
     history_data["learned_tp_params"] = tp_obj
     history_data["dynamic_tp_tuning"] = tp_obj
     save_json_safe(HISTORY_FILE, history_data)
