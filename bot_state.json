@@ -2981,6 +2981,42 @@
       "max_high_price": 0.04866,
       "peak_ts_ms": 1795002600000,
       "max_favorable_pct": 0.0
+    },
+    "ASTERUSDT": {
+      "created_at": 1795002600,
+      "track_type": "TRACK_A",
+      "score": 91,
+      "entry_price": 0.5522,
+      "swing_high_line": 0.5853,
+      "entry_low": 0.550543,
+      "entry_high": 0.553028,
+      "initial_stop_price": 0.519068,
+      "stop_price": 0.519068,
+      "sl_pct": 6,
+      "tps": [
+        0.598033,
+        0.639448,
+        0.711234
+      ],
+      "tp_pcts": [
+        8.3,
+        15.8,
+        28.8
+      ],
+      "vol_mult": 3.25,
+      "rsi6_15m": 59.7,
+      "oi_m": 17.2,
+      "turnover_m": 29.6,
+      "funding_pct": 0.0015999999999999999,
+      "reasons": [
+        "OI 집중도 최상(58%)",
+        "볼린저/켈트너 초응축(1.2%) 후 확산",
+        "응축 돌파 거래량 3.2배 유입",
+        "OBV 바닥 다이버전스 매집"
+      ],
+      "max_high_price": 0.5522,
+      "peak_ts_ms": 1795002600000,
+      "max_favorable_pct": 0.0
     }
   },
   "alert_history": {
@@ -3059,7 +3095,7 @@
     "HYPEUSDT": 1794744726,
     "UAIUSDT": 1794746527,
     "BERAUSDT": 1794748544,
-    "ASTERUSDT": 1794763018,
+    "ASTERUSDT": 1795002600,
     "PUMPUSDT": 1794778487,
     "BNCUSDT": 1794790098,
     "EVAAUSDT": 1794796786,
@@ -6935,6 +6971,45 @@
       "rsi6_15m": 64.1,
       "oi_m": 0.4,
       "funding_pct": -0.0018,
+      "hold_minutes": 0,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp3_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "trailing_closed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "ASTERUSDT_1795002600": {
+      "symbol": "ASTERUSDT",
+      "created_at": 1795002600,
+      "track_type": "TRACK_A",
+      "score": 91,
+      "entry_price": 0.5522,
+      "initial_stop_price": 0.519068,
+      "stop_price": 0.519068,
+      "sl_pct": 6.0,
+      "tps": [
+        0.598033,
+        0.639448,
+        0.711234
+      ],
+      "tp_pcts": [
+        8.3,
+        15.8,
+        28.8
+      ],
+      "max_high_price": 0.5522,
+      "max_favorable_pct": 0.0,
+      "realized_weighted_pct": 0.0,
+      "vol_mult": 3.25,
+      "rsi6_15m": 59.7,
+      "oi_m": 17.2,
+      "funding_pct": 0.0015999999999999999,
       "hold_minutes": 0,
       "tp1_hit": false,
       "tp2_hit": false,
