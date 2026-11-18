@@ -56,11 +56,6 @@ def fmt_price(price):
     return f"{p:,.2f}" if p >= 1000 else (f"{p:.3f}" if p >= 10 else (f"{p:.4f}" if p >= 1 else (f"{p:.5f}" if p >= 0.01 else f"{p:.6f}")))
 
 
-def fmt_vol(v):
-    val = to_float(v, 0.0)
-    return f"{val / 1e9:.2f}B" if val >= 1e9 else (f"{val / 1e6:.2f}M" if val >= 1e6 else (f"{val / 1e3:.1f}K" if val >= 1e3 else f"{val:.0f}"))
-
-
 def _ensure_playwright():
     global _PLAYWRIGHT_READY
     if _PLAYWRIGHT_READY:
@@ -90,7 +85,9 @@ def fetch_exact_bybit_klines(symbol, interval="15", limit=130):
 def build_briefing_message(res, now_str):
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
-    title = res.get("track_title", "🚀 [타점 포착]")
+    is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
+    title = res.get("track_title", "🐋 [장기 포지션 · 세력 대시세 매집 초입]" if is_long else "🚀 [타점 포착]")
+    horizon = res.get("position_horizon", "장기 포지션 (4H·1D 매집 초입)" if is_long else "단기·스윙 포지션")
     score = res.get("score", 85)
     price = to_float(res.get("price"))
     chg = to_float(res.get("change_24h"))
@@ -105,7 +102,8 @@ def build_briefing_message(res, now_str):
     e_low = to_float(res.get("entry_low"), price * 0.9970)
     e_high = to_float(res.get("entry_high"), price * 1.0015)
     sl_p = to_float(res.get("stop_price"))
-    sl_pct = int(round(to_float(res.get("sl_pct"), FIXED_SL_PCT)))
+    sl_pct = int(round(to_float(res.get("sl_pct"), 12 if is_long else FIXED_SL_PCT)))
+    sl_note = res.get("sl_note", f"장기스윙손절(-{sl_pct}%)" if is_long else f"고정손절(-{sl_pct}%)")
 
     tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
     tp_pcts = res.get("tp_pcts") or [8.0, 15.0, 22.0]
@@ -114,20 +112,22 @@ def build_briefing_message(res, now_str):
 
     def1_p = fmt_price(to_float(tps[0]) * 0.95)
     def2_p = fmt_price(to_float(tps[1]) * 0.95)
+    trail_drop = 8 if is_long else 3
 
     lines = [
         f"{title} ${base} ({symbol})",
-        f"🕒 포착 시각: {now_str} | 종합점수: {score}점",
+        f"📌 포지션 구분: 【{horizon}】 | 종합점수: {score}점",
+        f"🕒 포착 시각: {now_str}",
         f"• 현재가: {fmt_price(price)} USDT (24h {chg:+.2f}%)",
         f"• 수급: 거래대금 {turn_m:.1f}M | OI {oi_m:.1f}M (비중 {oi_ratio:.0f}%) | 펀딩 {fund:+.4f}%",
         f"• 멀티프레임: {htf} | 15m RSI6 {rsi15:.1f} · J {kdj15:.1f}",
         "",
-        "🎯 [매매 전략 가이드 (방어선 & 트레일링)]",
+        f"🎯 [{'장기 포지션 매매 전략 가이드' if is_long else '매매 전략 가이드'}]",
         f"• 진입 구간: {fmt_price(e_low)} ~ {fmt_price(e_high)} USDT",
-        f"• 손절가(SL): {fmt_price(sl_p)} USDT (-{sl_pct}% | 고정손절)",
+        f"• 손절가(SL): {fmt_price(sl_p)} USDT (-{sl_pct}% | {sl_note})",
         f"• 1차 목표(30% 익절): {fmt_price(tps[0])} USDT (+{to_float(tp_pcts[0]):.1f}% | {tp_labels[0]} · 돌파시 1차-5% 방어선 {def1_p})",
         f"• 2차 구간(70% 홀딩): {fmt_price(tps[1])} USDT (+{to_float(tp_pcts[1]):.1f}% | {tp_labels[1]} · 돌파시 2차-5% 방어선 {def2_p})",
-        f"• 3차 목표(30% 익절): {fmt_price(tps[2])} USDT (+{to_float(tp_pcts[2]):.1f}% | {tp_labels[2]} · 잔여 40% 고점 -3% 자동 트레일링)",
+        f"• 3차 목표(30% 익절): {fmt_price(tps[2])} USDT (+{to_float(tp_pcts[2]):.1f}% | {tp_labels[2]} · 잔여 40% 고점 -{trail_drop}% 자동 트레일링)",
     ]
 
     if reasons:
@@ -140,6 +140,8 @@ def build_briefing_message(res, now_str):
 
 def build_x_hook_line(res):
     track_type = str(res.get("track_type", "TRACK_A"))
+    if track_type == "TRACK_D" or res.get("is_long_term"):
+        return "【장기 포지션】 세력 4H·1D 매집 후 대시세 1파동 초입 포착"
     r_text = " ".join(str(x) for x in (res.get("reasons") or []))
     if "재진입" in str(res.get("track_title", "")) or "재탈환" in r_text:
         return "개미털기 바닥 확인 후 거래량 실리며 V자 반등 시도중"
@@ -157,11 +159,12 @@ def build_x_hook_line(res):
 def build_x_post_message(res):
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
+    is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
     price = to_float(res.get("price"))
     e_low = to_float(res.get("entry_low"), price * 0.9970)
     e_high = to_float(res.get("entry_high"), price * 1.0015)
     sl_p = to_float(res.get("stop_price"))
-    sl_pct = int(round(to_float(res.get("sl_pct"), FIXED_SL_PCT)))
+    sl_pct = int(round(to_float(res.get("sl_pct"), 12 if is_long else FIXED_SL_PCT)))
 
     tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
     tp_pcts = res.get("tp_pcts") or [8.0, 15.0, 22.0]
@@ -170,9 +173,10 @@ def build_x_post_message(res):
     p2 = round(to_float(tp_pcts[1], 15.0), 1)
     p3 = round(to_float(tp_pcts[2], 22.0), 1)
     hook_line = build_x_hook_line(res)
+    pos_label = " [장기 포지션]" if is_long else ""
 
     return (
-        "🔺️상승 예상 코인 검색기에 포착된 종목😎\n"
+        f"🔺️상승 예상 코인 검색기에 포착된 종목😎{pos_label}\n"
         f"⚠️{hook_line}⚠️\n\n"
         f"${base} ({symbol})\n\n"
         f"- 진입 구간: {fmt_price(e_low)} ~ {fmt_price(e_high)} USDT\n"
@@ -198,15 +202,15 @@ def _render_tradingview_lightweight_chart(df, res):
     base = res.get("base_coin") or res.get("base") or symbol.replace("USDT", "")
     score = res.get("score", 85)
     track_type = res.get("track_type", "TRACK_A")
+    is_long = bool(res.get("is_long_term") or track_type == "TRACK_D")
 
     latest_row = df.iloc[-1]
     price = to_float(latest_row["close"], to_float(res.get("price")))
     open_last, high_last, low_last = to_float(latest_row["open"], price), to_float(latest_row["high"], price), to_float(latest_row["low"], price)
-    vol_last = to_float(latest_row["volume"], 0.0)
 
     orig_entry = to_float(res.get("price"), price)
     ratio_adj = price / orig_entry if orig_entry > 0 else 1.0
-    sl_pct = int(round(to_float(res.get("sl_pct"), FIXED_SL_PCT)))
+    sl_pct = int(round(to_float(res.get("sl_pct"), 12 if is_long else FIXED_SL_PCT)))
     sl_p = to_float(res.get("stop_price"), price * (1.0 - sl_pct / 100.0)) * ratio_adj
     tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
     tp_pcts = res.get("tp_pcts") or [8.0, 15.0, 22.0]
@@ -222,8 +226,8 @@ def _render_tradingview_lightweight_chart(df, res):
         low_piv, high_piv = price * 0.985, price * 1.015
 
     core_span = max(high_piv - low_piv, price * 0.018)
-    up_comp = float(np.clip((core_span * 0.48) / max(tp3_p - high_piv, price * 0.04), 0.08, 0.65))
-    down_comp = float(np.clip((core_span * 0.16) / max(low_piv - sl_p, price * 0.01), 0.08, 0.55)) if sl_p < low_piv else 1.0
+    up_comp = float(np.clip((core_span * 0.48) / max(tp3_p - high_piv, price * 0.04), 0.03, 0.65))
+    down_comp = float(np.clip((core_span * 0.16) / max(low_piv - sl_p, price * 0.01), 0.06, 0.55)) if sl_p < low_piv else 1.0
 
     def _fwd(val):
         v = to_float(val, price)
@@ -242,16 +246,23 @@ def _render_tradingview_lightweight_chart(df, res):
         if pd.notna(row.get("ma20")):
             ma20_js.append({"time": ts_sec, "value": _fwd(row["ma20"])})
 
-    whitespace_js = [{"time": candles_js[-1]["time"] + (i * 900)} for i in range(1, 6)]
+    step_sec = 14400 if is_long else 900
+    whitespace_js = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 6)]
     kst_str = datetime.fromtimestamp(to_float(latest_row["timestamp"]) / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST")
-    track_badge = {"TRACK_A": "TRACK A · Pullback", "TRACK_B": "TRACK B · Breakout", "TRACK_C": "TRACK C · Leader Fib 0.5"}.get(track_type, track_type)
+    tf_label = "4H · LONG-TERM" if is_long else "15m · BYBIT"
+    track_badge = {
+        "TRACK_A": "TRACK A · Pullback",
+        "TRACK_B": "TRACK B · Breakout",
+        "TRACK_C": "TRACK C · Leader Fib 0.5",
+        "TRACK_D": "LONG-TERM · Track D Macro",
+    }.get(track_type, track_type)
     decimals = 6 if price < 0.01 else (5 if price < 1 else (4 if price < 10 else (3 if price < 1000 else 2)))
     min_move = 10 ** (-decimals)
     lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
 
     html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><script src="{lw_script_url}"></script>
 <style>*{{box-sizing:border-box;margin:0;padding:0}}body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#d1d4dc;width:1160px;height:680px;overflow:hidden}}.tv-wrap{{width:1160px;height:680px;background:#131722;border:1px solid #2a2e39;display:flex;flex-direction:column}}.tv-topbar{{height:42px;background:#181c27;border-bottom:1px solid #2a2e39;display:flex;align-items:center;justify-content:space-between;padding:0 16px}}.tv-left,.tv-right{{display:flex;align-items:center;gap:10px}}.tv-symbol{{font-size:16px;font-weight:800;color:#fff}}.tv-tf-badge{{background:#2a2e39;color:#d1d4dc;font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:4px}}.tv-ohlc{{display:flex;gap:10px;font-size:12px;font-weight:600}}.tv-val-up{{color:#26a69a}}.tv-score-pill{{background:#2962ff;color:#fff;font-size:12px;font-weight:700;padding:4px 11px;border-radius:5px}}#chart-box{{position:relative;flex:1;width:100%;height:638px}}.tv-ma-legend{{position:absolute;top:10px;left:14px;z-index:15;display:flex;gap:14px;font-size:12px;font-weight:700;background:rgba(19,23,34,0.84);padding:5px 11px;border-radius:4px;border:1px solid #2a2e39}}</style></head>
-<body><div class="tv-wrap"><div class="tv-topbar"><div class="tv-left"><span class="tv-symbol">${base}USDT.P</span><span class="tv-tf-badge">15m · BYBIT</span><div class="tv-ohlc"><span>O <span class="tv-val-up">{fmt_price(open_last)}</span></span><span>H <span class="tv-val-up">{fmt_price(high_last)}</span></span><span>L <span class="tv-val-up">{fmt_price(low_last)}</span></span><span>C <span class="tv-val-up">{fmt_price(price)}</span></span></div></div><div class="tv-right"><span>{kst_str}</span><span class="tv-score-pill">{track_badge} · {score} pts</span></div></div><div id="chart-box"><div class="tv-ma-legend"><span style="color:#00e5ff">● MA(5) {fmt_price(df["ma5"].iloc[-1])}</span><span style="color:#ffd166">● MA(9) {fmt_price(df["ma9"].iloc[-1])}</span><span style="color:#2962ff">● MA(20) {fmt_price(df["ma20"].iloc[-1])}</span></div></div></div>
+<body><div class="tv-wrap"><div class="tv-topbar"><div class="tv-left"><span class="tv-symbol">${base}USDT.P</span><span class="tv-tf-badge">{tf_label}</span><div class="tv-ohlc"><span>O <span class="tv-val-up">{fmt_price(open_last)}</span></span><span>H <span class="tv-val-up">{fmt_price(high_last)}</span></span><span>L <span class="tv-val-up">{fmt_price(low_last)}</span></span><span>C <span class="tv-val-up">{fmt_price(price)}</span></span></div></div><div class="tv-right"><span>{kst_str}</span><span class="tv-score-pill">{track_badge} · {score} pts</span></div></div><div id="chart-box"><div class="tv-ma-legend"><span style="color:#00e5ff">● MA(5) {fmt_price(df["ma5"].iloc[-1])}</span><span style="color:#ffd166">● MA(9) {fmt_price(df["ma9"].iloc[-1])}</span><span style="color:#2962ff">● MA(20) {fmt_price(df["ma20"].iloc[-1])}</span></div></div></div>
 <script>
 const lowPiv={low_piv},highPiv={high_piv},upComp={up_comp},downComp={down_comp},decimals={decimals};
 function invScale(y){{if(y>highPiv)return highPiv+(y-highPiv)/Math.max(upComp,1e-6);if(y<lowPiv)return lowPiv-(lowPiv-y)/Math.max(downComp,1e-6);return y;}}
@@ -296,7 +307,11 @@ def generate_signal_chart_bytes(res):
     symbol, price = res.get("symbol", ""), to_float(res.get("price"))
     if not symbol or price <= 0:
         return None
-    df = fetch_exact_bybit_klines(symbol, interval="15", limit=130)
+    is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
+    tf = "240" if is_long else "15"
+    df = fetch_exact_bybit_klines(symbol, interval=tf, limit=130)
+    if df is None or df.empty or len(df) < 30:
+        df = fetch_exact_bybit_klines(symbol, interval="15", limit=130)
     if df is None or df.empty or len(df) < 30:
         return None
     df = df.copy()
