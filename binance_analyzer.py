@@ -14,6 +14,16 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
+try:
+    import postmortem
+except Exception:
+    postmortem = None
+
+try:
+    import wave_engine
+except Exception:
+    wave_engine = None
+
 from api import get_scanner_candidates, fetch_klines, get_valid_bybit_linear_symbols, clean_url
 
 SCHEME = "ht" + "tps://"
@@ -36,7 +46,6 @@ def fmt_price(price):
 
 
 def classify_episode_by_mfe(e):
-    """실제 최고 상승률(max_favorable_pct)을 기준으로 정확한 익절 단계 판정"""
     fav = to_float(e.get("max_favorable_pct"))
     entry_p = to_float(e.get("entry_price"))
     max_h = to_float(e.get("max_high_price"))
@@ -82,14 +91,14 @@ def load_history_safe():
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
                 d = json.load(f)
                 if isinstance(d, list):
-                    return {"records": d, "learned_tp_params": {}}
+                    return {"records": d, "learned_tp_params": {}, "dynamic_tp_tuning": {}}
                 if isinstance(d, dict):
                     recs = d.get("records") or d.get("history") or d.get("items") or []
                     d["records"] = recs if isinstance(recs, list) else []
                     return d
         except Exception:
             pass
-    return {"records": [], "learned_tp_params": {}}
+    return {"records": [], "learned_tp_params": {}, "dynamic_tp_tuning": {}}
 
 
 def save_json_safe(path, data):
@@ -273,6 +282,14 @@ def summarize_scanner_episodes(now_ts):
             cause = "단기 고점 RSI 과열 추격" if rsi_v >= 70 else ("돌파 거래량 부족" if vol_m < 2.0 else "비트에 연동된 급격한 스탑헌팅")
             lines.append(f"  ↳ ⚠️ ${sym}: 보유 {hold_m}분 후 -{FIXED_SL_PCT}% 손절 (최고 +{max_f:.1f}% 반등 | 원인: {cause})")
 
+    if postmortem is not None and hasattr(postmortem, "build_daily_postmortem_summary"):
+        try:
+            pm_lines = postmortem.build_daily_postmortem_summary(sls_recent)
+            if isinstance(pm_lines, list):
+                lines.extend(pm_lines[:3])
+        except Exception:
+            pass
+
     return lines
 
 
@@ -304,12 +321,15 @@ def main():
         (float(np.clip(np.percentile(gains, 35), 7.5, 11.0)),
          float(np.clip(np.percentile(gains, 65), 14.0, 20.0)),
          float(np.clip(np.percentile(gains, 85), 22.0, 32.0)))
-        if len(gains) >= 5 else (8.0, 16.0, 24.0)
+        if len(gains) >= 5 else (8.0, 15.0, 22.0)
     )
-    history_data["learned_tp_params"] = {
+    tp_obj = {
         "tp1_min_pct": round(p1_l, 1), "tp2_min_pct": round(p2_l, 1),
         "tp3_min_pct": round(p3_l, 1), "updated_at": now_ts,
     }
+    # [Critical #3 해결] learned_tp_params 와 dynamic_tp_tuning 두 키에 모두 동시 저장
+    history_data["learned_tp_params"] = tp_obj
+    history_data["dynamic_tp_tuning"] = tp_obj
     save_json_safe(HISTORY_FILE, history_data)
 
     report = [
