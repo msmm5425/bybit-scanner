@@ -33,6 +33,27 @@ def fmt_price(price):
     return f"{p:,.2f}" if p >= 1000 else (f"{p:.3f}" if p >= 10 else (f"{p:.4f}" if p >= 1 else (f"{p:.5f}" if p >= 0.01 else f"{p:.6f}")))
 
 
+def classify_episode_by_mfe(e):
+    """실제 최고 상승률(max_favorable_pct)을 기준으로 정확한 익절 단계 판정"""
+    fav = to_float(e.get("max_favorable_pct"))
+    entry_p = to_float(e.get("entry_price"))
+    max_h = to_float(e.get("max_high_price"))
+    if entry_p > 0 and max_h > entry_p:
+        fav = max(fav, round((max_h - entry_p) / entry_p * 100.0, 2))
+    tps = e.get("tps") or []
+    tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 7.5
+    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 14.5
+    tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 21.5
+
+    tp1 = fav >= max(6.8, tp1_req)
+    tp2 = fav >= max(13.0, tp2_req)
+    tp3 = fav >= max(19.5, tp3_req)
+    is_sl = bool(e.get("sl_alerted")) and not tp1
+    be_save = (not tp1) and (not is_sl) and (fav >= 5.8 or bool(e.get("be_armed")))
+    trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and (tp1 or be_save) and not tp3 and not is_sl
+    return {"fav": fav, "tp1": tp1, "tp2": tp2, "tp3": tp3, "be_save": be_save, "sl": is_sl, "trailing_closed": trailing_closed}
+
+
 def load_json_safe(path, default_val):
     if os.path.exists(path):
         try:
@@ -71,7 +92,6 @@ def main():
 
     state = load_json_safe(STATE_FILE, {})
     episodes = state.get("signal_episodes") or {}
-    sl_history = state.get("sl_history") or {}
 
     valid_syms, _ = get_valid_bybit_linear_symbols()
     candidates, _, _ = get_scanner_candidates()
@@ -84,22 +104,24 @@ def main():
             continue
         c_at = int(ep.get("created_at", 0))
         sym = str(ep.get("symbol", "")).upper()
-        if c_at >= week_ago_ts and (not valid_syms or sym in valid_syms):
-            weekly_eps.append(ep)
+        base = sym[:-4] if sym.endswith("USDT") else sym
+        if c_at >= week_ago_ts and base.isascii() and not getattr(cfg, "is_tradfi_ticker", lambda x: False)(base):
+            weekly_eps.append((ep, classify_episode_by_mfe(ep)))
 
     total_signals = len(weekly_eps)
-    tp1_hits = sum(1 for e in weekly_eps if e.get("tp1_hit"))
-    tp2_hits = sum(1 for e in weekly_eps if e.get("tp2_hit"))
-    tp3_hits = sum(1 for e in weekly_eps if e.get("tp3_alerted") or e.get("tp3_completed"))
-    be_saves = sum(1 for e in weekly_eps if e.get("be_armed") and not e.get("tp1_hit") and not e.get("sl_alerted"))
-    sl_hits = sum(1 for e in weekly_eps if e.get("sl_alerted"))
+    tp1_hits = sum(1 for _, c in weekly_eps if c["tp1"])
+    tp2_hits = sum(1 for _, c in weekly_eps if c["tp2"])
+    tp3_hits = sum(1 for _, c in weekly_eps if c["tp3"])
+    trail_closes = sum(1 for _, c in weekly_eps if c["trailing_closed"])
+    be_saves = sum(1 for _, c in weekly_eps if c["be_save"])
+    sl_hits = sum(1 for _, c in weekly_eps if c["sl"])
     active_cnt = max(0, total_signals - (tp1_hits + be_saves + sl_hits))
 
     win_or_save_cnt = tp1_hits + be_saves
     closed_cnt = win_or_save_cnt + sl_hits
     win_rate = round((win_or_save_cnt / closed_cnt) * 100.0, 1) if closed_cnt > 0 else 0.0
 
-    fav_list = [to_float(e.get("max_favorable_pct")) for e in weekly_eps if to_float(e.get("max_favorable_pct")) > 0]
+    fav_list = [c["fav"] for _, c in weekly_eps if c["fav"] > 0]
     avg_mfe = round(float(np.mean(fav_list)), 1) if fav_list else 0.0
     med_mfe = round(float(np.median(fav_list)), 1) if fav_list else 0.0
 
@@ -108,17 +130,17 @@ def main():
     w3_retention = round(tp3_hits / max(tp2_hits, 1) * 100.0, 1) if tp2_hits > 0 else 0.0
 
     track_stats = {"TRACK_A": [0, 0, []], "TRACK_B": [0, 0, []], "TRACK_C": [0, 0, []]}
-    for e in weekly_eps:
+    for e, c in weekly_eps:
         tk = str(e.get("track_type", "TRACK_A"))
         if tk not in track_stats:
             track_stats[tk] = [0, 0, []]
         track_stats[tk][0] += 1
-        if e.get("tp1_hit") or (e.get("be_armed") and not e.get("sl_alerted")):
+        if c["tp1"] or c["be_save"]:
             track_stats[tk][1] += 1
-        track_stats[tk][2].append(to_float(e.get("max_favorable_pct")))
+        track_stats[tk][2].append(c["fav"])
 
-    best_5 = sorted(weekly_eps, key=lambda x: to_float(x.get("max_favorable_pct")), reverse=True)[:5]
-    sl_eps = [e for e in weekly_eps if e.get("sl_alerted")]
+    best_5 = sorted(weekly_eps, key=lambda x: x[1]["fav"], reverse=True)[:5]
+    sl_eps = [(e, c) for e, c in weekly_eps if c["sl"]]
 
     lines = [
         f"📅 [Bybit 멀티프레임 스캐너 주간 종합 & 3파동 심층 리포트] ({now_str})",
@@ -126,7 +148,7 @@ def main():
         "📊 [1. 최근 7일 실전 시그널 종합 성적]",
         f"• 주간 총 포착 종목: {total_signals}건 (마감 {closed_cnt}건 / 실시간 추적 중 {active_cnt}건)",
         f"• 실전 방어 포함 승률: {win_rate:.1f}% (익절/본전방어 {win_or_save_cnt}건 vs 손절 {sl_hits}건)",
-        f"• 단계별 달성: 1차익절(TP1) {tp1_hits}건 | 2차익절(TP2) {tp2_hits}건 | 3차졸업/수익마감 {tp3_hits}건 | 본전방어(1R) {be_saves}건",
+        f"• 단계별 실제 달성: 1차익절(TP1) {tp1_hits}건 | 2차익절(TP2) {tp2_hits}건 | 3차졸업(TP3) {tp3_hits}건 | 트레일링마감 {trail_closes}건 | 본전방어(1R) {be_saves}건",
         f"• 포착 종목 평균 최고 상승폭(MFE): +{avg_mfe:.1f}% (중앙값 +{med_mfe:.1f}%)",
         "",
         "🧭 [2. 트랙별(Track A·B·C) 성과 및 평균 상승폭]",
@@ -150,39 +172,47 @@ def main():
 
     lines.extend([
         "",
-        "🌊 [3. 3파동(TP1→TP2→TP3) 도달률 & 꺾임 구간 심층 해부]",
+        "🌊 [3. 3파동(TP1→TP2→TP3) 실제 도달률 & 꺾임 구간 심층 해부]",
         f"• 1파동(TP1, +8%권) 돌파율: 전체 포착 중 {w1_rate:.1f}% ({tp1_hits}/{total_signals}건)",
         f"• 2파동(TP2, +15%권) 연장 유지력: TP1 돌파 종목 중 {w2_retention:.1f}%가 2차 파동 안착 ({tp2_hits}/{max(tp1_hits, 1)}건)",
         f"• 3파동(TP3, +22%권) 클라이맥스 도달률: TP2 돌파 종목 중 {w3_retention:.1f}% 최종 졸업 ({tp3_hits}/{max(tp2_hits, 1)}건)",
     ])
 
-    stall_1_3 = sum(1 for e in sl_eps if 1.0 <= to_float(e.get("max_favorable_pct")) < 4.0)
-    stall_4_7 = sum(1 for e in sl_eps if 4.0 <= to_float(e.get("max_favorable_pct")) < 7.5)
+    stall_1_3 = sum(1 for _, c in sl_eps if 1.0 <= c["fav"] < 4.0)
+    stall_4_7 = sum(1 for _, c in sl_eps if 4.0 <= c["fav"] < 6.8)
     lines.append(
-        f"• 주요 꺾임(저항) 구간 진단: 손절 종목 중 +1~4% 초기 저항 후 반락 {stall_1_3}건 / +4~7% 본전방어 직전 반락 {stall_4_7}건"
+        f"• 주요 꺾임(저항) 구간 진단: 손절 종목 중 +1~4% 초기 저항 후 반락 {stall_1_3}건 / +4~6.8% 본전방어 직전 반락 {stall_4_7}건"
     )
 
     lines.append("\n🏆 [4. 주간 베스트 수익률 Top 5 타점]")
     if best_5:
-        for idx, b in enumerate(best_5, 1):
+        for idx, (b, c) in enumerate(best_5, 1):
             sym = b.get("symbol", "")
             base = sym.replace("USDT", "")
             entry_p = to_float(b.get("entry_price"))
             max_h = to_float(b.get("max_high_price"))
-            fav_pct = to_float(b.get("max_favorable_pct"))
-            stage = "3차졸업" if b.get("tp3_alerted") else ("2차돌파" if b.get("tp2_hit") else ("1차돌파" if b.get("tp1_hit") else "추적중"))
+            fav_pct = c["fav"]
+            stage = "3차졸업(TP3)" if c["tp3"] else (
+                "2차익절·트레일링마감" if (c["tp2"] and c["trailing_closed"]) else (
+                    "2차돌파(TP2)" if c["tp2"] else (
+                        "1차익절·트레일링마감" if (c["tp1"] and c["trailing_closed"]) else (
+                            "1차돌파(TP1)" if c["tp1"] else "추적중"
+                        )
+                    )
+                )
+            )
             lines.append(f"{idx}. ${base} ({sym}): 진입 {fmt_price(entry_p)} → 최고 {fmt_price(max_h)} (+{fav_pct:.1f}% | {stage})")
     else:
         lines.append("• 집계된 주간 타점 기록이 아직 없습니다.")
 
     lines.append(f"\n📓 [5. 주간 손절(SL) 오답노트 원인 해부 (총 {len(sl_eps)}건)]")
     if sl_eps:
-        sl_mfes = [to_float(x.get("max_favorable_pct")) for x in sl_eps]
+        sl_mfes = [c["fav"] for _, c in sl_eps]
         avg_sl_mfe = round(float(np.mean(sl_mfes)), 1) if sl_mfes else 0.0
         lines.append(f"• 손절 종목 진입 후 평균 최고 반등폭: +{avg_sl_mfe:.1f}% (고정 손절폭 -{FIXED_SL_PCT}%)")
-        for s in sorted(sl_eps, key=lambda x: int(x.get("created_at", 0)), reverse=True)[:5]:
+        for s, c in sorted(sl_eps, key=lambda x: int(x[0].get("created_at", 0)), reverse=True)[:5]:
             base = str(s.get("symbol", "")).replace("USDT", "")
-            fav = to_float(s.get("max_favorable_pct"))
+            fav = c["fav"]
             sc = int(s.get("score", 85))
             tk = str(s.get("track_type", "TRACK_A"))
             cause = "돌파 직후 매수세 실종(가짜 돌파)" if fav < 1.5 else f"+{fav:.1f}% 반등 후 차익 매물 출회"
