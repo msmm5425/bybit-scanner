@@ -22,7 +22,47 @@ BYBIT_HOST_NAMES = (
     "api.bybit.com",
 )
 
+# 한국·미국 주식, 빅테크, 지수, 원자재, 외환 RWA 토큰 완벽 차단 블랙리스트
+STOCK_TRADFI_EXACT_BLACKLIST = {
+    "SAMSUNG", "HYNIX", "SKHYNIX", "SKH", "SSNLF", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
+    "CELLTRION", "LGCHEM", "LGES", "KIA", "KB", "SHINHAN", "HANA", "WOORI", "COUPANG",
+    "KOSPI", "KOSDAQ", "KRW", "KRWUSDT", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "GOOGL",
+    "AMZN", "META", "NFLX", "AMD", "INTC", "TSM", "ASML", "ARM", "PLTR", "COIN", "MSTR",
+    "HOOD", "BABA", "BIDU", "JD", "PDD", "NIO", "XPEV", "LI", "SPY", "QQQ", "IWM", "DIA",
+    "TLT", "GLD", "SLV", "USO", "UNG", "XAU", "XAG", "XPD", "XPT", "WTI", "BRENT", "OIL",
+    "NATGAS", "COPPER", "GOLD", "SILVER", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "CNH",
+    "HKD", "SGD", "SPX", "NDX", "NAS100", "US500", "US30", "DJI", "VIX", "NIKKEI", "FTSE",
+    "DAX", "CAC", "HSI", "BRK", "JPM", "BAC", "WFC", "GS", "MS", "V", "MA", "UNH", "JNJ",
+    "LLY", "NVO", "PFE", "MRK", "ABBV", "WMT", "COST", "HD", "PG", "KO", "PEP", "MCD",
+    "SBUX", "NKE", "DIS", "XOM", "CVX", "BA", "CAT", "GE", "LMT", "RTX", "UBER", "ABNB",
+    "SNOW", "CRWD", "PANW", "SMCI", "AVGO", "ORCL", "CRM", "ADBE", "CSCO", "QCOM", "TXN",
+    "MU", "AMAT", "LRCX", "KLAC", "MRVL", "SONY", "TOYOTA", "SOFTBANK", "TENCENT", "XIAOMI", "BYD",
+}
+
+STOCK_SUBSTRING_KEYWORDS = (
+    "SAMSUNG", "HYNIX", "HYUNDAI", "POSCO", "NAVER", "KAKAO", "KOSPI", "NASDAQ",
+    "TSLA", "NVDA", "AAPL", "MSFT", "AMZN", "GOOG", "META", "NFLX", "MSTR", "COIN",
+    "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX", "STOCK",
+)
+
 _VALID_BYBIT_SYMBOLS_CACHE = {"ts": 0, "symbols": set(), "bases": set()}
+
+
+def is_stock_or_tradfi_symbol(sym_or_base):
+    """삼성·하이닉스·미국주식·원자재·외환 등 비암호화폐 티커 여부를 철저히 판별"""
+    s = str(sym_or_base or "").upper().strip()
+    if not s:
+        return True
+    base = s[:-4] if s.endswith("USDT") else s
+    base_clean = re.sub(r"^(1000000|100000|10000|1000|100|10)", "", base)
+    if base in STOCK_TRADFI_EXACT_BLACKLIST or base_clean in STOCK_TRADFI_EXACT_BLACKLIST:
+        return True
+    for kw in STOCK_SUBSTRING_KEYWORDS:
+        if kw in base:
+            return True
+    if is_tradfi_ticker(base) or is_tradfi_ticker(base_clean):
+        return True
+    return False
 
 
 def clean_url(raw_url):
@@ -55,24 +95,20 @@ def _fetch_bybit_json_via_proxy(path_and_query, timeout=7):
 
 
 def _fetch_24h_change_and_funding_backup_map():
-    """
-    [Major #5 해결] 코인게코 백업 동작 시 누락/축소되는 24h 등락률(%)과
-    펀딩비(fundingRate * 100.0)를 실시간 선물 마켓에서 정확히 보충합니다.
-    """
-    chg_map = {}
-    fund_map = {}
+    chg_map, fund_map = {}, {}
     try:
         u1 = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES")
         r1 = requests.get(u1, headers=BROWSER_HEADERS, timeout=5)
         if r1.status_code == 200:
             for it in r1.json().get("data", []):
                 sym = str(it.get("symbol", "")).upper().strip()
+                if not sym.endswith("USDT") or is_stock_or_tradfi_symbol(sym):
+                    continue
                 c24 = to_float(it.get("change24h")) * 100.0
                 f_pct = normalize_funding_pct(to_float(it.get("fundingRate")) * 100.0)
-                if sym.endswith("USDT"):
-                    if abs(c24) > 0.001:
-                        chg_map[sym] = round(c24, 2)
-                    fund_map[sym] = f_pct
+                if abs(c24) > 0.001:
+                    chg_map[sym] = round(c24, 2)
+                fund_map[sym] = f_pct
     except Exception:
         pass
 
@@ -82,13 +118,14 @@ def _fetch_24h_change_and_funding_backup_map():
         if r2.status_code == 200:
             for it in r2.json():
                 contract = str(it.get("contract", "")).upper().replace("_", "")
+                if not contract.endswith("USDT") or is_stock_or_tradfi_symbol(contract):
+                    continue
                 c24 = to_float(it.get("change_percentage"))
                 f_pct = normalize_funding_pct(to_float(it.get("funding_rate")) * 100.0)
-                if contract.endswith("USDT"):
-                    if contract not in chg_map and abs(c24) > 0.001:
-                        chg_map[contract] = round(c24, 2)
-                    if contract not in fund_map:
-                        fund_map[contract] = f_pct
+                if contract not in chg_map and abs(c24) > 0.001:
+                    chg_map[contract] = round(c24, 2)
+                if contract not in fund_map:
+                    fund_map[contract] = f_pct
     except Exception:
         pass
 
@@ -145,7 +182,7 @@ def get_valid_bybit_linear_symbols():
             contract_type = str(it.get("contractType", "")).strip()
             if sym.endswith("USDT") and quote == "USDT" and status == "Trading" and contract_type == "LinearPerpetual":
                 base = sym[:-4]
-                if base.isascii() and not is_tradfi_ticker(base):
+                if base.isascii() and not is_stock_or_tradfi_symbol(sym):
                     valid_syms.add(sym)
                     valid_bases.add(base)
 
@@ -178,7 +215,7 @@ def get_valid_bybit_linear_symbols():
                 conv_vol = to_float((t.get("converted_volume") or {}).get("usd"))
                 if sym.endswith("USDT") and c_type == "perpetual" and not t.get("expired_at") and conv_vol >= 500000:
                     base = sym[:-4]
-                    if base.isascii() and not is_tradfi_ticker(base):
+                    if base.isascii() and not is_stock_or_tradfi_symbol(sym):
                         valid_syms.add(sym)
                         valid_bases.add(base)
             if len(valid_syms) >= 50:
@@ -203,7 +240,7 @@ def get_scanner_candidates():
             if not sym.endswith("USDT"):
                 continue
             base = sym[:-4]
-            if (valid_syms and sym not in valid_syms) or not base.isascii() or is_tradfi_ticker(base):
+            if (valid_syms and sym not in valid_syms) or not base.isascii() or is_stock_or_tradfi_symbol(sym):
                 rwa_blocked_bases.add(base)
                 continue
             pure_crypto_bases.add(base)
@@ -256,12 +293,13 @@ def get_scanner_candidates():
                     c_type = str(t.get("contract_type", "perpetual")).lower().strip()
                     if not sym.endswith("USDT") or c_type != "perpetual" or t.get("expired_at"):
                         continue
-                    if valid_syms and sym not in valid_syms:
+                    base = sym[:-4]
+                    if (valid_syms and sym not in valid_syms) or not base.isascii() or is_stock_or_tradfi_symbol(sym):
+                        rwa_blocked_bases.add(base)
                         continue
                     if chg_backup_map and sym not in chg_backup_map:
                         continue
-                    base = sym[:-4]
-                    if not base.isascii() or is_tradfi_ticker(base) or is_heavy_major_coin(base):
+                    if is_heavy_major_coin(base):
                         continue
 
                     price = to_float(t.get("last"))
@@ -275,7 +313,6 @@ def get_scanner_candidates():
                     if abs(change_24h) < 1e-5 and sym in chg_backup_map:
                         change_24h = chg_backup_map[sym]
 
-                    # [Major #5 해결] 선물 펀딩비 백업 맵 우선 반영 + 소수점 펀딩비 * 100.0 보정
                     if sym in fund_backup_map:
                         funding_pct = fund_backup_map[sym]
                     else:
@@ -302,7 +339,7 @@ def get_scanner_candidates():
 
 def fetch_klines(symbol, interval="5", limit=150):
     sym = str(symbol).upper().strip()
-    if not sym.endswith("USDT"):
+    if not sym.endswith("USDT") or is_stock_or_tradfi_symbol(sym):
         return pd.DataFrame()
 
     valid_syms, _ = get_valid_bybit_linear_symbols()
