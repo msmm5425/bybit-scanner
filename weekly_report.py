@@ -1,4 +1,4 @@
-import os, json, time, requests
+import os, json, time, subprocess, requests
 import numpy as np
 from datetime import datetime, timedelta, timezone
 
@@ -35,7 +35,6 @@ def fmt_price(price):
 
 
 def load_merged_state():
-    """bot_state.json 과 scanner_state.json 을 모두 읽어 누락 없이 병합"""
     merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
     for path in STATE_CANDIDATE_FILES:
         if not os.path.exists(path):
@@ -62,16 +61,51 @@ def save_merged_state(state):
         try:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(state, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp, path)
         except Exception:
             pass
 
 
+def git_push_saved_files(extra_files=None):
+    """소급 복구된 상태 파일(bot_state.json, scanner_state.json 등)을 GitHub 저장소에 영구 커밋·푸시"""
+    target_files = list(STATE_CANDIDATE_FILES)
+    if extra_files:
+        for ef in extra_files:
+            if ef not in target_files:
+                target_files.append(ef)
+    try:
+        subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
+        subprocess.run(["git", "config", "--local", "user.name", "GitHub Actions"], check=False)
+        existing = [f for f in target_files if os.path.exists(f)]
+        if not existing:
+            return
+        raw_ backups = {}
+        for f in existing:
+            with open(f, "r", encoding="utf-8") as fp:
+                raw_backups[f] = fp.read()
+
+        for _ in range(3):
+            subprocess.run(["git", "fetch", "origin", "main"], check=False)
+            subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
+            for f, content in raw_backups.items():
+                with open(f, "w", encoding="utf-8") as fp:
+                    fp.write(content)
+                subprocess.run(["git", "add", f], check=False)
+            if subprocess.run(["git", "diff", "--staged", "--quiet"], check=False).returncode != 0:
+                subprocess.run(["git", "commit", "-m", "chore: sync backfilled state & history [skip ci]"], check=False)
+                if subprocess.run(["git", "push", "origin", "HEAD:main"], check=False).returncode == 0:
+                    print("[Git 동기화 완료] 상태 파일이 저장소에 영구 반영되었습니다.")
+                    break
+            else:
+                break
+            time.sleep(2)
+    except Exception as e:
+        print(f"[Git 동기화 경고] {e}")
+
+
 def ensure_missing_icnt_and_backfill(episodes, tracked, now_ts):
-    """
-    1) 어제 밤 23:30 KST 워크플로 종료 시 git push 누락으로 증발한 $ICNT 타점 복원
-    2) 최근 72시간 내 포착된 모든 종목의 실제 15분봉 최고가(MFE) 전수 소급 반영
-    """
     icnt_ts = int(datetime(2026, 11, 17, 23, 30, tzinfo=KST).timestamp())
     has_icnt = any(
         isinstance(v, dict) and str(v.get("symbol", "")).upper() == "ICNTUSDT" and abs(int(v.get("created_at", 0)) - icnt_ts) < 86400
@@ -198,7 +232,6 @@ def main():
 
     candidates, _, _ = get_scanner_candidates()
 
-    # 동일 종목 중복 에피소드는 가장 높은 수익률 기준으로 정리
     weekly_eps = []
     for ep in episodes.values():
         if not isinstance(ep, dict):
@@ -337,6 +370,7 @@ def main():
     report_text = "\n".join(lines)
     print(report_text)
     send_telegram_weekly(report_text)
+    git_push_saved_files()
 
 
 if __name__ == "__main__":
