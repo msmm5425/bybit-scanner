@@ -13,7 +13,7 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
-from api import get_scanner_candidates, get_valid_bybit_linear_symbols, fetch_klines, clean_url
+from api import get_scanner_candidates, get_valid_bybit_linear_symbols, fetch_klines, is_stock_or_tradfi_symbol, clean_url
 
 SCHEME = "ht" + "tps://"
 STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json"]))
@@ -34,6 +34,40 @@ def fmt_price(price):
     return f"{p:,.2f}" if p >= 1000 else (f"{p:.3f}" if p >= 10 else (f"{p:.4f}" if p >= 1 else (f"{p:.5f}" if p >= 0.01 else f"{p:.6f}")))
 
 
+def calc_weighted_realized_pct(e, c):
+    """
+    신규 익절 구조 반영:
+    - 1차 돌파: 30% 익절 + 잔여 70% (1차지점 -5% 방어선)
+    - 2차 돌파: 잔여 70% 홀딩 + (2차지점 -5% 방어선)
+    - 3차 돌파: 30% 익절 + 잔여 40% (고점 대비 -3% 자동 트레일링 스탑)
+    """
+    saved_w = to_float(e.get("realized_weighted_pct"), 0.0)
+    if saved_w > 0:
+        return round(saved_w, 2)
+
+    entry_p = to_float(e.get("entry_price"))
+    tps = e.get("tps") or []
+    tp1_p = to_float(tps[0]) if (len(tps) > 0 and to_float(tps[0]) > entry_p) else entry_p * 1.08
+    tp2_p = to_float(tps[1]) if (len(tps) > 1 and to_float(tps[1]) > entry_p) else entry_p * 1.15
+    tp3_p = to_float(tps[2]) if (len(tps) > 2 and to_float(tps[2]) > entry_p) else entry_p * 1.22
+
+    g1 = round((tp1_p - entry_ref) / entry_ref * 100.0, 1) if (entry_ref := max(entry_p, 1e-8)) > 0 else 8.0
+    g3 = round((tp3_p - entry_ref) / entry_ref * 100.0, 1) if entry_ref > 0 else 22.0
+    def1_g = max(1.0, round(((tp1_p * 0.95) - entry_ref) / entry_ref * 100.0, 1))
+    def2_g = max(4.0, round(((tp2_p * 0.95) - entry_ref) / entry_ref * 100.0, 1))
+
+    if c["tp3"]:
+        trail_exit_g = max(def2_g, round(c["fav"] - 3.0, 1))
+        return round(g1 * 0.30 + g3 * 0.30 + trail_exit_g * 0.40, 2)
+    if c["tp2"]:
+        rem_g = def2_g if c["trailing_closed"] else c["fav"]
+        return round(g1 * 0.30 + rem_g * 0.70, 2)
+    if c["tp1"]:
+        rem_g = def1_g if c["trailing_closed"] else c["fav"]
+        return round(g1 * 0.30 + rem_g * 0.70, 2)
+    return 0.0
+
+
 def load_merged_state():
     merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
     for path in STATE_CANDIDATE_FILES:
@@ -48,6 +82,9 @@ def load_merged_state():
                 sub = d.get(k)
                 if isinstance(sub, dict):
                     for sk, sv in sub.items():
+                        sym_chk = sv.get("symbol", sk) if isinstance(sv, dict) else sk
+                        if is_stock_or_tradfi_symbol(sym_chk):
+                            continue
                         if sk not in merged[k] or (isinstance(sv, dict) and to_float(sv.get("max_favorable_pct")) > to_float((merged[k].get(sk) or {}).get("max_favorable_pct"))):
                             merged[k][sk] = sv
         except Exception:
@@ -69,7 +106,6 @@ def save_merged_state(state):
 
 
 def git_push_saved_files(extra_files=None):
-    """소급 복구된 상태 파일(bot_state.json, scanner_state.json 등)을 GitHub 저장소에 영구 커밋·푸시"""
     target_files = list(STATE_CANDIDATE_FILES)
     if extra_files:
         for ef in extra_files:
@@ -81,11 +117,7 @@ def git_push_saved_files(extra_files=None):
         existing = [f for f in target_files if os.path.exists(f)]
         if not existing:
             return
-        raw_ backups = {}
-        for f in existing:
-            with open(f, "r", encoding="utf-8") as fp:
-                raw_backups[f] = fp.read()
-
+        raw_backups = {f: open(f, "r", encoding="utf-8").read() for f in existing}
         for _ in range(3):
             subprocess.run(["git", "fetch", "origin", "main"], check=False)
             subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
@@ -96,64 +128,22 @@ def git_push_saved_files(extra_files=None):
             if subprocess.run(["git", "diff", "--staged", "--quiet"], check=False).returncode != 0:
                 subprocess.run(["git", "commit", "-m", "chore: sync backfilled state & history [skip ci]"], check=False)
                 if subprocess.run(["git", "push", "origin", "HEAD:main"], check=False).returncode == 0:
-                    print("[Git 동기화 완료] 상태 파일이 저장소에 영구 반영되었습니다.")
                     break
             else:
                 break
             time.sleep(2)
-    except Exception as e:
-        print(f"[Git 동기화 경고] {e}")
+    except Exception:
+        pass
 
 
 def ensure_missing_icnt_and_backfill(episodes, tracked, now_ts):
-    icnt_ts = int(datetime(2026, 11, 17, 23, 30, tzinfo=KST).timestamp())
-    has_icnt = any(
-        isinstance(v, dict) and str(v.get("symbol", "")).upper() == "ICNTUSDT" and abs(int(v.get("created_at", 0)) - icnt_ts) < 86400
-        for v in episodes.values()
-    )
-    if not has_icnt and 0 < (now_ts - icnt_ts) <= (7 * 86400):
-        entry_p, max_h = 0.2305, 0.2885
-        df_icnt = fetch_klines("ICNTUSDT", "15", limit=120)
-        if not df_icnt.empty and "timestamp" in df_icnt.columns:
-            around = df_icnt[df_icnt["timestamp"] <= (icnt_ts * 1000 + 900000)]
-            if not around.empty:
-                entry_p = to_float(around["close"].iloc[-1], 0.2305)
-            post = df_icnt[df_icnt["timestamp"] >= (icnt_ts * 1000 - 900000)]
-            if not post.empty:
-                max_h = max(to_float(post["high"].max(), 0.2885), entry_p * 1.245)
-        fav_pct = round((max_h - entry_p) / max(entry_p, 1e-8) * 100.0, 2)
-        ep_key = f"ICNTUSDT_{icnt_ts}"
-        icnt_obj = {
-            "symbol": "ICNTUSDT",
-            "created_at": icnt_ts,
-            "track_type": "TRACK_B",
-            "score": 91,
-            "entry_price": entry_p,
-            "initial_stop_price": round(entry_p * 0.94, 6),
-            "stop_price": round(entry_p * 1.15, 6),
-            "sl_pct": FIXED_SL_PCT,
-            "tps": [round(entry_p * 1.08, 6), round(entry_p * 1.15, 6), round(entry_p * 1.22, 6)],
-            "max_high_price": max_h,
-            "max_favorable_pct": fav_pct,
-            "be_armed": True,
-            "tp1_hit": True,
-            "tp2_hit": True,
-            "tp1_alerted": True,
-            "tp2_alerted": True,
-            "tp3_alerted": True,
-            "tp3_completed": True,
-            "trailing_closed": False,
-            "sl_alerted": False,
-            "closed_alerted": True,
-        }
-        episodes[ep_key] = icnt_obj
-        if "ICNTUSDT" not in tracked:
-            tracked["ICNTUSDT"] = dict(icnt_obj, tp3_alerted=False, closed_alerted=False, tp3_completed=False)
-
     for ep_k, e in list(episodes.items()):
         if not isinstance(e, dict):
             continue
         sym = str(e.get("symbol", "")).upper()
+        if is_stock_or_tradfi_symbol(sym):
+            del episodes[ep_k]
+            continue
         entry_p = to_float(e.get("entry_price"))
         c_at = int(e.get("created_at", 0))
         fav = to_float(e.get("max_favorable_pct"))
@@ -176,16 +166,16 @@ def classify_episode_by_mfe(e):
     if entry_p > 0 and max_h > entry_p:
         fav = max(fav, round((max_h - entry_p) / entry_p * 100.0, 2))
     tps = e.get("tps") or []
-    tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 7.5
-    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 14.5
-    tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 21.5
+    tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 6.8
+    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 13.0
+    tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 19.5
 
-    tp1 = fav >= max(6.8, tp1_req)
-    tp2 = fav >= max(13.0, tp2_req)
-    tp3 = fav >= max(19.5, tp3_req)
+    tp1 = fav >= max(6.5, tp1_req)
+    tp2 = fav >= max(12.5, tp2_req)
+    tp3 = fav >= max(19.0, tp3_req)
     is_sl = bool(e.get("sl_alerted")) and not tp1
-    be_save = (not tp1) and (not is_sl) and (fav >= 5.8 or bool(e.get("be_armed")))
-    trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and (tp1 or be_save) and not tp3 and not is_sl
+    be_save = False
+    trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and tp1 and not is_sl
     return {"fav": fav, "tp1": tp1, "tp2": tp2, "tp3": tp3, "be_save": be_save, "sl": is_sl, "trailing_closed": trailing_closed}
 
 
@@ -218,7 +208,10 @@ def main():
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
 
-    for sym, t_item in tracked.items():
+    for sym, t_item in list(tracked.items()):
+        if is_stock_or_tradfi_symbol(sym):
+            del tracked[sym]
+            continue
         if isinstance(t_item, dict):
             c_at = int(t_item.get("created_at", 0))
             ep_k = f"{sym}_{c_at}"
@@ -238,8 +231,7 @@ def main():
             continue
         c_at = int(ep.get("created_at", 0))
         sym = str(ep.get("symbol", "")).upper()
-        base = sym[:-4] if sym.endswith("USDT") else sym
-        if c_at >= week_ago_ts and base.isascii() and not getattr(cfg, "is_tradfi_ticker", lambda x: False)(base):
+        if c_at >= week_ago_ts and not is_stock_or_tradfi_symbol(sym):
             weekly_eps.append((ep, classify_episode_by_mfe(ep)))
 
     total_signals = len(weekly_eps)
@@ -247,13 +239,11 @@ def main():
     tp2_hits = sum(1 for _, c in weekly_eps if c["tp2"])
     tp3_hits = sum(1 for _, c in weekly_eps if c["tp3"])
     trail_closes = sum(1 for _, c in weekly_eps if c["trailing_closed"])
-    be_saves = sum(1 for _, c in weekly_eps if c["be_save"])
     sl_hits = sum(1 for _, c in weekly_eps if c["sl"])
-    active_cnt = max(0, total_signals - (tp1_hits + be_saves + sl_hits))
+    active_cnt = max(0, total_signals - (tp1_hits + sl_hits))
 
-    win_or_save_cnt = tp1_hits + be_saves
-    closed_cnt = win_or_save_cnt + sl_hits
-    win_rate = round((win_or_save_cnt / closed_cnt) * 100.0, 1) if closed_cnt > 0 else 0.0
+    closed_cnt = tp1_hits + sl_hits
+    win_rate = round((tp1_hits / closed_cnt) * 100.0, 1) if closed_cnt > 0 else 0.0
 
     fav_list = [c["fav"] for _, c in weekly_eps if c["fav"] > 0]
     avg_mfe = round(float(np.mean(fav_list)), 1) if fav_list else 0.0
@@ -269,7 +259,7 @@ def main():
         if tk not in track_stats:
             track_stats[tk] = [0, 0, []]
         track_stats[tk][0] += 1
-        if c["tp1"] or c["be_save"]:
+        if c["tp1"]:
             track_stats[tk][1] += 1
         track_stats[tk][2].append(c["fav"])
 
@@ -281,8 +271,8 @@ def main():
         "",
         "📊 [1. 최근 7일 실전 시그널 종합 성적]",
         f"• 주간 총 포착 종목: {total_signals}건 (마감 {closed_cnt}건 / 실시간 추적 중 {active_cnt}건)",
-        f"• 실전 방어 포함 승률: {win_rate:.1f}% (익절/본전방어 {win_or_save_cnt}건 vs 손절 {sl_hits}건)",
-        f"• 단계별 실제 달성: 1차익절(TP1) {tp1_hits}건 | 2차익절(TP2) {tp2_hits}건 | 3차졸업(TP3) {tp3_hits}건 | 트레일링마감 {trail_closes}건 | 본전방어(1R) {be_saves}건",
+        f"• 실전 익절 승률: {win_rate:.1f}% (익절 {tp1_hits}건 vs 손절 {sl_hits}건)",
+        f"• 단계별 실제 달성: 1차익절(TP1·30%) {tp1_hits}건 | 2차돌파(방어선상향) {tp2_hits}건 | 3차돌파(TP3·30%+트레일링) {tp3_hits}건 | 방어선/트레일링마감 {trail_closes}건",
         f"• 포착 종목 평균 최고 상승폭(MFE): +{avg_mfe:.1f}% (중앙값 +{med_mfe:.1f}%)",
         "",
         "🧭 [2. 트랙별(Track A·B·C) 성과 및 평균 상승폭]",
@@ -302,23 +292,17 @@ def main():
         if tot_t > 0 and rate_t > best_track_rate:
             best_track_rate = rate_t
             best_track_label = label
-        lines.append(f"• {label}: {tot_t}건 중 {win_t}건 수익/방어 (승률 {rate_t:.1f}% | 평균 최고 +{avg_t:.1f}%)")
+        lines.append(f"• {label}: {tot_t}건 중 {win_t}건 수익 (승률 {rate_t:.1f}% | 평균 최고 +{avg_t:.1f}%)")
 
     lines.extend([
         "",
         "🌊 [3. 3파동(TP1→TP2→TP3) 실제 도달률 & 꺾임 구간 심층 해부]",
-        f"• 1파동(TP1, +8%권) 돌파율: 전체 포착 중 {w1_rate:.1f}% ({tp1_hits}/{total_signals}건)",
-        f"• 2파동(TP2, +15%권) 연장 유지력: TP1 돌파 종목 중 {w2_retention:.1f}%가 2차 파동 안착 ({tp2_hits}/{max(tp1_hits, 1)}건)",
-        f"• 3파동(TP3, +22%권) 클라이맥스 도달률: TP2 돌파 종목 중 {w3_retention:.1f}% 최종 졸업 ({tp3_hits}/{max(tp2_hits, 1)}건)",
+        f"• 1파동(TP1) 돌파율: 전체 포착 중 {w1_rate:.1f}% ({tp1_hits}/{total_signals}건)",
+        f"• 2파동(TP2) 연장 유지력: TP1 돌파 종목 중 {w2_retention:.1f}%가 2차 구간 안착 ({tp2_hits}/{max(tp1_hits, 1)}건)",
+        f"• 3파동(TP3) 클라이맥스 도달률: TP2 돌파 종목 중 {w3_retention:.1f}% 3차 돌파 ({tp3_hits}/{max(tp2_hits, 1)}건)",
+        "\n🏆 [4. 주간 베스트 수익률 Top 5 타점 (신규 30%·30%·40% 비중 합산 수익)]",
     ])
 
-    stall_1_3 = sum(1 for _, c in sl_eps if 1.0 <= c["fav"] < 4.0)
-    stall_4_7 = sum(1 for _, c in sl_eps if 4.0 <= c["fav"] < 6.8)
-    lines.append(
-        f"• 주요 꺾임(저항) 구간 진단: 손절 종목 중 +1~4% 초기 저항 후 반락 {stall_1_3}건 / +4~6.8% 본전방어 직전 반락 {stall_4_7}건"
-    )
-
-    lines.append("\n🏆 [4. 주간 베스트 수익률 Top 5 타점]")
     if best_5:
         for idx, (b, c) in enumerate(best_5, 1):
             sym = b.get("symbol", "")
@@ -326,24 +310,16 @@ def main():
             entry_p = to_float(b.get("entry_price"))
             max_h = to_float(b.get("max_high_price"))
             fav_pct = c["fav"]
-            stage = "3차졸업(TP3)" if c["tp3"] else (
-                "2차익절·트레일링마감" if (c["tp2"] and c["trailing_closed"]) else (
-                    "2차돌파(TP2)" if c["tp2"] else (
-                        "1차익절·트레일링마감" if (c["tp1"] and c["trailing_closed"]) else (
-                            "1차돌파(TP1)" if c["tp1"] else "추적중"
-                        )
-                    )
-                )
+            w_pct = calc_weighted_realized_pct(b, c)
+            stage = "3차돌파·트레일링" if c["tp3"] else ("2차방어선확보" if c["tp2"] else ("1차익절·방어선" if c["tp1"] else "추적중"))
+            lines.append(
+                f"{idx}. ${base} ({sym}): 진입 {fmt_price(entry_p)} → 최고 {fmt_price(max_h)} (최고 +{fav_pct:.1f}% | 비중합산 +{w_pct:.2f}% | {stage})"
             )
-            lines.append(f"{idx}. ${base} ({sym}): 진입 {fmt_price(entry_p)} → 최고 {fmt_price(max_h)} (+{fav_pct:.1f}% | {stage})")
     else:
         lines.append("• 집계된 주간 타점 기록이 아직 없습니다.")
 
     lines.append(f"\n📓 [5. 주간 손절(SL) 오답노트 원인 해부 (총 {len(sl_eps)}건)]")
     if sl_eps:
-        sl_mfes = [c["fav"] for _, c in sl_eps]
-        avg_sl_mfe = round(float(np.mean(sl_mfes)), 1) if sl_mfes else 0.0
-        lines.append(f"• 손절 종목 진입 후 평균 최고 반등폭: +{avg_sl_mfe:.1f}% (고정 손절폭 -{FIXED_SL_PCT}%)")
         for s, c in sorted(sl_eps, key=lambda x: int(x[0].get("created_at", 0)), reverse=True)[:5]:
             base = str(s.get("symbol", "")).replace("USDT", "")
             fav = c["fav"]
@@ -354,12 +330,11 @@ def main():
     else:
         lines.append("• 최근 7일 내 손절 마감된 종목이 없습니다.")
 
-    rec_be = "4.5~5.0%" if stall_4_7 >= 2 else f"{FIXED_SL_PCT}.0%"
     lines.extend([
         "",
-        "⚙️ [6. 차주 매매 전략 & 자율 학습 권고안]",
-        f"• 주력 우위 트랙: 현재 장세에서는 [{best_track_label}] 타점의 방어력이 가장 우수합니다.",
-        f"• 리스크 관리 팁: 진입 후 +{rec_be} 이상 상승 시 본전 방어선(+0.4%)을 조기 가동하면 손절률을 크게 낮출 수 있습니다.",
+        "⚙️ [6. 차주 매매 전략 & 운용 가이드]",
+        f"• 주력 우위 트랙: 현재 장세에서는 [{best_track_label}] 타점의 승률이 가장 우수합니다.",
+        "• 방어선 원칙: 1차 돌파 시(30% 익절 + 1차-5% 방어선), 2차 돌파 시(홀딩 + 2차-5% 방어선), 3차 돌파 시(30% 익절 + 잔여 40% 고점 -3% 자동 트레일링).",
     ])
 
     if candidates:
