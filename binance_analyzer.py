@@ -1,4 +1,3 @@
-python
 import os
 import json
 import time
@@ -72,7 +71,7 @@ def send_telegram_report(text):
         print("[경고] 텔레그램 토큰 또는 채팅 ID가 설정되지 않았습니다.")
         return False
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){token}/sendMessage"
     chunks = [text[i : i + 3800] for i in range(0, len(text), 3800)]
 
     for chunk in chunks:
