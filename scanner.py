@@ -1,4 +1,3 @@
-python
 import os
 import sys
 import json
@@ -51,7 +50,7 @@ def send_telegram_reliable(text, reply_markup=None):
         except Exception:
             return False
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){token}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
