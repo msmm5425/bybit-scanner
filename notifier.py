@@ -1,4 +1,3 @@
-python
 import os
 import io
 import sys
@@ -246,7 +245,7 @@ def build_x_post_message(res):
 
 def build_x_intent_reply_markup(x_post_text):
     encoded_text = urllib.parse.quote(str(x_post_text or ""), safe="")
-    intent_url = f"https://x.com/intent/post?text={encoded_text}"
+    intent_url = f"[https://x.com/intent/post?text=](https://x.com/intent/post?text=){encoded_text}"
     return {
         "inline_keyboard": [
             [
@@ -370,7 +369,7 @@ def _render_tradingview_lightweight_chart(df, res):
 <html>
 <head>
 <meta charset="utf-8">
-<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="[https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js](https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js)"></script>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
@@ -665,7 +664,7 @@ def send_telegram_single(text, reply_markup=None):
     if not text or not token or not chat_id:
         return False
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){token}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
@@ -699,7 +698,7 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
     if not photo_bytes or not token or not chat_id:
         return False
 
-    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){token}/sendPhoto"
     for attempt in range(3):
         try:
             files = {"photo": ("tv_signal_chart.png", photo_bytes, "image/png")}
