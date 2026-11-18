@@ -1,6 +1,7 @@
 import os, json, time, subprocess, requests
 import numpy as np
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import config as cfg
@@ -13,7 +14,7 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
-from api import get_scanner_candidates, get_valid_bybit_linear_symbols, fetch_klines, is_stock_or_tradfi_symbol, clean_url
+from api import get_scanner_candidates, fetch_klines, is_stock_or_tradfi_symbol, clean_url
 
 SCHEME = "ht" + "tps://"
 STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json"]))
@@ -35,24 +36,18 @@ def fmt_price(price):
 
 
 def calc_weighted_realized_pct(e, c):
-    """
-    신규 익절 구조 반영:
-    - 1차 돌파: 30% 익절 + 잔여 70% (1차지점 -5% 방어선)
-    - 2차 돌파: 잔여 70% 홀딩 + (2차지점 -5% 방어선)
-    - 3차 돌파: 30% 익절 + 잔여 40% (고점 대비 -3% 자동 트레일링 스탑)
-    """
     saved_w = to_float(e.get("realized_weighted_pct"), 0.0)
     if saved_w > 0:
         return round(saved_w, 2)
 
-    entry_p = to_float(e.get("entry_price"))
+    entry_ref = max(to_float(e.get("entry_price")), 1e-8)
     tps = e.get("tps") or []
-    tp1_p = to_float(tps[0]) if (len(tps) > 0 and to_float(tps[0]) > entry_p) else entry_p * 1.08
-    tp2_p = to_float(tps[1]) if (len(tps) > 1 and to_float(tps[1]) > entry_p) else entry_p * 1.15
-    tp3_p = to_float(tps[2]) if (len(tps) > 2 and to_float(tps[2]) > entry_p) else entry_p * 1.22
+    tp1_p = to_float(tps[0]) if (len(tps) > 0 and to_float(tps[0]) > entry_ref) else entry_ref * 1.08
+    tp2_p = to_float(tps[1]) if (len(tps) > 1 and to_float(tps[1]) > entry_ref) else entry_ref * 1.15
+    tp3_p = to_float(tps[2]) if (len(tps) > 2 and to_float(tps[2]) > entry_ref) else entry_ref * 1.22
 
-    g1 = round((tp1_p - entry_ref) / entry_ref * 100.0, 1) if (entry_ref := max(entry_p, 1e-8)) > 0 else 8.0
-    g3 = round((tp3_p - entry_ref) / entry_ref * 100.0, 1) if entry_ref > 0 else 22.0
+    g1 = round((tp1_p - entry_ref) / entry_ref * 100.0, 1)
+    g3 = round((tp3_p - entry_ref) / entry_ref * 100.0, 1)
     def1_g = max(1.0, round(((tp1_p * 0.95) - entry_ref) / entry_ref * 100.0, 1))
     def2_g = max(4.0, round(((tp2_p * 0.95) - entry_ref) / entry_ref * 100.0, 1))
 
@@ -117,8 +112,12 @@ def git_push_saved_files(extra_files=None):
         existing = [f for f in target_files if os.path.exists(f)]
         if not existing:
             return
-        raw_backups = {f: open(f, "r", encoding="utf-8").read() for f in existing}
-        for _ in range(3):
+        raw_backups = {}
+        for f in existing:
+            with open(f, "r", encoding="utf-8") as fp:
+                raw_backups[f] = fp.read()
+
+        for _ in range(2):
             subprocess.run(["git", "fetch", "origin", "main"], check=False)
             subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
             for f, content in raw_backups.items():
@@ -126,17 +125,33 @@ def git_push_saved_files(extra_files=None):
                     fp.write(content)
                 subprocess.run(["git", "add", f], check=False)
             if subprocess.run(["git", "diff", "--staged", "--quiet"], check=False).returncode != 0:
-                subprocess.run(["git", "commit", "-m", "chore: sync backfilled state & history [skip ci]"], check=False)
+                subprocess.run(["git", "commit", "-m", "chore: sync backfilled state [skip ci]"], check=False)
                 if subprocess.run(["git", "push", "origin", "HEAD:main"], check=False).returncode == 0:
                     break
             else:
                 break
-            time.sleep(2)
+            time.sleep(1.5)
     except Exception:
         pass
 
 
+def _backfill_single_ep(ep_k, e):
+    sym = str(e.get("symbol", "")).upper()
+    entry_p = to_float(e.get("entry_price"))
+    c_at = int(e.get("created_at", 0))
+    df_15m = fetch_klines(sym, "15", limit=96)
+    if not df_15m.empty and "timestamp" in df_15m.columns:
+        post_df = df_15m[df_15m["timestamp"] >= (c_at * 1000 - 900000)]
+        if not post_df.empty:
+            h_max = to_float(post_df["high"].max(), entry_p)
+            if 0.40 <= (h_max / entry_p) <= 2.80 and h_max > to_float(e.get("max_high_price"), entry_p):
+                e["max_high_price"] = h_max
+                e["max_favorable_pct"] = round((h_max - entry_p) / entry_p * 100.0, 2)
+    return ep_k, e
+
+
 def ensure_missing_icnt_and_backfill(episodes, tracked, now_ts):
+    to_bf = []
     for ep_k, e in list(episodes.items()):
         if not isinstance(e, dict):
             continue
@@ -147,16 +162,18 @@ def ensure_missing_icnt_and_backfill(episodes, tracked, now_ts):
         entry_p = to_float(e.get("entry_price"))
         c_at = int(e.get("created_at", 0))
         fav = to_float(e.get("max_favorable_pct"))
-        if sym and entry_p > 0 and c_at > 0 and (now_ts - c_at) <= 259200 and fav < 19.5:
-            df_15m = fetch_klines(sym, "15", limit=120)
-            if not df_15m.empty and "timestamp" in df_15m.columns:
-                post_df = df_15m[df_15m["timestamp"] >= (c_at * 1000 - 900000)]
-                if not post_df.empty:
-                    h_max = to_float(post_df["high"].max(), entry_p)
-                    if 0.40 <= (h_max / entry_p) <= 2.80 and h_max > to_float(e.get("max_high_price"), entry_p):
-                        e["max_high_price"] = h_max
-                        e["max_favorable_pct"] = round((h_max - entry_p) / entry_p * 100.0, 2)
-                        episodes[ep_k] = e
+        if sym and entry_p > 0 and c_at > 0 and (now_ts - c_at) <= 172800 and fav < 19.5 and not e.get("sl_alerted"):
+            to_bf.append((ep_k, e))
+
+    if to_bf:
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            futs = [ex.submit(_backfill_single_ep, k, v) for k, v in to_bf[:10]]
+            for fut in as_completed(futs):
+                try:
+                    k, v = fut.result()
+                    episodes[k] = v
+                except Exception:
+                    pass
 
 
 def classify_episode_by_mfe(e):
@@ -174,9 +191,8 @@ def classify_episode_by_mfe(e):
     tp2 = fav >= max(12.5, tp2_req)
     tp3 = fav >= max(19.0, tp3_req)
     is_sl = bool(e.get("sl_alerted")) and not tp1
-    be_save = False
     trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and tp1 and not is_sl
-    return {"fav": fav, "tp1": tp1, "tp2": tp2, "tp3": tp3, "be_save": be_save, "sl": is_sl, "trailing_closed": trailing_closed}
+    return {"fav": fav, "tp1": tp1, "tp2": tp2, "tp3": tp3, "be_save": False, "sl": is_sl, "trailing_closed": trailing_closed}
 
 
 def send_telegram_weekly(text):
@@ -189,7 +205,7 @@ def send_telegram_weekly(text):
         chunk = text[i : i + 3800]
         for _ in range(3):
             try:
-                r = requests.post(url, json={"chat_id": chat_id, "text": chunk, "disable_web_page_preview": True}, timeout=15)
+                r = requests.post(url, json={"chat_id": chat_id, "text": chunk, "disable_web_page_preview": True}, timeout=12)
                 if r.status_code == 200:
                     time.sleep(0.6)
                     break
@@ -300,7 +316,7 @@ def main():
         f"• 1파동(TP1) 돌파율: 전체 포착 중 {w1_rate:.1f}% ({tp1_hits}/{total_signals}건)",
         f"• 2파동(TP2) 연장 유지력: TP1 돌파 종목 중 {w2_retention:.1f}%가 2차 구간 안착 ({tp2_hits}/{max(tp1_hits, 1)}건)",
         f"• 3파동(TP3) 클라이맥스 도달률: TP2 돌파 종목 중 {w3_retention:.1f}% 3차 돌파 ({tp3_hits}/{max(tp2_hits, 1)}건)",
-        "\n🏆 [4. 주간 베스트 수익률 Top 5 타점 (신규 30%·30%·40% 비중 합산 수익)]",
+        "\n🏆 [4. 주간 베스트 수익률 Top 5 타점 (30%·30%·40% 비중 합산 수익)]",
     ])
 
     if best_5:
