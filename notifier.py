@@ -1,4 +1,5 @@
 import os
+import re
 import io
 import sys
 import time
@@ -45,7 +46,17 @@ if not TELEGRAM_CHAT_ID:
         or ""
     ).strip()
 
+SCHEME = "ht" + "tps://"
 _PLAYWRIGHT_READY = False
+
+
+def clean_url(raw_url):
+    s = str(raw_url or "").strip()
+    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\2", s)
+    s = s.replace("[", "").replace("]", "")
+    if not s.startswith("http"):
+        s = SCHEME + s.lstrip("/")
+    return s
 
 
 def to_float(value, default=0.0):
@@ -196,22 +207,6 @@ def build_x_hook_line(res):
 
 
 def build_x_post_message(res):
-    """
-    사용자 요청 신규 X(트위터) 양식 적용:
-    🔺️상승 예상 코인 검색기에 포착된 종목😎
-    ⚠️{핵심사유}⚠️
-
-    $ETHFI (ETHFIUSDT)
-
-    - 진입 구간: 0.47890 ~ 0.48058 USDT
-    - SL: 0.45129 (-6%)
-    - tp1: 0.51899(+8%)
-    - tp2: 0.55356(+15%)
-    - tp3: 0.58764(+22%)
-
-    #ETHFI 어디까지 오를거 같나요?
-    보유중이신 분들 계신가요?
-    """
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
     price = to_float(res.get("price"))
@@ -245,7 +240,7 @@ def build_x_post_message(res):
 
 def build_x_intent_reply_markup(x_post_text):
     encoded_text = urllib.parse.quote(str(x_post_text or ""), safe="")
-    intent_url = f"[https://x.com/intent/post?text=](https://x.com/intent/post?text=){encoded_text}"
+    intent_url = clean_url(f"{SCHEME}x.com/intent/post?text={encoded_text}")
     return {
         "inline_keyboard": [
             [
@@ -364,12 +359,13 @@ def _render_tradingview_lightweight_chart(df, res):
 
     decimals = 6 if price < 0.01 else (5 if price < 1 else (4 if price < 10 else (3 if price < 1000 else 2)))
     min_move = 10 ** (-decimals)
+    lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
 
     html_content = f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<script src="[https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js](https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js)"></script>
+<script src="{lw_script_url}"></script>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
@@ -664,7 +660,7 @@ def send_telegram_single(text, reply_markup=None):
     if not text or not token or not chat_id:
         return False
 
-    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){token}/sendMessage"
+    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendMessage")
     payload = {
         "chat_id": chat_id,
         "text": text,
@@ -698,7 +694,7 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
     if not photo_bytes or not token or not chat_id:
         return False
 
-    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){token}/sendPhoto"
+    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendPhoto")
     for attempt in range(3):
         try:
             files = {"photo": ("tv_signal_chart.png", photo_bytes, "image/png")}
