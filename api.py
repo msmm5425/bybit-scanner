@@ -15,14 +15,11 @@ from config import (
 SCHEME = "ht" + "tps://"
 
 BYBIT_HOST_NAMES = (
-    "api.bybit-tr.com",
-    "api.bybit.kz",
-    "api.bybit.nl",
     "api.bytick.com",
     "api.bybit.com",
+    "api.bybit-tr.com",
 )
 
-# 한국·미국 주식, 빅테크, 지수, 원자재, 외환 RWA 토큰 완벽 차단 블랙리스트
 STOCK_TRADFI_EXACT_BLACKLIST = {
     "SAMSUNG", "HYNIX", "SKHYNIX", "SKH", "SSNLF", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
     "CELLTRION", "LGCHEM", "LGES", "KIA", "KB", "SHINHAN", "HANA", "WOORI", "COUPANG",
@@ -46,10 +43,10 @@ STOCK_SUBSTRING_KEYWORDS = (
 )
 
 _VALID_BYBIT_SYMBOLS_CACHE = {"ts": 0, "symbols": set(), "bases": set()}
+_BYBIT_DIRECT_BLOCKED = False
 
 
 def is_stock_or_tradfi_symbol(sym_or_base):
-    """삼성·하이닉스·미국주식·원자재·외환 등 비암호화폐 티커 여부를 철저히 판별"""
     s = str(sym_or_base or "").upper().strip()
     if not s:
         return True
@@ -74,13 +71,12 @@ def clean_url(raw_url):
     return s
 
 
-def _fetch_bybit_json_via_proxy(path_and_query, timeout=7):
+def _fetch_bybit_json_via_proxy(path_and_query, timeout=4):
     target_url = clean_url(f"{SCHEME}api.bybit.com{path_and_query}")
     encoded = urllib.parse.quote(target_url, safe="")
     proxy_urls = (
         clean_url(f"{SCHEME}api.codetabs.com/v1/proxy?quest={encoded}"),
         clean_url(f"{SCHEME}api.allorigins.win/raw?url={encoded}"),
-        clean_url(f"{SCHEME}corsproxy.io/?{encoded}"),
     )
     for purl in proxy_urls:
         try:
@@ -98,7 +94,7 @@ def _fetch_24h_change_and_funding_backup_map():
     chg_map, fund_map = {}, {}
     try:
         u1 = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES")
-        r1 = requests.get(u1, headers=BROWSER_HEADERS, timeout=5)
+        r1 = requests.get(u1, headers=BROWSER_HEADERS, timeout=4)
         if r1.status_code == 200:
             for it in r1.json().get("data", []):
                 sym = str(it.get("symbol", "")).upper().strip()
@@ -114,7 +110,7 @@ def _fetch_24h_change_and_funding_backup_map():
 
     try:
         u2 = clean_url(f"{SCHEME}api.gateio.ws/api/v4/futures/usdt/tickers")
-        r2 = requests.get(u2, headers=BROWSER_HEADERS, timeout=5)
+        r2 = requests.get(u2, headers=BROWSER_HEADERS, timeout=4)
         if r2.status_code == 200:
             for it in r2.json():
                 contract = str(it.get("contract", "")).upper().replace("_", "")
@@ -168,6 +164,7 @@ def _normalize_kline_df(rows, expected_interval_min=None):
 
 
 def get_valid_bybit_linear_symbols():
+    global _BYBIT_DIRECT_BLOCKED
     now = time.time()
     if now - _VALID_BYBIT_SYMBOLS_CACHE["ts"] < 900 and len(_VALID_BYBIT_SYMBOLS_CACHE["symbols"]) >= 80:
         return _VALID_BYBIT_SYMBOLS_CACHE["symbols"], _VALID_BYBIT_SYMBOLS_CACHE["bases"]
@@ -186,19 +183,21 @@ def get_valid_bybit_linear_symbols():
                     valid_syms.add(sym)
                     valid_bases.add(base)
 
-    for host in BYBIT_HOST_NAMES:
-        try:
-            url = clean_url(f"{SCHEME}{host}/v5/market/instruments-info")
-            resp = requests.get(url, params={"category": "linear", "status": "Trading", "limit": 1000}, headers=BROWSER_HEADERS, timeout=4)
-            if resp.status_code == 200:
-                _parse_bybit_instruments(resp.json().get("result", {}).get("list", []))
-                if len(valid_syms) >= 80:
-                    _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": valid_syms, "bases": valid_bases})
-                    return valid_syms, valid_bases
-        except Exception:
-            continue
+    if not _BYBIT_DIRECT_BLOCKED:
+        for host in BYBIT_HOST_NAMES:
+            try:
+                url = clean_url(f"{SCHEME}{host}/v5/market/instruments-info")
+                resp = requests.get(url, params={"category": "linear", "status": "Trading", "limit": 1000}, headers=BROWSER_HEADERS, timeout=2.5)
+                if resp.status_code == 200:
+                    _parse_bybit_instruments(resp.json().get("result", {}).get("list", []))
+                    if len(valid_syms) >= 80:
+                        _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": valid_syms, "bases": valid_bases})
+                        return valid_syms, valid_bases
+            except Exception:
+                continue
+        _BYBIT_DIRECT_BLOCKED = True
 
-    proxy_data = _fetch_bybit_json_via_proxy("/v5/market/instruments-info?category=linear&status=Trading&limit=1000", timeout=7)
+    proxy_data = _fetch_bybit_json_via_proxy("/v5/market/instruments-info?category=linear&status=Trading&limit=1000", timeout=4)
     if proxy_data:
         _parse_bybit_instruments(proxy_data.get("result", {}).get("list", []))
         if len(valid_syms) >= 80:
@@ -207,7 +206,7 @@ def get_valid_bybit_linear_symbols():
 
     try:
         cg_url = clean_url(f"{SCHEME}api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=all")
-        cg_resp = requests.get(cg_url, headers=BROWSER_HEADERS, timeout=7)
+        cg_resp = requests.get(cg_url, headers=BROWSER_HEADERS, timeout=6)
         if cg_resp.status_code == 200:
             for t in cg_resp.json().get("tickers", []):
                 sym = str(t.get("symbol", "")).upper().strip()
@@ -228,6 +227,7 @@ def get_valid_bybit_linear_symbols():
 
 
 def get_scanner_candidates():
+    global _BYBIT_DIRECT_BLOCKED
     valid_syms, valid_bases = get_valid_bybit_linear_symbols()
     candidates = []
     pure_crypto_bases = set(valid_bases)
@@ -266,19 +266,20 @@ def get_scanner_candidates():
             })
         return out
 
-    for host in BYBIT_HOST_NAMES:
-        try:
-            url = clean_url(f"{SCHEME}{host}/v5/market/tickers")
-            resp = requests.get(url, params={"category": "linear"}, headers=BROWSER_HEADERS, timeout=4)
-            if resp.status_code == 200:
-                candidates = _parse_bybit_ticker_items(resp.json().get("result", {}).get("list", []))
-                if candidates:
-                    break
-        except Exception:
-            continue
+    if not _BYBIT_DIRECT_BLOCKED:
+        for host in BYBIT_HOST_NAMES:
+            try:
+                url = clean_url(f"{SCHEME}{host}/v5/market/tickers")
+                resp = requests.get(url, params={"category": "linear"}, headers=BROWSER_HEADERS, timeout=2.5)
+                if resp.status_code == 200:
+                    candidates = _parse_bybit_ticker_items(resp.json().get("result", {}).get("list", []))
+                    if candidates:
+                        break
+            except Exception:
+                continue
 
     if not candidates:
-        proxy_data = _fetch_bybit_json_via_proxy("/v5/market/tickers?category=linear", timeout=7)
+        proxy_data = _fetch_bybit_json_via_proxy("/v5/market/tickers?category=linear", timeout=4)
         if proxy_data:
             candidates = _parse_bybit_ticker_items(proxy_data.get("result", {}).get("list", []))
 
@@ -286,7 +287,7 @@ def get_scanner_candidates():
         chg_backup_map, fund_backup_map = _fetch_24h_change_and_funding_backup_map()
         try:
             cg_url = clean_url(f"{SCHEME}api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=all")
-            cg_resp = requests.get(cg_url, headers=BROWSER_HEADERS, timeout=8)
+            cg_resp = requests.get(cg_url, headers=BROWSER_HEADERS, timeout=6)
             if cg_resp.status_code == 200:
                 for t in cg_resp.json().get("tickers", []):
                     sym = str(t.get("symbol", "")).upper().strip()
@@ -338,6 +339,11 @@ def get_scanner_candidates():
 
 
 def fetch_klines(symbol, interval="5", limit=150):
+    """
+    [고속 서킷브레이커 적용]
+    미국 IP(_BYBIT_DIRECT_BLOCKED)에서는 느린 프록시를 반복 호출하지 않고
+    즉시 고속 선물 캔들 API(Bitget/Gate)를 조회하여 타임아웃(Canceled)을 원천 방지합니다.
+    """
     sym = str(symbol).upper().strip()
     if not sym.endswith("USDT") or is_stock_or_tradfi_symbol(sym):
         return pd.DataFrame()
@@ -348,25 +354,20 @@ def fetch_klines(symbol, interval="5", limit=150):
 
     iv_str = str(interval)
     iv_min = {"1": 1, "3": 3, "5": 5, "15": 15, "30": 30, "60": 60, "120": 120, "240": 240, "D": 1440}.get(iv_str, 5)
-    lim = int(min(limit, 500))
+    lim = int(min(limit, 300))
 
-    params = {"category": "linear", "symbol": sym, "interval": iv_str, "limit": lim}
-    for host in BYBIT_HOST_NAMES:
-        try:
-            url = clean_url(f"{SCHEME}{host}/v5/market/kline")
-            resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=3.5)
-            if resp.status_code == 200:
-                df = _normalize_kline_df(resp.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
-                if not df.empty and len(df) >= 15:
-                    return df
-        except Exception:
-            continue
-
-    proxy_data = _fetch_bybit_json_via_proxy(f"/v5/market/kline?category=linear&symbol={sym}&interval={iv_str}&limit={lim}", timeout=5)
-    if proxy_data:
-        df = _normalize_kline_df(proxy_data.get("result", {}).get("list", []), expected_interval_min=iv_min)
-        if not df.empty and len(df) >= 15:
-            return df
+    if not _BYBIT_DIRECT_BLOCKED:
+        params = {"category": "linear", "symbol": sym, "interval": iv_str, "limit": lim}
+        for host in BYBIT_HOST_NAMES:
+            try:
+                url = clean_url(f"{SCHEME}{host}/v5/market/kline")
+                resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=2.0)
+                if resp.status_code == 200:
+                    df = _normalize_kline_df(resp.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
+                    if not df.empty and len(df) >= 15:
+                        return df
+            except Exception:
+                continue
 
     bg_gran = {"1": "1m", "3": "3m", "5": "5m", "15": "15m", "30": "30m", "60": "1H", "120": "2H", "240": "4H", "D": "1D"}.get(iv_str, "5m")
     try:
@@ -374,7 +375,7 @@ def fetch_klines(symbol, interval="5", limit=150):
         bg_resp = requests.get(
             bg_url,
             params={"symbol": sym, "productType": "USDT-FUTURES", "granularity": bg_gran, "limit": str(lim)},
-            headers=BROWSER_HEADERS, timeout=4,
+            headers=BROWSER_HEADERS, timeout=3.0,
         )
         if bg_resp.status_code == 200:
             df = _normalize_kline_df(bg_resp.json().get("data", []), expected_interval_min=iv_min)
@@ -382,6 +383,12 @@ def fetch_klines(symbol, interval="5", limit=150):
                 return df
     except Exception:
         pass
+
+    proxy_data = _fetch_bybit_json_via_proxy(f"/v5/market/kline?category=linear&symbol={sym}&interval={iv_str}&limit={lim}", timeout=3.5)
+    if proxy_data:
+        df = _normalize_kline_df(proxy_data.get("result", {}).get("list", []), expected_interval_min=iv_min)
+        if not df.empty and len(df) >= 15:
+            return df
 
     return pd.DataFrame()
 
