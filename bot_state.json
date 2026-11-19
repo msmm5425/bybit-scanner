@@ -35,7 +35,7 @@
       "max_high_price": 0.05806,
       "peak_ts_ms": 1795053600000,
       "max_favorable_pct": 4.5,
-      "hold_minutes": 706
+      "hold_minutes": 712
     },
     "VVVUSDT": {
       "created_at": 1794732102,
@@ -88,7 +88,7 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false,
-      "hold_minutes": 5894
+      "hold_minutes": 5900
     },
     "PYTHUSDT": {
       "created_at": 1794987363,
@@ -130,7 +130,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1640
+      "hold_minutes": 1646
     },
     "PONSUSDT": {
       "created_at": 1794984239,
@@ -172,7 +172,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1692
+      "hold_minutes": 1698
     },
     "GRAMUSDT": {
       "created_at": 1794741572,
@@ -225,7 +225,7 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false,
-      "hold_minutes": 5737
+      "hold_minutes": 5743
     },
     "XPLUSDT": {
       "created_at": 1794741572,
@@ -278,7 +278,7 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false,
-      "hold_minutes": 5737
+      "hold_minutes": 5743
     },
     "TRUMPUSDT": {
       "created_at": 1794743038,
@@ -331,7 +331,7 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false,
-      "hold_minutes": 5712
+      "hold_minutes": 5718
     },
     "HYPEUSDT": {
       "created_at": 1794744726,
@@ -384,7 +384,7 @@
       "sl_alerted": false,
       "tp3_completed": false,
       "closed_alerted": false,
-      "hold_minutes": 5684
+      "hold_minutes": 5690
     },
     "PENGUUSDT": {
       "created_at": 1794985550,
@@ -425,7 +425,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1670
+      "hold_minutes": 1676
     },
     "VIRTUALUSDT": {
       "created_at": 1794989979,
@@ -467,7 +467,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1596
+      "hold_minutes": 1602
     },
     "HUSDT": {
       "created_at": 1795044096,
@@ -501,9 +501,9 @@
         "OBV 바닥 다이버전스 매집"
       ],
       "max_high_price": 0.01728,
-      "peak_ts_ms": 1795083420000,
+      "peak_ts_ms": 1795083300000,
       "max_favorable_pct": 13.68,
-      "hold_minutes": 695,
+      "hold_minutes": 701,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -550,7 +550,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1822
+      "hold_minutes": 1828
     },
     "SOONUSDT": {
       "created_at": 1795021799,
@@ -587,7 +587,7 @@
       "max_high_price": 0.2822,
       "peak_ts_ms": 1795035600000,
       "max_favorable_pct": 8.21,
-      "hold_minutes": 1066
+      "hold_minutes": 1072
     },
     "JTOUSDT": {
       "created_at": 1794979334,
@@ -633,7 +633,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1774
+      "hold_minutes": 1780
     },
     "USUALUSDT": {
       "created_at": 1795038187,
@@ -669,7 +669,7 @@
       "max_high_price": 0.010874,
       "peak_ts_ms": 1795046400000,
       "max_favorable_pct": 4.06,
-      "hold_minutes": 793
+      "hold_minutes": 799
     },
     "ALLOUSDT": {
       "created_at": 1794980736,
@@ -704,14 +704,14 @@
         "OBV 전고점 선행 돌파"
       ],
       "max_high_price": 0.1538,
-      "peak_ts_ms": 1795082400000,
+      "peak_ts_ms": 1795083000000,
       "max_favorable_pct": 5.42,
       "tp1_hit": false,
       "tp1_alerted": false,
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1751
+      "hold_minutes": 1757
     },
     "ZAMAUSDT": {
       "created_at": 1794980736,
@@ -753,7 +753,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1751
+      "hold_minutes": 1757
     },
     "BTWUSDT": {
       "created_at": 1795024453,
@@ -925,7 +925,7 @@
       "max_high_price": 0.03093,
       "peak_ts_ms": 1795057200000,
       "max_favorable_pct": 7.88,
-      "hold_minutes": 982
+      "hold_minutes": 988
     },
     "MUBARAKUSDT": {
       "created_at": 1795045561,
@@ -962,7 +962,7 @@
       "max_high_price": 0.02674,
       "peak_ts_ms": 1795060800000,
       "max_favorable_pct": 0.6,
-      "hold_minutes": 670
+      "hold_minutes": 676
     },
     "USELESSUSDT": {
       "created_at": 1794983030,
@@ -1004,7 +1004,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1712
+      "hold_minutes": 1718
     },
     "WLFIUSDT": {
       "created_at": 1794983030,
@@ -1046,7 +1046,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1712
+      "hold_minutes": 1718
     },
     "WUSDT": {
       "created_at": 1794983642,
@@ -1088,7 +1088,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1702
+      "hold_minutes": 1708
     },
     "FLUIDUSDT": {
       "created_at": 1794984239,
@@ -1129,7 +1129,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1692
+      "hold_minutes": 1698
     },
     "DGAIUSDT": {
       "created_at": 1794984957,
@@ -1170,7 +1170,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1680,
+      "hold_minutes": 1686,
       "be_armed": true
     },
     "MAGMAUSDT": {
@@ -1207,7 +1207,7 @@
       "max_high_price": 0.24545,
       "peak_ts_ms": 1795029300000,
       "max_favorable_pct": 0.57,
-      "hold_minutes": 952
+      "hold_minutes": 957
     },
     "SOPHUSDT": {
       "created_at": 1795028323,
@@ -1244,7 +1244,7 @@
       "max_high_price": 0.001127,
       "peak_ts_ms": 1795078800000,
       "max_favorable_pct": 10.06,
-      "hold_minutes": 957,
+      "hold_minutes": 963,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -1283,7 +1283,7 @@
       "max_high_price": 0.0741,
       "peak_ts_ms": 1795061700000,
       "max_favorable_pct": 7.14,
-      "hold_minutes": 735,
+      "hold_minutes": 741,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -1323,7 +1323,7 @@
       "max_high_price": 0.089,
       "peak_ts_ms": 1795059000000,
       "max_favorable_pct": 2.53,
-      "hold_minutes": 1125
+      "hold_minutes": 1131
     },
     "BLESSUSDT": {
       "created_at": 1795046913,
@@ -1359,7 +1359,7 @@
       "max_high_price": 0.012818,
       "peak_ts_ms": 1795064400000,
       "max_favorable_pct": 12.3,
-      "hold_minutes": 648,
+      "hold_minutes": 654,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -1447,7 +1447,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1650
+      "hold_minutes": 1656
     },
     "ZILUSDT": {
       "created_at": 1795049660,
@@ -1486,7 +1486,7 @@
       "max_high_price": 0.001039,
       "peak_ts_ms": 1795055400000,
       "max_favorable_pct": 2.57,
-      "hold_minutes": 602
+      "hold_minutes": 608
     },
     "TRUSTUSDT": {
       "created_at": 1794987363,
@@ -1527,7 +1527,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1640
+      "hold_minutes": 1646
     },
     "SKRUSDT": {
       "created_at": 1794987363,
@@ -1569,7 +1569,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1640
+      "hold_minutes": 1646
     },
     "ZKPUSDT": {
       "created_at": 1795020755,
@@ -1652,7 +1652,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1607
+      "hold_minutes": 1613
     },
     "GRASSUSDT": {
       "created_at": 1794989338,
@@ -1694,7 +1694,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1607
+      "hold_minutes": 1613
     },
     "PIEVERSEUSDT": {
       "created_at": 1795053783,
@@ -1811,7 +1811,7 @@
       "max_high_price": 2.987,
       "peak_ts_ms": 1795069800000,
       "max_favorable_pct": 9.29,
-      "hold_minutes": 602,
+      "hold_minutes": 608,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -1855,7 +1855,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1586
+      "hold_minutes": 1592
     },
     "SENTUSDT": {
       "created_at": 1795083286,
@@ -1893,7 +1893,7 @@
       "max_high_price": 0.02314,
       "peak_ts_ms": 1795085400000,
       "max_favorable_pct": 3.21,
-      "hold_minutes": 41
+      "hold_minutes": 47
     },
     "NIGHTUSDT": {
       "created_at": 1794991208,
@@ -1935,7 +1935,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1576
+      "hold_minutes": 1582
     },
     "ARIAUSDT": {
       "created_at": 1795025812,
@@ -2020,7 +2020,7 @@
       "max_high_price": 0.01781,
       "peak_ts_ms": 1795061700000,
       "max_favorable_pct": 1.14,
-      "hold_minutes": 412
+      "hold_minutes": 418
     },
     "ZKUSDT": {
       "created_at": 1795060675,
@@ -2057,7 +2057,7 @@
       "max_high_price": 0.00792,
       "peak_ts_ms": 1795081500000,
       "max_favorable_pct": 1.41,
-      "hold_minutes": 418
+      "hold_minutes": 424
     },
     "ZKCUSDT": {
       "created_at": 1795035698,
@@ -2143,7 +2143,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 1506
+      "hold_minutes": 1512
     },
     "ZORAUSDT": {
       "created_at": 1794996051,
@@ -2225,7 +2225,7 @@
       "max_high_price": 0.01427,
       "peak_ts_ms": 1795045500000,
       "max_favorable_pct": 0.42,
-      "hold_minutes": 689
+      "hold_minutes": 695
     },
     "IRYSUSDT": {
       "created_at": 1794996051,
@@ -2358,7 +2358,7 @@
       "max_high_price": 0.1284,
       "peak_ts_ms": 1795062600000,
       "max_favorable_pct": 0.78,
-      "hold_minutes": 840
+      "hold_minutes": 846
     },
     "MELANIAUSDT": {
       "created_at": 1795002600,
@@ -2394,7 +2394,7 @@
       "max_high_price": 0.05031,
       "peak_ts_ms": 1795027500000,
       "max_favorable_pct": 3.39,
-      "hold_minutes": 1386
+      "hold_minutes": 1392
     },
     "ASTERUSDT": {
       "created_at": 1795002600,
@@ -2431,7 +2431,7 @@
       "max_high_price": 0.5596,
       "peak_ts_ms": 1795015800000,
       "max_favorable_pct": 1.34,
-      "hold_minutes": 1386
+      "hold_minutes": 1392
     },
     "ETHFIUSDT": {
       "created_at": 1795003662,
@@ -2468,7 +2468,7 @@
       "max_high_price": 0.5272,
       "peak_ts_ms": 1795071600000,
       "max_favorable_pct": 11.74,
-      "hold_minutes": 1368,
+      "hold_minutes": 1374,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -2585,9 +2585,9 @@
         "응축 돌파 거래량 11.7배 유입"
       ],
       "max_high_price": 0.06081,
-      "peak_ts_ms": 1795082460000,
+      "peak_ts_ms": 1795082400000,
       "max_favorable_pct": 2.25,
-      "hold_minutes": 1363
+      "hold_minutes": 1369
     },
     "LAUSDT": {
       "created_at": 1795004377,
@@ -2624,7 +2624,7 @@
       "max_high_price": 0.04562,
       "peak_ts_ms": 1795011300000,
       "max_favorable_pct": 2.15,
-      "hold_minutes": 1357
+      "hold_minutes": 1362
     },
     "RUNEUSDT": {
       "created_at": 1795022486,
@@ -2662,7 +2662,7 @@
       "max_high_price": 0.537,
       "peak_ts_ms": 1795071600000,
       "max_favorable_pct": 2.56,
-      "hold_minutes": 1055
+      "hold_minutes": 1061
     },
     "HUMAUSDT": {
       "created_at": 1795004730,
@@ -2745,7 +2745,7 @@
       "max_high_price": 0.10336,
       "peak_ts_ms": 1795008600000,
       "max_favorable_pct": 2.29,
-      "hold_minutes": 1323
+      "hold_minutes": 1329
     },
     "MOCAUSDT": {
       "created_at": 1795025127,
@@ -2782,7 +2782,7 @@
       "max_high_price": 0.006986,
       "peak_ts_ms": 1795048200000,
       "max_favorable_pct": 5.91,
-      "hold_minutes": 1011
+      "hold_minutes": 1017
     },
     "EVAAUSDT": {
       "created_at": 1795008446,
@@ -2862,7 +2862,7 @@
       "max_high_price": 0.002116,
       "peak_ts_ms": 1795081500000,
       "max_favorable_pct": 4.44,
-      "hold_minutes": 1249
+      "hold_minutes": 1255
     },
     "AKEUSDT": {
       "created_at": 1795010848,
@@ -2898,7 +2898,7 @@
       "max_high_price": 0.0112747,
       "peak_ts_ms": 1795025700000,
       "max_favorable_pct": 9.4,
-      "hold_minutes": 1249
+      "hold_minutes": 1255
     },
     "AEROUSDT": {
       "created_at": 1795012246,
@@ -2935,7 +2935,7 @@
       "max_high_price": 0.4465,
       "peak_ts_ms": 1795062600000,
       "max_favorable_pct": 1.8,
-      "hold_minutes": 1225
+      "hold_minutes": 1231
     },
     "BEAMUSDT": {
       "created_at": 1795076822,
@@ -2973,7 +2973,7 @@
       "max_high_price": 0.003645,
       "peak_ts_ms": 1795077900000,
       "max_favorable_pct": 1.87,
-      "hold_minutes": 149
+      "hold_minutes": 155
     },
     "RAREUSDT": {
       "created_at": 1795017559,
@@ -3010,7 +3010,7 @@
       "max_high_price": 0.01166,
       "peak_ts_ms": 1795024800000,
       "max_favorable_pct": 1.75,
-      "hold_minutes": 1137
+      "hold_minutes": 1143
     },
     "SYRUPUSDT": {
       "created_at": 1795021453,
@@ -3047,7 +3047,7 @@
       "max_high_price": 0.1007,
       "peak_ts_ms": 1795085580000,
       "max_favorable_pct": 5.56,
-      "hold_minutes": 1072
+      "hold_minutes": 1078
     },
     "2ZUSDT": {
       "created_at": 1795034658,
@@ -3083,7 +3083,7 @@
       "max_high_price": 0.01713,
       "peak_ts_ms": 1795033800000,
       "max_favorable_pct": 0.0,
-      "hold_minutes": 852
+      "hold_minutes": 858
     },
     "AXISUSDT": {
       "created_at": 1795034658,
@@ -3119,7 +3119,7 @@
       "max_high_price": 0.09528,
       "peak_ts_ms": 1795051800000,
       "max_favorable_pct": 8.33,
-      "hold_minutes": 852,
+      "hold_minutes": 858,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -3157,7 +3157,7 @@
       "max_high_price": 0.03241,
       "peak_ts_ms": 1795085100000,
       "max_favorable_pct": 10.24,
-      "hold_minutes": 700,
+      "hold_minutes": 706,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -3197,7 +3197,7 @@
       "max_high_price": 0.09141,
       "peak_ts_ms": 1795048200000,
       "max_favorable_pct": 8.24,
-      "hold_minutes": 631
+      "hold_minutes": 637
     },
     "VELVETUSDT": {
       "created_at": 1795049303,
@@ -3233,7 +3233,7 @@
       "max_high_price": 0.08394,
       "peak_ts_ms": 1795085700000,
       "max_favorable_pct": 17.27,
-      "hold_minutes": 608,
+      "hold_minutes": 614,
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_hit": true,
@@ -3274,7 +3274,7 @@
       "max_high_price": 0.07504,
       "peak_ts_ms": 1795080600000,
       "max_favorable_pct": 8.47,
-      "hold_minutes": 556,
+      "hold_minutes": 562,
       "tp1_hit": true,
       "tp1_alerted": true
     }
@@ -4599,7 +4599,7 @@
       "rsi6_15m": 53.1,
       "oi_m": 3.0559285526399997,
       "funding_pct": 0.005,
-      "hold_minutes": 5894,
+      "hold_minutes": 5900,
       "tp1_hit": true,
       "tp2_hit": true,
       "tp3_hit": false,
@@ -4853,7 +4853,7 @@
       "rsi6_15m": 57.4,
       "oi_m": 4.209949558869995,
       "funding_pct": -0.0036,
-      "hold_minutes": 5737,
+      "hold_minutes": 5743,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -4920,7 +4920,7 @@
       "rsi6_15m": 61.5,
       "oi_m": 3.76968672462,
       "funding_pct": -0.0107,
-      "hold_minutes": 5737,
+      "hold_minutes": 5743,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -4960,7 +4960,7 @@
       "rsi6_15m": 73.2,
       "oi_m": 4.303778045600001,
       "funding_pct": -0.034999999999999996,
-      "hold_minutes": 5712,
+      "hold_minutes": 5718,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5027,7 +5027,7 @@
       "rsi6_15m": 57.3,
       "oi_m": 162.1003088369601,
       "funding_pct": 0.0025,
-      "hold_minutes": 5684,
+      "hold_minutes": 5690,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5348,7 +5348,7 @@
       "rsi6_15m": 56.0,
       "oi_m": 2.13657729042,
       "funding_pct": -0.053,
-      "hold_minutes": 1822,
+      "hold_minutes": 1828,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5427,7 +5427,7 @@
       "rsi6_15m": 62.5,
       "oi_m": 1.42024054095,
       "funding_pct": 0.005,
-      "hold_minutes": 1774,
+      "hold_minutes": 1780,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5506,7 +5506,7 @@
       "rsi6_15m": 73.0,
       "oi_m": 0.6,
       "funding_pct": 0.005,
-      "hold_minutes": 1751,
+      "hold_minutes": 1757,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5546,7 +5546,7 @@
       "rsi6_15m": 76.2,
       "oi_m": 1.1,
       "funding_pct": 0.004699999999999999,
-      "hold_minutes": 1751,
+      "hold_minutes": 1757,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5818,7 +5818,7 @@
       "rsi6_15m": 55.0,
       "oi_m": 3.9,
       "funding_pct": 0.005,
-      "hold_minutes": 1712,
+      "hold_minutes": 1718,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5858,7 +5858,7 @@
       "rsi6_15m": 59.5,
       "oi_m": 10.1,
       "funding_pct": -0.0028,
-      "hold_minutes": 1712,
+      "hold_minutes": 1718,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5898,7 +5898,7 @@
       "rsi6_15m": 74.0,
       "oi_m": 1.4,
       "funding_pct": -0.0021,
-      "hold_minutes": 1702,
+      "hold_minutes": 1708,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5938,7 +5938,7 @@
       "rsi6_15m": 69.6,
       "oi_m": 0.7,
       "funding_pct": 0.005,
-      "hold_minutes": 1692,
+      "hold_minutes": 1698,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -5978,7 +5978,7 @@
       "rsi6_15m": 61.9,
       "oi_m": 3.8,
       "funding_pct": 0.005,
-      "hold_minutes": 1692,
+      "hold_minutes": 1698,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6018,7 +6018,7 @@
       "rsi6_15m": 64.6,
       "oi_m": 0.6,
       "funding_pct": 0.005,
-      "hold_minutes": 1680,
+      "hold_minutes": 1686,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6136,7 +6136,7 @@
       "rsi6_15m": 55.3,
       "oi_m": 4.8,
       "funding_pct": 0.005,
-      "hold_minutes": 1670,
+      "hold_minutes": 1676,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6333,7 +6333,7 @@
       "rsi6_15m": 48.8,
       "oi_m": 1.0,
       "funding_pct": -0.0007999999999999999,
-      "hold_minutes": 1650,
+      "hold_minutes": 1656,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6412,7 +6412,7 @@
       "rsi6_15m": 70.2,
       "oi_m": 2.4,
       "funding_pct": 0.0026999999999999997,
-      "hold_minutes": 1640,
+      "hold_minutes": 1646,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6452,7 +6452,7 @@
       "rsi6_15m": 71.3,
       "oi_m": 0.2,
       "funding_pct": 0.005,
-      "hold_minutes": 1640,
+      "hold_minutes": 1646,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6492,7 +6492,7 @@
       "rsi6_15m": 42.4,
       "oi_m": 1.4,
       "funding_pct": -0.025500000000000002,
-      "hold_minutes": 1640,
+      "hold_minutes": 1646,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6571,7 +6571,7 @@
       "rsi6_15m": 61.8,
       "oi_m": 6.2,
       "funding_pct": -0.007600000000000001,
-      "hold_minutes": 1607,
+      "hold_minutes": 1613,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6611,7 +6611,7 @@
       "rsi6_15m": 51.7,
       "oi_m": 9.0,
       "funding_pct": 0.005,
-      "hold_minutes": 1607,
+      "hold_minutes": 1613,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6651,7 +6651,7 @@
       "rsi6_15m": 55.1,
       "oi_m": 2.9,
       "funding_pct": 0.005,
-      "hold_minutes": 1596,
+      "hold_minutes": 1602,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6809,7 +6809,7 @@
       "rsi6_15m": 61.1,
       "oi_m": 0.5,
       "funding_pct": 0.005,
-      "hold_minutes": 1586,
+      "hold_minutes": 1592,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -6889,7 +6889,7 @@
       "rsi6_15m": 69.8,
       "oi_m": 1.5,
       "funding_pct": -0.010799999999999999,
-      "hold_minutes": 1576,
+      "hold_minutes": 1582,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7086,7 +7086,7 @@
       "rsi6_15m": 91.0,
       "oi_m": 0.9,
       "funding_pct": 0.005,
-      "hold_minutes": 1506,
+      "hold_minutes": 1512,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7324,7 +7324,7 @@
       "rsi6_15m": 64.1,
       "oi_m": 0.4,
       "funding_pct": -0.0018,
-      "hold_minutes": 1386,
+      "hold_minutes": 1392,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7364,7 +7364,7 @@
       "rsi6_15m": 59.7,
       "oi_m": 17.2,
       "funding_pct": 0.0015999999999999999,
-      "hold_minutes": 1386,
+      "hold_minutes": 1392,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7404,7 +7404,7 @@
       "rsi6_15m": 61.1,
       "oi_m": 5.3,
       "funding_pct": 0.0018,
-      "hold_minutes": 1368,
+      "hold_minutes": 1374,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7524,7 +7524,7 @@
       "rsi6_15m": 47.5,
       "oi_m": 0.3,
       "funding_pct": 0.005,
-      "hold_minutes": 1363,
+      "hold_minutes": 1369,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7564,7 +7564,7 @@
       "rsi6_15m": 52.9,
       "oi_m": 0.7,
       "funding_pct": -0.065,
-      "hold_minutes": 1357,
+      "hold_minutes": 1362,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7683,7 +7683,7 @@
       "rsi6_15m": 70.2,
       "oi_m": 5.0,
       "funding_pct": 0.005,
-      "hold_minutes": 1323,
+      "hold_minutes": 1329,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7841,7 +7841,7 @@
       "rsi6_15m": 71.6,
       "oi_m": 2.8,
       "funding_pct": 0.005,
-      "hold_minutes": 1249,
+      "hold_minutes": 1255,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7920,7 +7920,7 @@
       "rsi6_15m": 71.2,
       "oi_m": 5.6,
       "funding_pct": 0.005,
-      "hold_minutes": 1249,
+      "hold_minutes": 1255,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -7960,7 +7960,7 @@
       "rsi6_15m": 68.2,
       "oi_m": 6.2,
       "funding_pct": 0.005,
-      "hold_minutes": 1225,
+      "hold_minutes": 1231,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8080,7 +8080,7 @@
       "rsi6_15m": 41.5,
       "oi_m": 1.2,
       "funding_pct": -0.10269999999999999,
-      "hold_minutes": 1137,
+      "hold_minutes": 1143,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8120,7 +8120,7 @@
       "rsi6_15m": 40.9,
       "oi_m": 1.7,
       "funding_pct": -0.0173,
-      "hold_minutes": 1125,
+      "hold_minutes": 1131,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8200,7 +8200,7 @@
       "rsi6_15m": 43.1,
       "oi_m": 0.7,
       "funding_pct": 0.005,
-      "hold_minutes": 1072,
+      "hold_minutes": 1078,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8240,7 +8240,7 @@
       "rsi6_15m": 45.0,
       "oi_m": 2.4,
       "funding_pct": 0.005,
-      "hold_minutes": 1066,
+      "hold_minutes": 1072,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8319,7 +8319,7 @@
       "rsi6_15m": 53.3,
       "oi_m": 1.5,
       "funding_pct": 0.01,
-      "hold_minutes": 1055,
+      "hold_minutes": 1061,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8399,7 +8399,7 @@
       "rsi6_15m": 57.3,
       "oi_m": 0.6,
       "funding_pct": 0.005,
-      "hold_minutes": 1011,
+      "hold_minutes": 1017,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8479,7 +8479,7 @@
       "rsi6_15m": 67.8,
       "oi_m": 1.1,
       "funding_pct": -0.002044,
-      "hold_minutes": 982,
+      "hold_minutes": 988,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8519,7 +8519,7 @@
       "rsi6_15m": 71.4,
       "oi_m": 1.2,
       "funding_pct": 0.0013,
-      "hold_minutes": 957,
+      "hold_minutes": 963,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8559,7 +8559,7 @@
       "rsi6_15m": 45.6,
       "oi_m": 0.9,
       "funding_pct": 0.005,
-      "hold_minutes": 952,
+      "hold_minutes": 957,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8639,7 +8639,7 @@
       "rsi6_15m": 43.8,
       "oi_m": 0.4,
       "funding_pct": 0.005,
-      "hold_minutes": 852,
+      "hold_minutes": 858,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8679,7 +8679,7 @@
       "rsi6_15m": 58.3,
       "oi_m": 0.5,
       "funding_pct": -0.0018520000000000001,
-      "hold_minutes": 852,
+      "hold_minutes": 858,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8719,7 +8719,7 @@
       "rsi6_15m": 50.3,
       "oi_m": 0.8,
       "funding_pct": 0.005,
-      "hold_minutes": 840,
+      "hold_minutes": 846,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8839,7 +8839,7 @@
       "rsi6_15m": 41.5,
       "oi_m": 0.3,
       "funding_pct": 0.005,
-      "hold_minutes": 793,
+      "hold_minutes": 799,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8919,7 +8919,7 @@
       "rsi6_15m": 40.6,
       "oi_m": 1.3,
       "funding_pct": -0.0274,
-      "hold_minutes": 735,
+      "hold_minutes": 741,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8959,7 +8959,7 @@
       "rsi6_15m": 85.7,
       "oi_m": 2.2,
       "funding_pct": 0.005,
-      "hold_minutes": 706,
+      "hold_minutes": 712,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -8999,7 +8999,7 @@
       "rsi6_15m": 59.8,
       "oi_m": 1.8,
       "funding_pct": 0.005,
-      "hold_minutes": 700,
+      "hold_minutes": 706,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9039,7 +9039,7 @@
       "rsi6_15m": 57.3,
       "oi_m": 1.5,
       "funding_pct": 0.005,
-      "hold_minutes": 695,
+      "hold_minutes": 701,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9079,7 +9079,7 @@
       "rsi6_15m": 47.6,
       "oi_m": 4.1,
       "funding_pct": -0.0178,
-      "hold_minutes": 689,
+      "hold_minutes": 695,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9159,7 +9159,7 @@
       "rsi6_15m": 62.4,
       "oi_m": 0.7,
       "funding_pct": 0.005,
-      "hold_minutes": 670,
+      "hold_minutes": 676,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9199,7 +9199,7 @@
       "rsi6_15m": 43.4,
       "oi_m": 2.0,
       "funding_pct": 0.005,
-      "hold_minutes": 648,
+      "hold_minutes": 654,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9239,7 +9239,7 @@
       "rsi6_15m": 70.9,
       "oi_m": 2.1,
       "funding_pct": -0.11100000000000002,
-      "hold_minutes": 631,
+      "hold_minutes": 637,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9279,7 +9279,7 @@
       "rsi6_15m": 49.1,
       "oi_m": 0.8,
       "funding_pct": 0.005,
-      "hold_minutes": 608,
+      "hold_minutes": 614,
       "tp1_hit": true,
       "tp2_hit": true,
       "tp3_hit": false,
@@ -9319,7 +9319,7 @@
       "rsi6_15m": 70.4,
       "oi_m": 19.2,
       "funding_pct": -0.0274,
-      "hold_minutes": 602,
+      "hold_minutes": 608,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9359,7 +9359,7 @@
       "rsi6_15m": 47.2,
       "oi_m": 0.6,
       "funding_pct": 0.005,
-      "hold_minutes": 602,
+      "hold_minutes": 608,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9399,7 +9399,7 @@
       "rsi6_15m": 95.5,
       "oi_m": 1.1,
       "funding_pct": -0.0063999999999999994,
-      "hold_minutes": 556,
+      "hold_minutes": 562,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9479,7 +9479,7 @@
       "rsi6_15m": 65.2,
       "oi_m": 1.5,
       "funding_pct": 0.005,
-      "hold_minutes": 418,
+      "hold_minutes": 424,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9519,7 +9519,7 @@
       "rsi6_15m": 44.6,
       "oi_m": 2.4,
       "funding_pct": 0.005,
-      "hold_minutes": 412,
+      "hold_minutes": 418,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9559,7 +9559,7 @@
       "rsi6_15m": 62.5,
       "oi_m": 2.1,
       "funding_pct": -0.0134,
-      "hold_minutes": 149,
+      "hold_minutes": 155,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9599,7 +9599,7 @@
       "rsi6_15m": 40.8,
       "oi_m": 1.8,
       "funding_pct": -0.0433,
-      "hold_minutes": 41,
+      "hold_minutes": 47,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
