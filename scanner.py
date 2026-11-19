@@ -54,6 +54,7 @@ HISTORY_RETENTION_SEC = 259200
 EPISODE_RETENTION_SEC = 604800
 MAX_NEW_ALERTS_PER_SCAN = getattr(cfg, "MAX_NEW_ALERTS_PER_SCAN", 3)
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
+DEFAULT_LONGTERM_SL_PCT = 20
 LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
 ALL_STATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json", LOCAL_RUNTIME_CACHE]))
 
@@ -236,8 +237,8 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
         return None
 
     is_long = bool(t_item.get("is_long_term") or t_item.get("track_type") == "TRACK_D")
-    sl_pct_use = int(round(to_float(t_item.get("sl_pct"), 12 if is_long else DEFAULT_FIXED_SL_PCT)))
-    trail_drop_pct = 8 if is_long else 3
+    sl_pct_use = int(round(to_float(t_item.get("sl_pct"), DEFAULT_LONGTERM_SL_PCT if is_long else DEFAULT_FIXED_SL_PCT)))
+    trail_drop_pct = 10 if is_long else 4
     trail_mult = 1.0 - (trail_drop_pct / 100.0)
     horizon_tag = "[장기 포지션] " if is_long else ""
 
@@ -256,7 +257,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             if not post_15m.empty:
                 p_idx = post_15m["high"].idxmax()
                 h_15m = to_float(post_15m.loc[p_idx, "high"], default=entry_ref)
-                if 0.40 <= (h_15m / entry_ref) <= 6.00 and h_15m >= prev_max_h:
+                if 0.40 <= (h_15m / entry_ref) <= 8.00 and h_15m >= prev_max_h:
                     prev_max_h = h_15m
                     prev_peak_ms = int(to_float(post_15m.loc[p_idx, "timestamp"], default=created_ms))
                 hist_min_low = min(hist_min_low, to_float(post_15m["low"].min(), default=entry_ref))
@@ -296,28 +297,25 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     g1 = round(max(6.5, (tp1_p - entry_ref) / entry_ref * 100.0), 1)
     g2 = round(max(12.5, (tp2_p - entry_ref) / entry_ref * 100.0), 1)
     g3 = round(max(19.5, (tp3_p - entry_ref) / entry_ref * 100.0), 1)
-
-    def1_p = max(entry_ref * 1.01, tp1_p * 0.95)
-    def2_p = max(def1_p, tp2_p * 0.95)
     msgs = []
 
-    # [3차 돌파]: 30% 익절 확정(누적 60%) + 잔여 40% 자동 트레일링(단기 -3% / 장기 -8%)
+    # [3차 돌파]: 50% 익절 확정 + 방어선 TP2 상향 + 잔여 50% 고점 대비 자동 트레일링(단기 -4% / 장기 -10%)
     if max_high >= tp3_p or t_item.get("tp3_hit"):
         for fg in ("tp1_hit", "tp2_hit", "tp3_hit", "tp1_alerted", "tp2_alerted"):
             t_item[fg] = True
-        trail3_p = max(def2_p, tp3_p * trail_mult, max_high * trail_mult)
+        trail3_p = max(tp2_p, max_high * trail_mult)
         stop_p = max(stop_p, trail3_p)
         t_item["stop_price"] = stop_p
 
         if not t_item.get("tp3_alerted"):
             t_item["tp3_alerted"] = True
-            w1, w3 = round(g1 * 0.30, 2), round(g3 * 0.30, 2)
+            w3 = round(g3 * 0.50, 2)
             tr_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
             msgs.append(
-                f"🚀 {horizon_tag}[3차 목표가(TP3) 돌파! 30% 익절 & 잔여 40% 고점 -{trail_drop_pct}% 트레일링 가동] ${base} ({symbol})\n"
+                f"🚀 {horizon_tag}[3차 목표가(TP3) 돌파! 50% 익절 & 방어선 TP2 상향 + 고점 -{trail_drop_pct}% 트레일링 가동] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
-                f"• 📊 [누적 60% 분할 익절]: 1차(30%) +{g1:.1f}%(+{w1:.2f}%) + 3차(30%) +{g3:.1f}%(+{w3:.2f}%)\n"
-                f"• 🎯 남은 40% 물량은 고점 대비 -{trail_drop_pct}% 자동 트레일링 스탑({fmt_price(stop_p)}, +{tr_pct:.1f}%)으로 끝까지 수익을 추적합니다!"
+                f"• 📊 [3차 분할 익절(비중 50%)]: +{g3:.1f}% 확정 (기여 +{w3:.2f}%)\n"
+                f"• 🎯 남은 50% 물량은 바닥 방어선 TP2({fmt_price(tp2_p)}, +{g2:.1f}%) + 고점 대비 -{trail_drop_pct}% 자동 트레일링({fmt_price(stop_p)}, +{tr_pct:.1f}%)으로 끝까지 수익을 추적합니다!"
             )
 
         if last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
@@ -325,31 +323,32 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             t_item["trailing_closed"] = True
             t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
-            exit_g = round(max(g2 * 0.9, (stop_p - entry_ref) / entry_ref * 100.0), 1)
-            w1, w3, w_rem = round(g1 * 0.30, 2), round(g3 * 0.30, 2), round(exit_g * 0.40, 2)
-            total_cum = round(w1 + w3 + w_rem, 2)
+            exit_g = round(max(g2, (stop_p - entry_ref) / entry_ref * 100.0), 1)
+            w3 = round(g3 * 0.50, 2)
+            w_rem = round(exit_g * 0.50, 2)
+            total_cum = round(w3 + w_rem, 2)
             t_item["realized_weighted_pct"] = total_cum
             msgs.append(
-                f"🎯 {horizon_tag}[3차 돌파 후 잔여 40% 트레일링 스탑 최종 익절 완료] ${base} ({symbol})\n"
+                f"🎯 {horizon_tag}[3차 돌파 후 잔여 50% 트레일링 스탑 최종 익절 완료] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 최고가 {fmt_price(max_high)} (+{max_fav:.1f}%) → 마감가 {fmt_price(stop_p)} (+{exit_g:.1f}%)\n"
+                f"• 📊 [최종 익절 내역]: 3차(50%) +{g3:.1f}%(+{w3:.2f}%) + 잔여(50%) +{exit_g:.1f}%(+{w_rem:.2f}%)\n"
                 f"• 💰 [최종 합산 확정 수익률]: +{total_cum:.2f}% 달성 (비중 100% 합산)"
             )
         return {"messages": msgs, "sl_record": None}
 
-    # [2차 돌파]: 70% 홀딩 + 2차지점 -5% 고정 방어선 (트레일링 스탑 없음)
+    # [2차 돌파]: 추가 익절 없이 100% 홀딩 + 방어선 TP1로 상향 고정 (트레일링 스탑 없음)
     if max_high >= tp2_p or t_item.get("tp2_hit"):
         for fg in ("tp1_hit", "tp2_hit", "tp1_alerted"):
             t_item[fg] = True
-        stop_p = max(stop_p, def2_p)
+        stop_p = max(stop_p, tp1_p)
         t_item["stop_price"] = stop_p
 
         if not t_item.get("tp2_alerted"):
             t_item["tp2_alerted"] = True
-            def2_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
             msgs.append(
-                f"✅ {horizon_tag}[2차 구간(TP2) 돌파 & 2차 방어선(-5%) 상향 고정] ${base} ({symbol})\n"
+                f"✅ {horizon_tag}[2차 구간(TP2) 돌파! 100% 홀딩 & 방어선 TP1 상향 고정] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
-                f"• 🛡️ [2차 방어선 설정]: 2차 지점 대비 -5% 아래인 {fmt_price(stop_p)} USDT (+{def2_pct:.1f}%)로 방어선을 고정하고 잔여 70% 물량으로 3차 목표가(+{g3:.1f}%)를 홀딩합니다."
+                f"• 🛡️ [방어선 상향 고정]: 추가 익절 없이 100% 전량 홀딩하며 방어선을 TP1({fmt_price(tp1_p)}, +{g1:.1f}%)로 상향 고정합니다."
             )
 
         if last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
@@ -357,49 +356,27 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             t_item["trailing_closed"] = True
             t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
-            def2_g = round(max(1.0, (stop_p - entry_ref) / entry_ref * 100.0), 1)
-            total_cum = round(g1 * 0.30 + def2_g * 0.70, 2)
-            t_item["realized_weighted_pct"] = total_cum
+            exit_g = round(max(g1, (stop_p - entry_ref) / entry_ref * 100.0), 1)
+            t_item["realized_weighted_pct"] = exit_g
             msgs.append(
-                f"🔒 {horizon_tag}[2차 방어선(-5%) 수익 마감 완료] ${base} ({symbol})\n"
-                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 2차 방어선({fmt_price(stop_p)}) 이탈로 잔여 70% 물량을 익절 마감합니다.\n"
-                f"• 💰 [최종 합산 확정 수익률]: +{total_cum:.2f}% 달성 (비중 100% 합산)"
+                f"🔒 {horizon_tag}[TP1 방어선 100% 전량 수익 마감 완료] ${base} ({symbol})\n"
+                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 TP1({fmt_price(stop_p)}) 이탈로 전량(100%) 익절 마감합니다.\n"
+                f"• 💰 [최종 합산 확정 수익률]: +{exit_g:.2f}% 달성 (100% 전량 익절)"
             )
         return {"messages": msgs, "sl_record": None}
 
-    # [1차 돌파]: 30% 분할 익절 + 1차지점 -5% 고정 방어선
+    # [1차 돌파]: 익절 없이 100% 홀딩 유지 (방어선 변경 없이 초기 손절선 유지)
     if max_high >= tp1_p or t_item.get("tp1_hit"):
         t_item["tp1_hit"] = True
-        stop_p = max(stop_p, def1_p)
-        t_item["stop_price"] = stop_p
-
         if not t_item.get("tp1_alerted"):
             t_item["tp1_alerted"] = True
-            w1 = round(g1 * 0.30, 2)
-            def1_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
             msgs.append(
-                f"✅ {horizon_tag}[1차 목표가(TP1) 돌파! 30% 익절 & 1차 방어선(-5%) 가동] ${base} ({symbol})\n"
+                f"✅ {horizon_tag}[1차 목표가(TP1) 돌파! 익절 없이 100% 홀딩 유지] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
-                f"• 📊 1차 분할 익절(비중 30%): +{g1:.1f}% 확정 (기여 +{w1:.2f}%)\n"
-                f"• 🛡️ [1차 방어선 설정]: 남은 70% 물량은 1차 지점 대비 -5% 아래인 {fmt_price(stop_p)} USDT (+{def1_pct:.1f}%)를 방어선으로 설정하여 2·3차 파동을 홀딩합니다."
+                f"• 📈 분할 익절 없이 100% 전량 홀딩하며 2차 목표가({fmt_price(tp2_p)}, +{g2:.1f}%) 돌파를 추적합니다."
             )
 
-        if last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
-            t_item["tp3_completed"] = True
-            t_item["trailing_closed"] = True
-            t_item["closed_alerted"] = True
-            t_item["tp3_at"] = now_ts
-            def1_g = round(max(0.5, (stop_p - entry_ref) / entry_ref * 100.0), 1)
-            total_cum = round(g1 * 0.30 + def1_g * 0.70, 2)
-            t_item["realized_weighted_pct"] = total_cum
-            msgs.append(
-                f"🔒 {horizon_tag}[1차 방어선(-5%) 수익 마감 완료] ${base} ({symbol})\n"
-                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 1차 방어선({fmt_price(stop_p)}) 이탈로 잔여 70% 물량을 안전하게 익절 마감합니다.\n"
-                f"• 💰 [최종 합산 확정 수익률]: +{total_cum:.2f}% 달성 (비중 100% 합산)"
-            )
-        return {"messages": msgs, "sl_record": None}
-
-    # [1차 도달 전]: 손절선 이탈 감시 (단기 -6% / 장기 -12%)
+    # [2차 도달 전]: 고정 손절선 이탈 감시 (단기 -6% / 장기 -20%)
     min_low = min(hist_min_low, min_1m_low)
     min_close = min(hist_min_close, min_1m_close)
     if min_low <= init_stop_p and (min_close <= init_stop_p or last_close <= init_stop_p):
@@ -444,7 +421,7 @@ def _send_signal_notifications(res, now_str):
 
 
 def _git_sync_state():
-    """로컬 메모리와 원격 상태를 합집합 병합한 뒤 GitHub에 영구 커밋·푸시 (중복 알림 원천 차단)"""
+    """로컬 메모리와 원격 상태를 합집합 병합한 뒤 GitHub에 영구 커밋·푸시"""
     try:
         subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
         subprocess.run(["git", "config", "--local", "user.name", "GitHub Actions"], check=False)
@@ -522,7 +499,7 @@ def main():
             alert_history[sym] = c_at
         is_done = bool(t_item.get("sl_alerted") or t_item.get("tp3_completed") or t_item.get("closed_alerted"))
         done_ts = int(t_item.get("sl_at") or t_item.get("tp3_at") or c_at)
-        max_age = 1209600 if t_item.get("is_long_term") else 432000
+        max_age = 2592000 if t_item.get("is_long_term") else 432000
         if (is_done and (now_ts - done_ts) > 86400) or age_sec > max_age:
             del tracked[sym]
             continue
