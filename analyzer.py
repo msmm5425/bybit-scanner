@@ -32,6 +32,7 @@ except Exception:
     postmortem = None
 
 HISTORY_FILE = getattr(cfg, "ANALYZER_HISTORY_FILE", "analyzer_history.json")
+# [수정 1] 정예 타점 기준선 90점으로 상향 고정
 ELITE_SCORE_THRESHOLD = max(90, int(getattr(cfg, "SCORE_THRESHOLD", 90)))
 FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 LONGTERM_SL_PCT = 20
@@ -169,7 +170,7 @@ def _calculate_macro_longterm_tps(price, turnover_m, df_4h, df_1d):
 
 
 def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
-    """신규 장기 포지션 Track D 3대 전략 판별 (D1·D2·D3 — 기존 유지)"""
+    """신규 장기 포지션 Track D 3대 전략 판별 (D1·D2·D3 — 90점 정예 기준 보정)"""
     if df_4h is None or df_4h.empty or len(df_4h) < 45:
         return None
 
@@ -185,6 +186,7 @@ def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
     ma20_4h = to_float(c4.rolling(20, min_periods=5).mean().iloc[-1], price)
     ma50_4h = to_float(c4.rolling(50, min_periods=10).mean().iloc[-1], price)
 
+    # D1: 스텔스 OI · OBV 선행 매집
     hi_10d = to_float(h4.iloc[-60:-1].max(), price * 1.05)
     obv_hi_10d = to_float(obv4.iloc[-60:-1].max(), 0.0)
     if -3.0 <= change_24h <= 11.0 and oi_ratio >= 28.0 and funding_pct <= 0.008:
@@ -200,6 +202,7 @@ def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
                 ],
             }
 
+    # D2: 매집봉(Test Pump) 출현 후 거래량 건조 눌림목 반등
     recent_30 = df_4h.iloc[-30:-2]
     vr_30 = v4_ratio.iloc[-30:-2]
     if not vr_30.empty and float(vr_30.max()) >= 3.8:
@@ -224,6 +227,7 @@ def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
                 ],
             }
 
+    # D3: 4H · 1D 장기 박스권 초응축 30일 신고가 첫 돌파
     if len(df_4h) >= 120:
         hi_30d = to_float(h4.iloc[:-1].max(), price)
         lo_30d = to_float(l4.iloc[:-1].min(), price * 0.8)
@@ -284,15 +288,10 @@ def analyze_symbol(coin):
     ma20_15m_val = to_float(ma20.iloc[-1], price)
     ma20_disp_pct = ((price - ma20_15m_val) / max(ma20_15m_val, 1e-8)) * 100.0
 
-    rsi6_s = _calc_rsi(closes, 6)
-    rsi6_15m = round(to_float(rsi6_s.iloc[-1], 50.0), 1)
-    rsi6_prev = to_float(rsi6_s.iloc[-2], 50.0)
-    min_rsi6_6 = round(to_float(rsi6_s.iloc[-6:].min(), 50.0), 1)
-
+    rsi6_15m = round(to_float(_calc_rsi(closes, 6).iloc[-1], 50.0), 1)
     kdj_j_s = _calc_kdj_j(df_15m, 9)
     kdj_j_15m = round(to_float(kdj_j_s.iloc[-1], 50.0), 1)
     kdj_j_prev = to_float(kdj_j_s.iloc[-2], 50.0)
-    min_kdj_j_6 = round(to_float(kdj_j_s.iloc[-6:].min(), 50.0), 1)
 
     vol_ma20 = vols.rolling(20, min_periods=5).mean().replace(0, np.nan)
     vol_ratios = (vols / vol_ma20).replace([np.inf, -np.inf], np.nan).fillna(0.0)
@@ -307,7 +306,7 @@ def analyze_symbol(coin):
     htf_status = "1H 정배열지지" if (price >= ma20_1h >= ma50_1h * 0.995) else ("1H 중심선지지" if htf_bull else "1H 눌림목지지")
     oi_ratio = round((oi_m / max(turnover_m, 0.1)) * 100.0, 1)
 
-    # [1순위] 신규 장기 포지션(Track D: D1·D2·D3) — 기존 그대로 유지
+    # [1순위] 신규 장기 포지션(Track D: D1·D2·D3) — 장기 고정손절 -20%, 90점 이상 + 단기 극과열 차단
     if oi_m >= 0.4 and turnover_m >= 2.5 and rsi6_15m < 80.0 and ma20_disp_pct < 8.0:
         df_4h = fetch_klines(symbol, interval="240", limit=180)
         macro_d = _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h)
@@ -348,7 +347,7 @@ def analyze_symbol(coin):
                 "reason_str": " / ".join(reasons[:4]),
             }
 
-    # 단기·스윙(Track A·B·C) 과열 추격 차단
+    # [수정 1] 단기·스윙(Track A·B·C) 단기 고점 과열 추격 원천 차단 (RSI6 >= 78 또는 20MA 이격 >= +6.0%)
     if rsi6_15m >= 78.0 or ma20_disp_pct >= 6.0:
         return None
 
@@ -358,7 +357,6 @@ def analyze_symbol(coin):
     swing_high = to_float(highs.iloc[-48:-1].max(), price * 1.03)
     swing_low = to_float(lows.iloc[-48:-1].min(), price * 0.95)
     fib_retracement = (swing_high - price) / max(swing_high - swing_low, price * 0.01)
-    pullback_from_high_pct = ((swing_high - price) / max(swing_high, 1e-8)) * 100.0
 
     reasons = []
     supply_score = (10 if oi_ratio >= 18.0 else (7 if oi_ratio >= 8.0 else 4)) + (10 if funding_pct < -0.005 else (7 if funding_pct <= 0.012 else 3))
@@ -367,57 +365,18 @@ def analyze_symbol(coin):
     if funding_pct < -0.005:
         reasons.append(f"음수 펀딩 숏스퀴즈({funding_pct:+.4f}%)")
 
-    is_breakout_b = price >= to_float(highs.iloc[-24:-2].max(), price) * 0.992 and vol_mult >= 2.0 and change_24h >= 3.0
-
-    # [핵심 수정] Track C (대장주 심층 눌림목): 기존 조기 진입 후 -6% 손절되던 스탑헌팅 바닥 구간에서 반등 확인 후 진입
-    if change_24h >= 12.0 and not is_breakout_b:
-        # 1) 얕은 조기 눌림(Fib < 0.48 또는 고점 대비 -6.5% 미만 조정) 전면 차단 (Track A로 새지 않도록 즉시 return None)
-        if not (0.48 <= fib_retracement <= 0.78 and pullback_from_high_pct >= 6.5 and price >= swing_low * 1.015):
-            return None
-
-        # 2) 최근 6봉(90분) 내 실제 과매도 털기(Flush/스탑헌팅) 경과 필수 확인
-        touched_ma20_flush = to_float(lows.iloc[-6:].min(), price) <= ma20_15m_val * 0.995
-        had_flush = (min_rsi6_6 <= 38.0) or (min_kdj_j_6 <= 22.0) or touched_ma20_flush
-        if not had_flush:
-            return None
-
-        # 3) 떨어지는 칼날 차단 — 양봉 전환 또는 긴 아래꼬리(망치형) 지지 + RSI/J선 동시 상방 턴 필수
-        c_open, c_close = to_float(opens.iloc[-1], price), to_float(closes.iloc[-1], price)
-        c_high, c_low = to_float(highs.iloc[-1], price), to_float(lows.iloc[-1], price)
-        p_open, p_close = to_float(opens.iloc[-2], price), to_float(closes.iloc[-2], price)
-        p_high, p_low = to_float(highs.iloc[-2], price), to_float(lows.iloc[-2], price)
-
-        curr_lwick = (min(c_open, c_close) - c_low) / max(c_high - c_low, 1e-10)
-        prev_lwick = (min(p_open, p_close) - p_low) / max(p_high - p_low, 1e-10)
-        max_lwick = max(curr_lwick, prev_lwick)
-
-        is_bullish_turn = (c_close > c_open) or (curr_lwick >= 0.45 and c_close >= p_low)
-        is_momentum_turn = (kdj_j_15m > kdj_j_prev) and (rsi6_15m > rsi6_prev) and (rsi6_15m <= 60.0)
-        is_holding_low = c_close >= to_float(lows.iloc[-4:].min(), c_low) * 1.003
-
-        if not (is_bullish_turn and is_momentum_turn and is_holding_low):
-            return None
-
-        # 4) 조정 중 거래량 건조(매도세 소진) 여부 확인
-        avg_v_pullback = to_float(vols.iloc[-4:-1].mean(), 1.0)
-        avg_v_base = to_float(vols.iloc[-20:-4].mean(), 1.0)
-        vol_dry_up = avg_v_base > 0 and (avg_v_pullback / avg_v_base) <= 0.70
-
+    if change_24h >= 12.0 and 0.28 <= fib_retracement <= 0.68 and price >= swing_low * 1.02:
         track_type = "TRACK_C"
-        track_title = "🚀 [Track C · 대장주 심층 눌림목(바닥 확인) 반등 타점]"
+        track_title = "🚀 [Track C · 대장주 핵심 눌림목 2파동 타점]"
         tech_score = (
-            (34 if 0.52 <= fib_retracement <= 0.72 else 29)
-            + (18 if price >= ma20_1h * 0.985 else (14 if price >= ma50_1h * 0.985 else 8))
-            + (14 if obv_strong else (11 if vol_dry_up else 7))
-            + (14 if (min_rsi6_6 <= 30.0 or max_lwick >= 0.35) else 9)
-            + (8 if (c_close > c_open and rsi6_15m <= 55.0) else 4)
+            (36 if 0.36 <= fib_retracement <= 0.62 else 31)
+            + (18 if price >= ma20_1h else (14 if price >= ma50_1h * 0.99 else 0))
+            + (14 if obv_strong else 9)
+            + (14 if (closes.iloc[-1] >= opens.iloc[-1] and kdj_j_15m >= kdj_j_prev) else 9)
+            + (8 if 35.0 <= rsi6_15m <= 68.0 else 0)
         )
-        reasons.insert(0, f"과매도 털기(저점 RSI {min_rsi6_6:.1f}) 완료 후 바닥 반등 턴")
-        reasons.insert(0, f"대장주(+{change_24h:.1f}%) 고점대비 -{pullback_from_high_pct:.1f}% · Fib {fib_retracement:.2f} 심층 눌림")
-        if max_lwick >= 0.35:
-            reasons.append("15m 아래꼬리 스탑헌팅 매물 흡수 확인")
-
-    elif is_breakout_b:
+        reasons.insert(0, f"대장주(+{change_24h:.1f}%) Fib {fib_retracement:.2f} 눌림 지지")
+    elif price >= to_float(highs.iloc[-24:-2].max(), price) * 0.992 and vol_mult >= 2.0 and change_24h >= 3.0:
         track_type = "TRACK_B"
         track_title = "🔥 [Track B · 수급 폭발 전고점 돌파 타점]"
         tech_score = (
@@ -428,7 +387,6 @@ def analyze_symbol(coin):
             + (8 if 48.0 <= rsi6_15m <= 74.0 else 0)
         )
         reasons.insert(0, f"15분봉 거래량 {vol_mult:.1f}배 포켓피벗 돌파")
-
     else:
         track_type = "TRACK_A"
         track_title = "💎 [Track A · 바닥권 에너지 응축 초입 타점]"
