@@ -3228,6 +3228,41 @@
       "tp1_hit": true,
       "tp1_alerted": true
     },
+    "CFGUSDT": {
+      "created_at": 1795092871,
+      "track_type": "TRACK_A",
+      "is_long_term": false,
+      "score": 91,
+      "entry_price": 0.06505,
+      "swing_high_line": 0.07274,
+      "entry_low": 0.064855,
+      "entry_high": 0.065148,
+      "initial_stop_price": 0.061147,
+      "stop_price": 0.061147,
+      "sl_pct": 6,
+      "tps": [
+        0.07136,
+        0.076889,
+        0.085541
+      ],
+      "tp_pcts": [
+        9.7,
+        18.2,
+        31.5
+      ],
+      "vol_mult": 2.6,
+      "rsi6_15m": 52.5,
+      "oi_m": 0.5,
+      "turnover_m": 4.0,
+      "funding_pct": -0.0473,
+      "reasons": [
+        "볼린저/켈트너 응축(2.3%) 후 전환",
+        "음수 펀딩 숏스퀴즈(-0.0473%)"
+      ],
+      "max_high_price": 0.06505,
+      "peak_ts_ms": 1795092871000,
+      "max_favorable_pct": 0.0
+    },
     "MMTUSDT": {
       "created_at": 1794996673,
       "track_type": "TRACK_A",
@@ -3364,7 +3399,8 @@
     "UAIUSDT": 1794746527,
     "BERAUSDT": 1794748544,
     "PUMPUSDT": 1794778487,
-    "UNITASUSDT": 1794821652
+    "UNITASUSDT": 1794821652,
+    "CFGUSDT": 1795092871
   },
   "sl_history": {
     "PYTHUSDT_1794739168": {
@@ -9659,6 +9695,46 @@
       "rsi6_15m": 48.1,
       "oi_m": 3.0,
       "funding_pct": -0.0067,
+      "hold_minutes": 0,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp3_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "trailing_closed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "CFGUSDT_1795092871": {
+      "symbol": "CFGUSDT",
+      "created_at": 1795092871,
+      "track_type": "TRACK_A",
+      "is_long_term": false,
+      "score": 91,
+      "entry_price": 0.06505,
+      "initial_stop_price": 0.061147,
+      "stop_price": 0.061147,
+      "sl_pct": 6.0,
+      "tps": [
+        0.07136,
+        0.076889,
+        0.085541
+      ],
+      "tp_pcts": [
+        9.7,
+        18.2,
+        31.5
+      ],
+      "max_high_price": 0.06505,
+      "max_favorable_pct": 0.0,
+      "realized_weighted_pct": 0.0,
+      "vol_mult": 2.6,
+      "rsi6_15m": 52.5,
+      "oi_m": 0.5,
+      "funding_pct": -0.0473,
       "hold_minutes": 0,
       "tp1_hit": false,
       "tp2_hit": false,
