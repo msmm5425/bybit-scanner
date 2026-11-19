@@ -17,8 +17,8 @@ except ImportError:
     import re
     _FALLBACK_STOCKS = {
         "SAMSUNG", "HYNIX", "SKHYNIX", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
-        "KOSPI", "LITE", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "AMZN", "META", "NFLX",
-        "MSTR", "COIN", "SPY", "QQQ", "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX",
+        "KOSPI", "LITE", "ANTA", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "AMZN",
+        "META", "NFLX", "MSTR", "COIN", "SPY", "QQQ", "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX",
     }
     def is_stock_or_tradfi_symbol(sym_or_base):
         s = str(sym_or_base or "").upper().strip()
@@ -52,7 +52,8 @@ RE_ALERT_COOLDOWN_SEC = 86400
 SL_RECOVERY_COOLDOWN_SEC = 14400
 HISTORY_RETENTION_SEC = 259200
 EPISODE_RETENTION_SEC = 604800
-MAX_NEW_ALERTS_PER_SCAN = getattr(cfg, "MAX_NEW_ALERTS_PER_SCAN", 3)
+# [수정 1] 1회 스캔당 신규 발송 최대 2건으로 압축
+MAX_NEW_ALERTS_PER_SCAN = 2
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 DEFAULT_LONGTERM_SL_PCT = 20
 LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
@@ -215,7 +216,7 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
     signal_episodes[ep_key] = {
         "symbol": symbol, "created_at": c_at, "track_type": t_item.get("track_type", "TRACK_A"),
         "is_long_term": bool(t_item.get("is_long_term", False)),
-        "score": int(t_item.get("score", 85)), "entry_price": to_float(t_item.get("entry_price")),
+        "score": int(t_item.get("score", 90)), "entry_price": to_float(t_item.get("entry_price")),
         "initial_stop_price": to_float(t_item.get("initial_stop_price") or t_item.get("stop_price")),
         "stop_price": to_float(t_item.get("stop_price")), "sl_pct": to_float(t_item.get("sl_pct", DEFAULT_FIXED_SL_PCT)),
         "tps": t_item.get("tps", []), "tp_pcts": t_item.get("tp_pcts", []),
@@ -275,8 +276,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     base = symbol.replace("USDT", "")
     has_live_1m = False
     has_live_price = False
-    last_close = 0.0
-    last_ts_ms = 0
+    last_close, last_ts_ms = 0.0, 0
     min_1m_low, min_1m_close = None, None
 
     if not post_1m.empty:
@@ -293,7 +293,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             has_live_1m = True
             has_live_price = True
     else:
-        # [핵심 버그 수정] 1분봉 조회 실패 시 절대 진입가(entry_ref)를 현재가로 대체하지 않음
         max_high, peak_ts_ms = max(prev_max_h, entry_ref), prev_peak_ms
         if hist_last_close > 0 and hist_last_ts_ms > 0:
             has_live_price = True
@@ -342,8 +341,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
             exit_g = round(max(g2, (stop_p - entry_ref) / entry_ref * 100.0), 1)
-            w3 = round(g3 * 0.50, 2)
-            w_rem = round(exit_g * 0.50, 2)
+            w3, w_rem = round(g3 * 0.50, 2), round(exit_g * 0.50, 2)
             total_cum = round(w3 + w_rem, 2)
             t_item["realized_weighted_pct"] = total_cum
             msgs.append(
@@ -369,7 +367,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 🛡️ [방어선 상향 고정]: 추가 익절 없이 100% 전량 홀딩하며 방어선을 TP1({fmt_price(tp1_p)}, +{g1:.1f}%)로 상향 고정합니다."
             )
 
-        # 실측 1분봉 종가(has_live_1m)가 고점 이후 실제 TP1 방어선 이하로 마감했을 때만 청산 처리
         if has_live_1m and last_close > 0 and last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
             t_item["tp3_completed"] = True
             t_item["trailing_closed"] = True
@@ -384,7 +381,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             )
         return {"messages": msgs, "sl_record": None}
 
-    # [1차 돌파]: 익절 없이 100% 홀딩 유지 (방어선 변경 없이 초기 손절선 유지)
+    # [1차 돌파]: 익절 없이 100% 홀딩 유지
     if max_high >= tp1_p or t_item.get("tp1_hit"):
         t_item["tp1_hit"] = True
         if not t_item.get("tp1_alerted"):
@@ -395,7 +392,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 📈 분할 익절 없이 100% 전량 홀딩하며 2차 목표가({fmt_price(tp2_p)}, +{g2:.1f}%) 돌파를 추적합니다."
             )
 
-    # [2차 도달 전]: 고정 손절선 이탈 감시 (단기 -6% / 장기 -20%) — 실측 캔들 데이터가 있을 때만 판정
+    # [2차 도달 전]: 고정 손절선 이탈 감시 (단기 -6% / 장기 -20%)
     valid_lows = [v for v in (hist_min_low, min_1m_low) if v is not None and v > 0]
     valid_closes = [v for v in (hist_min_close, min_1m_close) if v is not None and v > 0]
     if has_live_price and valid_lows and valid_closes:
@@ -408,7 +405,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             t_item["sl_at"] = now_ts
             sl_payload = {
                 "symbol": symbol, "track_type": t_item.get("track_type", "TRACK_A"),
-                "score": int(t_item.get("score", 85)), "entry_price": entry_ref,
+                "score": int(t_item.get("score", 90)), "entry_price": entry_ref,
                 "stop_price": init_stop_p, "sl_trigger_price": trig,
                 "sl_pct": sl_pct_use, "created_at": created_at, "sl_at": now_ts,
                 "hold_minutes": hold_min, "max_high_price": max_high, "max_favorable_pct": max_fav,
@@ -443,7 +440,6 @@ def _send_signal_notifications(res, now_str):
 
 
 def _git_sync_state():
-    """로컬 메모리와 원격 상태를 합집합 병합한 뒤 GitHub에 영구 커밋·푸시"""
     try:
         subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
         subprocess.run(["git", "config", "--local", "user.name", "GitHub Actions"], check=False)
@@ -555,14 +551,17 @@ def main():
         save_state(state)
         return
 
+    def _recent_sl_count(sym_check):
+        return sum(
+            1 for v in sl_history.values()
+            if isinstance(v, dict) and v.get("symbol") == sym_check and (now_ts - int(v.get("sl_at", 0))) < RE_ALERT_COOLDOWN_SEC
+        )
+
     def _was_stopped_recently(sym_check):
         pt = tracked.get(sym_check)
-        if pt and pt.get("sl_alerted"):
+        if pt and pt.get("sl_alerted") and (now_ts - int(pt.get("sl_at") or pt.get("created_at") or 0)) < RE_ALERT_COOLDOWN_SEC:
             return True
-        return any(
-            isinstance(v, dict) and v.get("symbol") == sym_check and (now_ts - int(v.get("sl_at", 0))) < RE_ALERT_COOLDOWN_SEC
-            for v in sl_history.values()
-        )
+        return _recent_sl_count(sym_check) > 0
 
     to_analyze = []
     for c in candidates:
@@ -572,7 +571,9 @@ def main():
         prev_t = tracked.get(sym)
         if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed") and not prev_t.get("closed_alerted"):
             continue
-        cd = SL_RECOVERY_COOLDOWN_SEC if _was_stopped_recently(sym) else RE_ALERT_COOLDOWN_SEC
+        # [수정 3] 최근 24시간 내 이미 2회 이상 손절된 종목은 24시간 완전 차단
+        sl_cnt = _recent_sl_count(sym)
+        cd = SL_RECOVERY_COOLDOWN_SEC if (_was_stopped_recently(sym) and sl_cnt < 2) else RE_ALERT_COOLDOWN_SEC
         if (now_ts - int(alert_history.get(sym, 0))) < cd:
             continue
         to_analyze.append(c)
@@ -602,12 +603,15 @@ def main():
 
         elapsed_alert = now_ts - int(alert_history.get(sym, 0))
         was_sl = _was_stopped_recently(sym)
+        sl_cnt = _recent_sl_count(sym)
+
+        # [수정 3] 손절 후 4~24시간 V자 재진입 엄격화: 92점 이상 + RSI6 < 68 비과열 + 2연속 손절 방지
         if was_sl and elapsed_alert < RE_ALERT_COOLDOWN_SEC:
-            if elapsed_alert < SL_RECOVERY_COOLDOWN_SEC or res["score"] < 88:
+            if sl_cnt >= 2 or elapsed_alert < SL_RECOVERY_COOLDOWN_SEC or res["score"] < 92 or to_float(res.get("rsi6_15m"), 50.0) >= 68.0:
                 continue
-            res["track_title"] = "🔄 [스탑헌팅 후 V자 탈환 재진입 타점]"
-            if "스탑헌팅 바닥 확인 후 V자 재탈환" not in res["reasons"]:
-                res["reasons"].insert(0, "스탑헌팅 바닥 확인 후 V자 재탈환")
+            res["track_title"] = "🔄 [스탑헌팅 후 V자 탈환 정예 재진입]"
+            if "스탑헌팅 바닥 확인 후 비과열 V자 재탈환" not in res["reasons"]:
+                res["reasons"].insert(0, "스탑헌팅 바닥 확인 후 비과열 V자 재탈환")
             res["reason_str"] = " / ".join(res["reasons"])
         elif elapsed_alert < RE_ALERT_COOLDOWN_SEC:
             continue
