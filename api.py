@@ -21,12 +21,11 @@ BYBIT_HOST_NAMES = (
     "api.bybit-tr.com",
 )
 
-# API 일시 장애 시에도 작동하는 정적 백업 블랙리스트 (LITE, SKHY, SNDK, SOXL 등 포함)
 STOCK_TRADFI_EXACT_BLACKLIST = {
     "SAMSUNG", "HYNIX", "SKHYNIX", "SKHY", "SKH", "SSNLF", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
     "CELLTRION", "LGCHEM", "LGES", "KIA", "KB", "SHINHAN", "HANA", "WOORI", "COUPANG",
     "KOSPI", "KOSDAQ", "KRW", "KRWUSDT", "LITE", "SNDK", "SOXL", "SOXS", "KORU", "CIEN",
-    "COHR", "MSI", "TSLL", "NVDL", "NVDX", "TQQQ", "SQQQ", "CONL", "MSTU", "MSTX",
+    "COHR", "MSI", "TSLL", "NVDL", "NVDX", "TQQQ", "SQQQ", "CONL", "MSTU", "MSTX", "ANTA",
     "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "GOOGL", "AMZN", "META", "NFLX", "AMD",
     "INTC", "TSM", "ASML", "ARM", "PLTR", "COIN", "MSTR", "HOOD", "BABA", "BIDU",
     "JD", "PDD", "NIO", "XPEV", "LI", "SPY", "QQQ", "IWM", "DIA", "TLT", "ARKK", "SMH",
@@ -67,7 +66,6 @@ def clean_url(raw_url):
 
 
 def _is_bybit_item_tradfi(it):
-    """Bybit V5 instruments-info 공식 메타데이터로 주식/ETF/원자재/외환(TradFi) 판별"""
     if not isinstance(it, dict):
         return False
     sym_type = str(it.get("symbolType") or "").lower().strip()
@@ -84,11 +82,10 @@ def _is_bybit_item_tradfi(it):
 
 
 def _fetch_bitget_rwa_blocklist():
-    """Bitget 공식 계약 API에서 isRwa == 'YES'인 전체 주식/ETF/원자재 종목(300종+) 자동 수집"""
     syms, bases = set(), set()
     try:
         url = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/contracts?productType=USDT-FUTURES")
-        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=3.5)
+        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=4.0)
         if resp.status_code == 200:
             for it in resp.json().get("data", []):
                 is_rwa = str(it.get("isRwa") or "").upper().strip() == "YES"
@@ -107,11 +104,10 @@ def _fetch_bitget_rwa_blocklist():
 
 
 def _fetch_okx_tradfi_blocklist():
-    """OKX 공식 SWAP API에서 instCategory가 3(주식/ETF) 또는 4(원자재)인 종목(160종+) 자동 수집"""
     syms, bases = set(), set()
     try:
         url = clean_url(f"{SCHEME}www.okx.com/api/v5/public/instruments?instType=SWAP")
-        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=3.5)
+        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=4.0)
         if resp.status_code == 200:
             for it in resp.json().get("data", []):
                 cat = str(it.get("instCategory") or "").strip()
@@ -127,7 +123,6 @@ def _fetch_okx_tradfi_blocklist():
 
 
 def _ensure_dynamic_tradfi_blocklist():
-    """15분 캐시 주기로 Bitget(isRwa) + OKX(instCategory) 주식/RWA 차단 목록을 병렬 갱신"""
     now = time.time()
     if now - _DYNAMIC_TRADFI_CACHE["ts"] < 900 and _DYNAMIC_TRADFI_CACHE["bases"]:
         return
@@ -158,11 +153,6 @@ def _register_dynamic_tradfi(sym, base=None):
 
 
 def is_stock_or_tradfi_symbol(sym_or_base):
-    """
-    [영구적 TradFi/주식/ETF/원자재 차단 필터]
-    1) 거래소 공식 API 동적 수집 목록 (Bybit symbolType + Bitget isRwa='YES' + OKX instCategory 3/4)
-    2) 정적 백업 블랙리스트 및 키워드
-    """
     _ensure_dynamic_tradfi_blocklist()
     s = str(sym_or_base or "").upper().strip()
     if not s:
@@ -186,7 +176,7 @@ def is_stock_or_tradfi_symbol(sym_or_base):
     return False
 
 
-def _fetch_bybit_json_via_proxy(path_and_query, timeout=4):
+def _fetch_bybit_json_via_proxy(path_and_query, timeout=4.5):
     target_url = clean_url(f"{SCHEME}api.bybit.com{path_and_query}")
     encoded = urllib.parse.quote(target_url, safe="")
     proxy_urls = (
@@ -339,7 +329,7 @@ def get_valid_bybit_linear_symbols():
         q = "/v5/market/instruments-info?category=linear&status=Trading&limit=1000"
         if cursor:
             q += f"&cursor={urllib.parse.quote(cursor, safe='')}"
-        proxy_data = _fetch_bybit_json_via_proxy(q, timeout=4)
+        proxy_data = _fetch_bybit_json_via_proxy(q, timeout=4.5)
         if not proxy_data:
             break
         res_obj = proxy_data.get("result", {})
@@ -430,7 +420,7 @@ def get_scanner_candidates():
                 continue
 
     if not candidates:
-        proxy_data = _fetch_bybit_json_via_proxy("/v5/market/tickers?category=linear", timeout=4)
+        proxy_data = _fetch_bybit_json_via_proxy("/v5/market/tickers?category=linear", timeout=4.5)
         if proxy_data:
             candidates = _parse_bybit_ticker_items(proxy_data.get("result", {}).get("list", []))
 
@@ -507,7 +497,7 @@ def fetch_klines(symbol, interval="5", limit=150):
         for host in BYBIT_HOST_NAMES:
             try:
                 url = clean_url(f"{SCHEME}{host}/v5/market/kline")
-                resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=2.0)
+                resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=2.5)
                 if resp.status_code == 200:
                     df = _normalize_kline_df(resp.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
                     if not df.empty and len(df) >= 15:
@@ -521,7 +511,7 @@ def fetch_klines(symbol, interval="5", limit=150):
         bg_resp = requests.get(
             bg_url,
             params={"symbol": sym, "productType": "USDT-FUTURES", "granularity": bg_gran, "limit": str(lim)},
-            headers=BROWSER_HEADERS, timeout=3.0,
+            headers=BROWSER_HEADERS, timeout=4.0,
         )
         if bg_resp.status_code == 200:
             df = _normalize_kline_df(bg_resp.json().get("data", []), expected_interval_min=iv_min)
@@ -530,7 +520,7 @@ def fetch_klines(symbol, interval="5", limit=150):
     except Exception:
         pass
 
-    proxy_data = _fetch_bybit_json_via_proxy(f"/v5/market/kline?category=linear&symbol={sym}&interval={iv_str}&limit={lim}", timeout=3.5)
+    proxy_data = _fetch_bybit_json_via_proxy(f"/v5/market/kline?category=linear&symbol={sym}&interval={iv_str}&limit={lim}", timeout=4.5)
     if proxy_data:
         df = _normalize_kline_df(proxy_data.get("result", {}).get("list", []), expected_interval_min=iv_min)
         if not df.empty and len(df) >= 15:
@@ -545,7 +535,7 @@ def fetch_verified_1m_klines(symbol, entry_ref=0.0, limit=25):
         return pd.DataFrame()
     if entry_ref and entry_ref > 0:
         last_close = to_float(df["close"].iloc[-1], 0.0)
-        if last_close <= 0 or not (0.40 <= (last_close / entry_ref) <= 2.60):
+        if last_close <= 0 or not (0.40 <= (last_close / entry_ref) <= 15.0):
             return pd.DataFrame()
     return df
 # === END OF FILE ===
