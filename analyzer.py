@@ -34,7 +34,7 @@ except Exception:
 HISTORY_FILE = getattr(cfg, "ANALYZER_HISTORY_FILE", "analyzer_history.json")
 SCORE_THRESHOLD = int(getattr(cfg, "SCORE_THRESHOLD", 85))
 FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
-LONGTERM_SL_PCT = 12
+LONGTERM_SL_PCT = 20
 
 
 def get_dynamic_tp_params():
@@ -123,11 +123,7 @@ def _calculate_resistance_based_tps(price, df_15m, df_1h):
 
 
 def _calculate_macro_longterm_tps(price, turnover_m, df_4h, df_1d):
-    """
-    [장기 포지션(Track D) 전용 큰 시간 프레임(4H·1D) 종목별 개별 3차 TP 산출]
-    - 대시세 11종 검토 결과를 반영하여 거래대금 탄력도(Tier 1~3), 4H 30일 박스 폭,
-      1D 120일 전고점 매물대, 일봉 ATR, 피보나치 확장(1.618 / 2.618 / 4.236)으로 종목별 고유 TP 산출
-    """
+    """장기 포지션(Track D) 전용 큰 시간 프레임(4H·1D) 종목별 개별 TP 산출"""
     h4 = df_4h["high"].astype(float)
     l4 = df_4h["low"].astype(float)
     box_h_30d = to_float(h4.max(), price * 1.15)
@@ -173,12 +169,7 @@ def _calculate_macro_longterm_tps(price, turnover_m, df_4h, df_1d):
 
 
 def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
-    """
-    [신규 장기 포지션 Track D 3대 전략 판별]
-    D1: 스텔스 OI · OBV 선행 매집
-    D2: 매집봉(Test Pump) 출현 후 거래량 건조 눌림목
-    D3: 4H · 1D 30일 장기 박스권 초응축 신고가 첫 돌파
-    """
+    """신규 장기 포지션 Track D 3대 전략 판별 (D1·D2·D3)"""
     if df_4h is None or df_4h.empty or len(df_4h) < 45:
         return None
 
@@ -306,7 +297,7 @@ def analyze_symbol(coin):
     htf_status = "1H 정배열지지" if (price >= ma20_1h >= ma50_1h * 0.995) else ("1H 중심선지지" if htf_bull else "1H 눌림목지지")
     oi_ratio = round((oi_m / max(turnover_m, 0.1)) * 100.0, 1)
 
-    # [1순위] 신규 장기 포지션(Track D: D1·D2·D3) 조건 충족 시 별도 장기 TP/SL 적용
+    # [1순위] 신규 장기 포지션(Track D: D1·D2·D3) — 장기 고정손절 -20%
     if oi_m >= 0.4 and turnover_m >= 2.5:
         df_4h = fetch_klines(symbol, interval="240", limit=180)
         macro_d = _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h)
@@ -320,7 +311,7 @@ def analyze_symbol(coin):
                 "base_coin": base_coin,
                 "track_type": "TRACK_D",
                 "is_long_term": True,
-                "position_horizon": "장기 포지션 (4H·1D 매집 초입)",
+                "position_horizon": "장기 포지션 (1개월 이상 홀딩 예상)",
                 "sub_strategy": macro_d["sub_strategy"],
                 "track_title": "🐋 [장기 포지션 · 세력 대시세 매집 초입]",
                 "score": macro_d["score"],
@@ -339,7 +330,7 @@ def analyze_symbol(coin):
                 "entry_high": round(price * 1.0050, 6),
                 "stop_price": stop_price,
                 "sl_pct": LONGTERM_SL_PCT,
-                "sl_note": f"장기스윙손절(-{LONGTERM_SL_PCT}% · 4H박스하단)",
+                "sl_note": f"장기 고정손절(-{LONGTERM_SL_PCT}%)",
                 "tps": tps,
                 "tp_pcts": tp_pcts,
                 "tp_labels": tp_labels,
@@ -347,7 +338,7 @@ def analyze_symbol(coin):
                 "reason_str": " / ".join(reasons[:4]),
             }
 
-    # [2순위] 기존 단기·스윙 전략 (Track A · B · C) 그대로 유지
+    # [2순위] 기존 단기·스윙 전략 (Track A · B · C) — 단기 고정손절 -6%
     ma7 = closes.rolling(7, min_periods=3).mean()
     ma20 = closes.rolling(20, min_periods=5).mean()
     std20 = closes.rolling(20, min_periods=5).std().fillna(0.0)
