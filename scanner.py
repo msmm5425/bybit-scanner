@@ -17,7 +17,7 @@ except ImportError:
     import re
     _FALLBACK_STOCKS = {
         "SAMSUNG", "HYNIX", "SKHYNIX", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
-        "KOSPI", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "AMZN", "META", "NFLX",
+        "KOSPI", "LITE", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "AMZN", "META", "NFLX",
         "MSTR", "COIN", "SPY", "QQQ", "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX",
     }
     def is_stock_or_tradfi_symbol(sym_or_base):
@@ -249,7 +249,8 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     prev_max_h = to_float(t_item.get("max_high_price"), default=entry_ref)
     prev_peak_ms = int(to_float(t_item.get("peak_ts_ms"), default=created_ms))
 
-    hist_min_low, hist_min_close = entry_ref, entry_ref
+    hist_min_low, hist_min_close = None, None
+    hist_last_close, hist_last_ts_ms = 0.0, 0
     if (now_ts - created_at) >= 300:
         df_15m = fetch_klines(symbol, "15", limit=150)
         if not df_15m.empty and "timestamp" in df_15m.columns:
@@ -257,30 +258,47 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             if not post_15m.empty:
                 p_idx = post_15m["high"].idxmax()
                 h_15m = to_float(post_15m.loc[p_idx, "high"], default=entry_ref)
-                if 0.40 <= (h_15m / entry_ref) <= 8.00 and h_15m >= prev_max_h:
+                if 0.40 <= (h_15m / entry_ref) <= 15.0 and h_15m >= prev_max_h:
                     prev_max_h = h_15m
                     prev_peak_ms = int(to_float(post_15m.loc[p_idx, "timestamp"], default=created_ms))
-                hist_min_low = min(hist_min_low, to_float(post_15m["low"].min(), default=entry_ref))
-                hist_min_close = min(hist_min_close, to_float(post_15m["close"].min(), default=entry_ref))
+                hist_min_low = to_float(post_15m["low"].min(), default=0.0)
+                hist_min_close = to_float(post_15m["close"].min(), default=0.0)
+                hist_last_close = to_float(post_15m["close"].iloc[-1], default=0.0)
+                hist_last_ts_ms = int(to_float(post_15m["timestamp"].iloc[-1], default=0))
 
     df_1m = fetch_verified_1m_klines(symbol, entry_ref=entry_ref, limit=60)
+    if df_1m.empty:
+        time.sleep(0.4)
+        df_1m = fetch_verified_1m_klines(symbol, entry_ref=entry_ref, limit=30)
     post_1m = df_1m[df_1m["timestamp"] >= created_ms].copy() if not df_1m.empty else df_1m
 
     base = symbol.replace("USDT", "")
+    has_live_1m = False
+    has_live_price = False
+    last_close = 0.0
+    last_ts_ms = 0
+    min_1m_low, min_1m_close = None, None
+
     if not post_1m.empty:
         w_idx = post_1m["high"].idxmax()
         w_high = to_float(post_1m.loc[w_idx, "high"], default=entry_ref)
         w_ts = int(to_float(post_1m.loc[w_idx, "timestamp"], default=created_ms))
         max_high = max(w_high, prev_max_h, entry_ref)
         peak_ts_ms = w_ts if w_high >= prev_max_h else prev_peak_ms
-        last_close = to_float(post_1m["close"].iloc[-1], default=entry_ref)
-        last_ts_ms = int(to_float(post_1m["timestamp"].iloc[-1], default=now_ts * 1000))
-        min_1m_low = to_float(post_1m["low"].min(), default=entry_ref)
-        min_1m_close = to_float(post_1m["close"].min(), default=entry_ref)
+        last_close = to_float(post_1m["close"].iloc[-1], default=0.0)
+        last_ts_ms = int(to_float(post_1m["timestamp"].iloc[-1], default=0))
+        min_1m_low = to_float(post_1m["low"].min(), default=0.0)
+        min_1m_close = to_float(post_1m["close"].min(), default=0.0)
+        if last_close > 0 and last_ts_ms > 0:
+            has_live_1m = True
+            has_live_price = True
     else:
+        # [핵심 버그 수정] 1분봉 조회 실패 시 절대 진입가(entry_ref)를 현재가로 대체하지 않음
         max_high, peak_ts_ms = max(prev_max_h, entry_ref), prev_peak_ms
-        last_close, last_ts_ms = entry_ref, now_ts * 1000
-        min_1m_low, min_1m_close = hist_min_low, hist_min_close
+        if hist_last_close > 0 and hist_last_ts_ms > 0:
+            has_live_price = True
+            last_close = hist_last_close
+            last_ts_ms = hist_last_ts_ms
 
     max_fav = round((max_high - entry_ref) / entry_ref * 100.0, 2)
     t_item["max_high_price"] = max_high
@@ -318,7 +336,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 🎯 남은 50% 물량은 바닥 방어선 TP2({fmt_price(tp2_p)}, +{g2:.1f}%) + 고점 대비 -{trail_drop_pct}% 자동 트레일링({fmt_price(stop_p)}, +{tr_pct:.1f}%)으로 끝까지 수익을 추적합니다!"
             )
 
-        if last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
+        if has_live_1m and last_close > 0 and last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
             t_item["tp3_completed"] = True
             t_item["trailing_closed"] = True
             t_item["closed_alerted"] = True
@@ -351,7 +369,8 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 🛡️ [방어선 상향 고정]: 추가 익절 없이 100% 전량 홀딩하며 방어선을 TP1({fmt_price(tp1_p)}, +{g1:.1f}%)로 상향 고정합니다."
             )
 
-        if last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
+        # 실측 1분봉 종가(has_live_1m)가 고점 이후 실제 TP1 방어선 이하로 마감했을 때만 청산 처리
+        if has_live_1m and last_close > 0 and last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
             t_item["tp3_completed"] = True
             t_item["trailing_closed"] = True
             t_item["closed_alerted"] = True
@@ -360,7 +379,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             t_item["realized_weighted_pct"] = exit_g
             msgs.append(
                 f"🔒 {horizon_tag}[TP1 방어선 100% 전량 수익 마감 완료] ${base} ({symbol})\n"
-                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 TP1({fmt_price(stop_p)}) 이탈로 전량(100%) 익절 마감합니다.\n"
+                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 TP1({fmt_price(stop_p)}) 이탈(확인가 {fmt_price(last_close)})로 전량(100%) 익절 마감합니다.\n"
                 f"• 💰 [최종 합산 확정 수익률]: +{exit_g:.2f}% 달성 (100% 전량 익절)"
             )
         return {"messages": msgs, "sl_record": None}
@@ -376,35 +395,38 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 📈 분할 익절 없이 100% 전량 홀딩하며 2차 목표가({fmt_price(tp2_p)}, +{g2:.1f}%) 돌파를 추적합니다."
             )
 
-    # [2차 도달 전]: 고정 손절선 이탈 감시 (단기 -6% / 장기 -20%)
-    min_low = min(hist_min_low, min_1m_low)
-    min_close = min(hist_min_close, min_1m_close)
-    if min_low <= init_stop_p and (min_close <= init_stop_p or last_close <= init_stop_p):
-        trig = min(min_close, last_close)
-        t_item["sl_alerted"] = True
-        t_item["closed_alerted"] = True
-        t_item["sl_at"] = now_ts
-        sl_payload = {
-            "symbol": symbol, "track_type": t_item.get("track_type", "TRACK_A"),
-            "score": int(t_item.get("score", 85)), "entry_price": entry_ref,
-            "stop_price": init_stop_p, "sl_trigger_price": trig,
-            "sl_pct": sl_pct_use, "created_at": created_at, "sl_at": now_ts,
-            "hold_minutes": hold_min, "max_high_price": max_high, "max_favorable_pct": max_fav,
-            "vol_mult": to_float(t_item.get("vol_mult", 1.0)), "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
-            "oi_m": to_float(t_item.get("oi_m", 0.0)), "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
-            "reasons": t_item.get("reasons", []),
-        }
-        if postmortem is not None and hasattr(postmortem, "record_sl_postmortem"):
-            try:
-                postmortem.record_sl_postmortem(sl_payload)
-            except Exception:
-                pass
-        msgs.append(
-            f"⚠️ {horizon_tag}[손절 기준가 이탈] ${base} ({symbol})\n"
-            f"• 이탈 확인가: {fmt_price(trig)} USDT (손절선 {fmt_price(init_stop_p)}, -{sl_pct_use}% 이탈)\n"
-            f"• 진입 후 최고 상승폭: +{max_fav:.1f}% (보유 {hold_min}분)"
-        )
-        return {"messages": msgs, "sl_record": (f"{symbol}_{created_at}", sl_payload)}
+    # [2차 도달 전]: 고정 손절선 이탈 감시 (단기 -6% / 장기 -20%) — 실측 캔들 데이터가 있을 때만 판정
+    valid_lows = [v for v in (hist_min_low, min_1m_low) if v is not None and v > 0]
+    valid_closes = [v for v in (hist_min_close, min_1m_close) if v is not None and v > 0]
+    if has_live_price and valid_lows and valid_closes:
+        min_low = min(valid_lows)
+        min_close = min(valid_closes)
+        if min_low <= init_stop_p and (min_close <= init_stop_p or (last_close > 0 and last_close <= init_stop_p)):
+            trig = min(min_close, last_close) if last_close > 0 else min_close
+            t_item["sl_alerted"] = True
+            t_item["closed_alerted"] = True
+            t_item["sl_at"] = now_ts
+            sl_payload = {
+                "symbol": symbol, "track_type": t_item.get("track_type", "TRACK_A"),
+                "score": int(t_item.get("score", 85)), "entry_price": entry_ref,
+                "stop_price": init_stop_p, "sl_trigger_price": trig,
+                "sl_pct": sl_pct_use, "created_at": created_at, "sl_at": now_ts,
+                "hold_minutes": hold_min, "max_high_price": max_high, "max_favorable_pct": max_fav,
+                "vol_mult": to_float(t_item.get("vol_mult", 1.0)), "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
+                "oi_m": to_float(t_item.get("oi_m", 0.0)), "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
+                "reasons": t_item.get("reasons", []),
+            }
+            if postmortem is not None and hasattr(postmortem, "record_sl_postmortem"):
+                try:
+                    postmortem.record_sl_postmortem(sl_payload)
+                except Exception:
+                    pass
+            msgs.append(
+                f"⚠️ {horizon_tag}[손절 기준가 이탈] ${base} ({symbol})\n"
+                f"• 이탈 확인가: {fmt_price(trig)} USDT (손절선 {fmt_price(init_stop_p)}, -{sl_pct_use}% 이탈)\n"
+                f"• 진입 후 최고 상승폭: +{max_fav:.1f}% (보유 {hold_min}분)"
+            )
+            return {"messages": msgs, "sl_record": (f"{symbol}_{created_at}", sl_payload)}
 
     return {"messages": msgs, "sl_record": None}
 
