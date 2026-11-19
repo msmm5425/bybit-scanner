@@ -1,4 +1,5 @@
 import os, re, json, time, urllib.parse, requests
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pandas as pd
 
@@ -20,13 +21,16 @@ BYBIT_HOST_NAMES = (
     "api.bybit-tr.com",
 )
 
+# API 일시 장애 시에도 작동하는 정적 백업 블랙리스트 (LITE, SKHY, SNDK, SOXL 등 포함)
 STOCK_TRADFI_EXACT_BLACKLIST = {
-    "SAMSUNG", "HYNIX", "SKHYNIX", "SKH", "SSNLF", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
+    "SAMSUNG", "HYNIX", "SKHYNIX", "SKHY", "SKH", "SSNLF", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
     "CELLTRION", "LGCHEM", "LGES", "KIA", "KB", "SHINHAN", "HANA", "WOORI", "COUPANG",
-    "KOSPI", "KOSDAQ", "KRW", "KRWUSDT", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "GOOGL",
-    "AMZN", "META", "NFLX", "AMD", "INTC", "TSM", "ASML", "ARM", "PLTR", "COIN", "MSTR",
-    "HOOD", "BABA", "BIDU", "JD", "PDD", "NIO", "XPEV", "LI", "SPY", "QQQ", "IWM", "DIA",
-    "TLT", "GLD", "SLV", "USO", "UNG", "XAU", "XAG", "XPD", "XPT", "WTI", "BRENT", "OIL",
+    "KOSPI", "KOSDAQ", "KRW", "KRWUSDT", "LITE", "SNDK", "SOXL", "SOXS", "KORU", "CIEN",
+    "COHR", "MSI", "TSLL", "NVDL", "NVDX", "TQQQ", "SQQQ", "CONL", "MSTU", "MSTX",
+    "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "GOOGL", "AMZN", "META", "NFLX", "AMD",
+    "INTC", "TSM", "ASML", "ARM", "PLTR", "COIN", "MSTR", "HOOD", "BABA", "BIDU",
+    "JD", "PDD", "NIO", "XPEV", "LI", "SPY", "QQQ", "IWM", "DIA", "TLT", "ARKK", "SMH",
+    "GLD", "SLV", "USO", "UNG", "XAU", "XAG", "XPD", "XPT", "WTI", "BRENT", "OIL",
     "NATGAS", "COPPER", "GOLD", "SILVER", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "CNH",
     "HKD", "SGD", "SPX", "NDX", "NAS100", "US500", "US30", "DJI", "VIX", "NIKKEI", "FTSE",
     "DAX", "CAC", "HSI", "BRK", "JPM", "BAC", "WFC", "GS", "MS", "V", "MA", "UNH", "JNJ",
@@ -34,32 +38,23 @@ STOCK_TRADFI_EXACT_BLACKLIST = {
     "SBUX", "NKE", "DIS", "XOM", "CVX", "BA", "CAT", "GE", "LMT", "RTX", "UBER", "ABNB",
     "SNOW", "CRWD", "PANW", "SMCI", "AVGO", "ORCL", "CRM", "ADBE", "CSCO", "QCOM", "TXN",
     "MU", "AMAT", "LRCX", "KLAC", "MRVL", "SONY", "TOYOTA", "SOFTBANK", "TENCENT", "XIAOMI", "BYD",
+    "CRCL", "RKLB", "ASTS", "IONQ", "RGTI", "OKLO", "HIMS", "RDDT", "VST", "CEG", "GEV",
+    "DELL", "HPE", "WDC", "STX", "ANET", "VRT", "ALAB", "EWY", "EWJ", "FXI", "KWEB",
 }
 
 STOCK_SUBSTRING_KEYWORDS = (
-    "SAMSUNG", "HYNIX", "HYUNDAI", "POSCO", "NAVER", "KAKAO", "KOSPI", "NASDAQ",
+    "SAMSUNG", "HYNIX", "SKHY", "HYUNDAI", "POSCO", "NAVER", "KAKAO", "KOSPI", "NASDAQ",
     "TSLA", "NVDA", "AAPL", "MSFT", "AMZN", "GOOG", "META", "NFLX", "MSTR", "COIN",
-    "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX", "STOCK",
+    "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX", "STOCK", "XSTOCK",
+)
+
+TRADFI_SYMBOL_TYPE_KEYWORDS = (
+    "stock", "etf", "commod", "forex", "fx", "tradfi", "equity", "metal", "index", "rwa",
 )
 
 _VALID_BYBIT_SYMBOLS_CACHE = {"ts": 0, "symbols": set(), "bases": set()}
+_DYNAMIC_TRADFI_CACHE = {"ts": 0, "symbols": set(), "bases": set()}
 _BYBIT_DIRECT_BLOCKED = False
-
-
-def is_stock_or_tradfi_symbol(sym_or_base):
-    s = str(sym_or_base or "").upper().strip()
-    if not s:
-        return True
-    base = s[:-4] if s.endswith("USDT") else s
-    base_clean = re.sub(r"^(1000000|100000|10000|1000|100|10)", "", base)
-    if base in STOCK_TRADFI_EXACT_BLACKLIST or base_clean in STOCK_TRADFI_EXACT_BLACKLIST:
-        return True
-    for kw in STOCK_SUBSTRING_KEYWORDS:
-        if kw in base:
-            return True
-    if is_tradfi_ticker(base) or is_tradfi_ticker(base_clean):
-        return True
-    return False
 
 
 def clean_url(raw_url):
@@ -69,6 +64,126 @@ def clean_url(raw_url):
     if not s.startswith("http"):
         s = SCHEME + s.lstrip("/")
     return s
+
+
+def _is_bybit_item_tradfi(it):
+    """Bybit V5 instruments-info 공식 메타데이터로 주식/ETF/원자재/외환(TradFi) 판별"""
+    if not isinstance(it, dict):
+        return False
+    sym_type = str(it.get("symbolType") or "").lower().strip()
+    if sym_type and any(k in sym_type for k in TRADFI_SYMBOL_TYPE_KEYWORDS):
+        return True
+    if str(it.get("marketRegion") or "").strip():
+        return True
+    if str(it.get("underlyingTicker") or "").strip():
+        return True
+    x_mult = str(it.get("xstockMultiplier") or "").strip()
+    if x_mult and x_mult not in ("1", "1.0", "0"):
+        return True
+    return False
+
+
+def _fetch_bitget_rwa_blocklist():
+    """Bitget 공식 계약 API에서 isRwa == 'YES'인 전체 주식/ETF/원자재 종목(300종+) 자동 수집"""
+    syms, bases = set(), set()
+    try:
+        url = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/contracts?productType=USDT-FUTURES")
+        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=3.5)
+        if resp.status_code == 200:
+            for it in resp.json().get("data", []):
+                is_rwa = str(it.get("isRwa") or "").upper().strip() == "YES"
+                sym_type = str(it.get("symbolType") or "").lower().strip()
+                if is_rwa or any(k in sym_type for k in TRADFI_SYMBOL_TYPE_KEYWORDS):
+                    sym = str(it.get("symbol") or "").upper().strip()
+                    base = str(it.get("baseCoin") or (sym[:-4] if sym.endswith("USDT") else sym)).upper().strip()
+                    if sym:
+                        syms.add(sym)
+                    if base:
+                        bases.add(base)
+                        syms.add(f"{base}USDT")
+    except Exception:
+        pass
+    return syms, bases
+
+
+def _fetch_okx_tradfi_blocklist():
+    """OKX 공식 SWAP API에서 instCategory가 3(주식/ETF) 또는 4(원자재)인 종목(160종+) 자동 수집"""
+    syms, bases = set(), set()
+    try:
+        url = clean_url(f"{SCHEME}www.okx.com/api/v5/public/instruments?instType=SWAP")
+        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=3.5)
+        if resp.status_code == 200:
+            for it in resp.json().get("data", []):
+                cat = str(it.get("instCategory") or "").strip()
+                if cat in ("3", "4"):
+                    inst_id = str(it.get("instId") or "").upper().strip()
+                    base = inst_id.split("-")[0] if "-" in inst_id else ""
+                    if base:
+                        bases.add(base)
+                        syms.add(f"{base}USDT")
+    except Exception:
+        pass
+    return syms, bases
+
+
+def _ensure_dynamic_tradfi_blocklist():
+    """15분 캐시 주기로 Bitget(isRwa) + OKX(instCategory) 주식/RWA 차단 목록을 병렬 갱신"""
+    now = time.time()
+    if now - _DYNAMIC_TRADFI_CACHE["ts"] < 900 and _DYNAMIC_TRADFI_CACHE["bases"]:
+        return
+    _DYNAMIC_TRADFI_CACHE["ts"] = now
+    try:
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            f_bg = ex.submit(_fetch_bitget_rwa_blocklist)
+            f_okx = ex.submit(_fetch_okx_tradfi_blocklist)
+            for fut in (f_bg, f_okx):
+                try:
+                    s_set, b_set = fut.result(timeout=5)
+                    _DYNAMIC_TRADFI_CACHE["symbols"].update(s_set)
+                    _DYNAMIC_TRADFI_CACHE["bases"].update(b_set)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def _register_dynamic_tradfi(sym, base=None):
+    s = str(sym or "").upper().strip()
+    b = str(base or (s[:-4] if s.endswith("USDT") else s)).upper().strip()
+    if s:
+        _DYNAMIC_TRADFI_CACHE["symbols"].add(s)
+    if b:
+        _DYNAMIC_TRADFI_CACHE["bases"].add(b)
+        _DYNAMIC_TRADFI_CACHE["symbols"].add(f"{b}USDT")
+
+
+def is_stock_or_tradfi_symbol(sym_or_base):
+    """
+    [영구적 TradFi/주식/ETF/원자재 차단 필터]
+    1) 거래소 공식 API 동적 수집 목록 (Bybit symbolType + Bitget isRwa='YES' + OKX instCategory 3/4)
+    2) 정적 백업 블랙리스트 및 키워드
+    """
+    _ensure_dynamic_tradfi_blocklist()
+    s = str(sym_or_base or "").upper().strip()
+    if not s:
+        return True
+    base = s[:-4] if s.endswith("USDT") else s
+    base_clean = re.sub(r"^(1000000|100000|10000|1000|100|10)", "", base)
+
+    if (
+        s in _DYNAMIC_TRADFI_CACHE["symbols"]
+        or base in _DYNAMIC_TRADFI_CACHE["bases"]
+        or base_clean in _DYNAMIC_TRADFI_CACHE["bases"]
+    ):
+        return True
+    if base in STOCK_TRADFI_EXACT_BLACKLIST or base_clean in STOCK_TRADFI_EXACT_BLACKLIST:
+        return True
+    for kw in STOCK_SUBSTRING_KEYWORDS:
+        if kw in base:
+            return True
+    if is_tradfi_ticker(base) or is_tradfi_ticker(base_clean):
+        return True
+    return False
 
 
 def _fetch_bybit_json_via_proxy(path_and_query, timeout=4):
@@ -91,6 +206,7 @@ def _fetch_bybit_json_via_proxy(path_and_query, timeout=4):
 
 
 def _fetch_24h_change_and_funding_backup_map():
+    _ensure_dynamic_tradfi_blocklist()
     chg_map, fund_map = {}, {}
     try:
         u1 = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES")
@@ -165,6 +281,7 @@ def _normalize_kline_df(rows, expected_interval_min=None):
 
 def get_valid_bybit_linear_symbols():
     global _BYBIT_DIRECT_BLOCKED
+    _ensure_dynamic_tradfi_blocklist()
     now = time.time()
     if now - _VALID_BYBIT_SYMBOLS_CACHE["ts"] < 900 and len(_VALID_BYBIT_SYMBOLS_CACHE["symbols"]) >= 80:
         return _VALID_BYBIT_SYMBOLS_CACHE["symbols"], _VALID_BYBIT_SYMBOLS_CACHE["bases"]
@@ -177,8 +294,13 @@ def get_valid_bybit_linear_symbols():
             quote = str(it.get("quoteCoin", "")).upper().strip()
             status = str(it.get("status", "")).strip()
             contract_type = str(it.get("contractType", "")).strip()
-            if sym.endswith("USDT") and quote == "USDT" and status == "Trading" and contract_type == "LinearPerpetual":
-                base = sym[:-4]
+            if not sym.endswith("USDT"):
+                continue
+            base = sym[:-4]
+            if _is_bybit_item_tradfi(it):
+                _register_dynamic_tradfi(sym, base)
+                continue
+            if quote == "USDT" and status == "Trading" and contract_type == "LinearPerpetual":
                 if base.isascii() and not is_stock_or_tradfi_symbol(sym):
                     valid_syms.add(sym)
                     valid_bases.add(base)
@@ -186,23 +308,52 @@ def get_valid_bybit_linear_symbols():
     if not _BYBIT_DIRECT_BLOCKED:
         for host in BYBIT_HOST_NAMES:
             try:
-                url = clean_url(f"{SCHEME}{host}/v5/market/instruments-info")
-                resp = requests.get(url, params={"category": "linear", "status": "Trading", "limit": 1000}, headers=BROWSER_HEADERS, timeout=2.5)
-                if resp.status_code == 200:
-                    _parse_bybit_instruments(resp.json().get("result", {}).get("list", []))
-                    if len(valid_syms) >= 80:
-                        _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": valid_syms, "bases": valid_bases})
-                        return valid_syms, valid_bases
+                cursor = ""
+                fetched_ok = False
+                for _ in range(4):
+                    params = {"category": "linear", "status": "Trading", "limit": 1000}
+                    if cursor:
+                        params["cursor"] = cursor
+                    url = clean_url(f"{SCHEME}{host}/v5/market/instruments-info")
+                    resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=2.5)
+                    if resp.status_code != 200:
+                        break
+                    res_obj = resp.json().get("result", {})
+                    items = res_obj.get("list", [])
+                    if not items:
+                        break
+                    fetched_ok = True
+                    _parse_bybit_instruments(items)
+                    cursor = str(res_obj.get("nextPageCursor") or "").strip()
+                    if not cursor:
+                        break
+                if fetched_ok and len(valid_syms) >= 80:
+                    _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": valid_syms, "bases": valid_bases})
+                    return valid_syms, valid_bases
             except Exception:
                 continue
         _BYBIT_DIRECT_BLOCKED = True
 
-    proxy_data = _fetch_bybit_json_via_proxy("/v5/market/instruments-info?category=linear&status=Trading&limit=1000", timeout=4)
-    if proxy_data:
-        _parse_bybit_instruments(proxy_data.get("result", {}).get("list", []))
-        if len(valid_syms) >= 80:
-            _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": valid_syms, "bases": valid_bases})
-            return valid_syms, valid_bases
+    cursor = ""
+    for _ in range(3):
+        q = "/v5/market/instruments-info?category=linear&status=Trading&limit=1000"
+        if cursor:
+            q += f"&cursor={urllib.parse.quote(cursor, safe='')}"
+        proxy_data = _fetch_bybit_json_via_proxy(q, timeout=4)
+        if not proxy_data:
+            break
+        res_obj = proxy_data.get("result", {})
+        items = res_obj.get("list", [])
+        if not items:
+            break
+        _parse_bybit_instruments(items)
+        cursor = str(res_obj.get("nextPageCursor") or "").strip()
+        if not cursor:
+            break
+
+    if len(valid_syms) >= 80:
+        _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": valid_syms, "bases": valid_bases})
+        return valid_syms, valid_bases
 
     try:
         cg_url = clean_url(f"{SCHEME}api.coingecko.com/api/v3/derivatives/exchanges/bybit?include_tickers=all")
@@ -231,7 +382,7 @@ def get_scanner_candidates():
     valid_syms, valid_bases = get_valid_bybit_linear_symbols()
     candidates = []
     pure_crypto_bases = set(valid_bases)
-    rwa_blocked_bases = set()
+    rwa_blocked_bases = set(_DYNAMIC_TRADFI_CACHE["bases"])
 
     def _parse_bybit_ticker_items(items):
         out = []
@@ -339,11 +490,6 @@ def get_scanner_candidates():
 
 
 def fetch_klines(symbol, interval="5", limit=150):
-    """
-    [고속 서킷브레이커 적용]
-    미국 IP(_BYBIT_DIRECT_BLOCKED)에서는 느린 프록시를 반복 호출하지 않고
-    즉시 고속 선물 캔들 API(Bitget/Gate)를 조회하여 타임아웃(Canceled)을 원천 방지합니다.
-    """
     sym = str(symbol).upper().strip()
     if not sym.endswith("USDT") or is_stock_or_tradfi_symbol(sym):
         return pd.DataFrame()
