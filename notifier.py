@@ -87,7 +87,7 @@ def build_briefing_message(res, now_str):
     symbol = res.get("symbol", "")
     is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
     title = res.get("track_title", "🐋 [장기 포지션 · 세력 대시세 매집 초입]" if is_long else "🚀 [타점 포착]")
-    horizon = res.get("position_horizon", "장기 포지션 (4H·1D 매집 초입)" if is_long else "단기·스윙 포지션")
+    horizon = res.get("position_horizon", "장기 포지션 (1개월 이상 홀딩 예상)" if is_long else "단기·스윙 포지션")
     score = res.get("score", 85)
     price = to_float(res.get("price"))
     chg = to_float(res.get("change_24h"))
@@ -102,17 +102,14 @@ def build_briefing_message(res, now_str):
     e_low = to_float(res.get("entry_low"), price * 0.9970)
     e_high = to_float(res.get("entry_high"), price * 1.0015)
     sl_p = to_float(res.get("stop_price"))
-    sl_pct = int(round(to_float(res.get("sl_pct"), 12 if is_long else FIXED_SL_PCT)))
-    sl_note = res.get("sl_note", f"장기스윙손절(-{sl_pct}%)" if is_long else f"고정손절(-{sl_pct}%)")
+    sl_pct = int(round(to_float(res.get("sl_pct"), 20 if is_long else FIXED_SL_PCT)))
+    sl_note = res.get("sl_note", f"장기 고정손절(-{sl_pct}%)" if is_long else f"고정손절(-{sl_pct}%)")
 
     tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
     tp_pcts = res.get("tp_pcts") or [8.0, 15.0, 22.0]
     tp_labels = res.get("tp_labels") or ["단기 매물대 저항", "1H 주요 저항구간", "Fib 1.618 확장목표"]
     reasons = res.get("reasons") or []
-
-    def1_p = fmt_price(to_float(tps[0]) * 0.95)
-    def2_p = fmt_price(to_float(tps[1]) * 0.95)
-    trail_drop = 8 if is_long else 3
+    trail_drop = 10 if is_long else 4
 
     lines = [
         f"{title} ${base} ({symbol})",
@@ -125,9 +122,9 @@ def build_briefing_message(res, now_str):
         f"🎯 [{'장기 포지션 매매 전략 가이드' if is_long else '매매 전략 가이드'}]",
         f"• 진입 구간: {fmt_price(e_low)} ~ {fmt_price(e_high)} USDT",
         f"• 손절가(SL): {fmt_price(sl_p)} USDT (-{sl_pct}% | {sl_note})",
-        f"• 1차 목표(30% 익절): {fmt_price(tps[0])} USDT (+{to_float(tp_pcts[0]):.1f}% | {tp_labels[0]} · 돌파시 1차-5% 방어선 {def1_p})",
-        f"• 2차 구간(70% 홀딩): {fmt_price(tps[1])} USDT (+{to_float(tp_pcts[1]):.1f}% | {tp_labels[1]} · 돌파시 2차-5% 방어선 {def2_p})",
-        f"• 3차 목표(30% 익절): {fmt_price(tps[2])} USDT (+{to_float(tp_pcts[2]):.1f}% | {tp_labels[2]} · 잔여 40% 고점 -{trail_drop}% 자동 트레일링)",
+        f"• 1차 구간(TP1·전량 홀딩): {fmt_price(tps[0])} USDT (+{to_float(tp_pcts[0]):.1f}% | {tp_labels[0]} · 익절 없이 100% 홀딩)",
+        f"• 2차 구간(TP2·전량 홀딩): {fmt_price(tps[1])} USDT (+{to_float(tp_pcts[1]):.1f}% | {tp_labels[1]} · 돌파시 방어선 TP1({fmt_price(tps[0])}) 상향 고정)",
+        f"• 3차 목표(TP3·50% 익절): {fmt_price(tps[2])} USDT (+{to_float(tp_pcts[2]):.1f}% | {tp_labels[2]} · 방어선 TP2 상향 & 잔여 50% 고점 -{trail_drop}% 트레일링)",
     ]
 
     if reasons:
@@ -141,7 +138,7 @@ def build_briefing_message(res, now_str):
 def build_x_hook_line(res):
     track_type = str(res.get("track_type", "TRACK_A"))
     if track_type == "TRACK_D" or res.get("is_long_term"):
-        return "【장기 포지션】 세력 4H·1D 매집 후 대시세 1파동 초입 포착"
+        return " 세력 4H·1D 매집 후 대시세 1파동 초입 포착"
     r_text = " ".join(str(x) for x in (res.get("reasons") or []))
     if "재진입" in str(res.get("track_title", "")) or "재탈환" in r_text:
         return "개미털기 바닥 확인 후 거래량 실리며 V자 반등 시도중"
@@ -164,7 +161,7 @@ def build_x_post_message(res):
     e_low = to_float(res.get("entry_low"), price * 0.9970)
     e_high = to_float(res.get("entry_high"), price * 1.0015)
     sl_p = to_float(res.get("stop_price"))
-    sl_pct = int(round(to_float(res.get("sl_pct"), 12 if is_long else FIXED_SL_PCT)))
+    sl_pct = int(round(to_float(res.get("sl_pct"), 20 if is_long else FIXED_SL_PCT)))
 
     tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
     tp_pcts = res.get("tp_pcts") or [8.0, 15.0, 22.0]
@@ -173,10 +170,24 @@ def build_x_post_message(res):
     p2 = round(to_float(tp_pcts[1], 15.0), 1)
     p3 = round(to_float(tp_pcts[2], 22.0), 1)
     hook_line = build_x_hook_line(res)
-    pos_label = " [장기 포지션]" if is_long else ""
+
+    if is_long:
+        return (
+            "【장기 포지션】1개월이상 홀딩예상\n"
+            "🔺️상승 예상 코인 검색기에 포착된 종목😎\n"
+            f"⚠️{hook_line}⚠️\n\n"
+            f"${base} ({symbol})\n\n"
+            f"- 진입 구간: {fmt_price(e_low)} ~ {fmt_price(e_high)} USDT\n"
+            f"- SL: {fmt_price(sl_p)} (-{sl_pct}%)\n"
+            f"- tp1: {fmt_price(tps[0])}(+{p1:g}%)\n"
+            f"- tp2: {fmt_price(tps[1])}(+{p2:g}%)\n"
+            f"- tp3: {fmt_price(tps[2])}(+{p3:g}%)\n\n"
+            f"#{base} 어디까지 오를거 같나요?\n"
+            "보유중이신 분들 계신가요?"
+        )
 
     return (
-        f"🔺️상승 예상 코인 검색기에 포착된 종목😎{pos_label}\n"
+        "🔺️상승 예상 코인 검색기에 포착된 종목😎\n"
         f"⚠️{hook_line}⚠️\n\n"
         f"${base} ({symbol})\n\n"
         f"- 진입 구간: {fmt_price(e_low)} ~ {fmt_price(e_high)} USDT\n"
@@ -210,7 +221,7 @@ def _render_tradingview_lightweight_chart(df, res):
 
     orig_entry = to_float(res.get("price"), price)
     ratio_adj = price / orig_entry if orig_entry > 0 else 1.0
-    sl_pct = int(round(to_float(res.get("sl_pct"), 12 if is_long else FIXED_SL_PCT)))
+    sl_pct = int(round(to_float(res.get("sl_pct"), 20 if is_long else FIXED_SL_PCT)))
     sl_p = to_float(res.get("stop_price"), price * (1.0 - sl_pct / 100.0)) * ratio_adj
     tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
     tp_pcts = res.get("tp_pcts") or [8.0, 15.0, 22.0]
@@ -227,7 +238,7 @@ def _render_tradingview_lightweight_chart(df, res):
 
     core_span = max(high_piv - low_piv, price * 0.018)
     up_comp = float(np.clip((core_span * 0.48) / max(tp3_p - high_piv, price * 0.04), 0.03, 0.65))
-    down_comp = float(np.clip((core_span * 0.16) / max(low_piv - sl_p, price * 0.01), 0.06, 0.55)) if sl_p < low_piv else 1.0
+    down_comp = float(np.clip((core_span * 0.16) / max(low_piv - sl_p, price * 0.01), 0.05, 0.55)) if sl_p < low_piv else 1.0
 
     def _fwd(val):
         v = to_float(val, price)
