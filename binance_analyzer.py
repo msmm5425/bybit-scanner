@@ -1,4 +1,4 @@
-import os, json, time, subprocess, requests
+import os, json, time, requests
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -116,6 +116,7 @@ def load_merged_state():
 
 
 def classify_episode_by_mfe(e):
+    """신규 전량 홀딩 전략(1차 홀딩 · 2차 TP1방어 · 3차 50%+50% 트레일링) 기준 분류"""
     fav = to_float(e.get("max_favorable_pct"))
     entry_p = to_float(e.get("entry_price"))
     max_h = to_float(e.get("max_high_price"))
@@ -129,9 +130,9 @@ def classify_episode_by_mfe(e):
     tp1 = fav >= max(6.5, tp1_req)
     tp2 = fav >= max(12.5, tp2_req)
     tp3 = fav >= max(19.0, tp3_req)
-    is_sl = bool(e.get("sl_alerted")) and not tp1
-    trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and tp1 and not is_sl
-    return {"fav": fav, "tp1": tp1, "tp2": tp2, "tp3": tp3, "be_save": False, "sl": is_sl, "trailing_closed": trailing_closed}
+    is_sl = bool(e.get("sl_alerted")) and not tp2
+    trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and tp2 and not is_sl
+    return {"fav": fav, "tp1": tp1, "tp2": tp2, "tp3": tp3, "sl": is_sl, "trailing_closed": trailing_closed}
 
 
 def calc_rsi(series, period=6):
@@ -160,6 +161,11 @@ def analyze_top_gainer_structure(coin):
 
     if not df_15m.empty and len(df_15m) >= 25:
         closes, vols = df_15m["close"], df_15m["volume"]
+        # [수정 2] 코인게코 백업 반올림 가격 대신 15분봉 최신 실측 종가로 정밀 교체
+        live_p = to_float(closes.iloc[-1], 0.0)
+        if live_p > 0 and (price <= 0 or 0.50 <= (live_p / price) <= 2.00):
+            price = live_p
+
         rsi15 = round(to_float(calc_rsi(closes, 6).iloc[-1], 55.0), 1)
         avg_v = to_float(vols.iloc[-25:-5].mean(), 1.0)
         max_v = to_float(vols.iloc[-12:].max(), avg_v)
@@ -207,13 +213,15 @@ def verify_48h_history(history_data, current_map, now_ts):
         curr_p = to_float(current_map.get(sym, {}).get("price"), entry_p)
         max_h = max(to_float(rec.get("max_high_48h"), entry_p), curr_p)
 
-        # 최대 6개 고유 종목만 1시간봉 고점 조회하여 타임아웃(Canceled) 완벽 방지
         if 0.2 <= age_h <= 54 and sym not in seen_syms and len(seen_syms) < 6:
             df_1h = fetch_klines(sym, interval="60", limit=48)
             if not df_1h.empty and "timestamp" in df_1h.columns:
+                live_1h_c = to_float(df_1h["close"].iloc[-1], 0.0)
+                if live_1h_c > 0 and 0.40 <= (live_1h_c / entry_p) <= 4.00:
+                    curr_p = live_1h_c
                 post_df = df_1h[df_1h["timestamp"] >= rec_ts * 1000]
                 if not post_df.empty:
-                    max_h = max(max_h, to_float(post_df["high"].max(), entry_p))
+                    max_h = max(max_h, to_float(post_df["high"].max(), entry_p), curr_p)
 
         rec["max_high_48h"] = max_h
         max_gain = round((max_h - entry_p) / entry_p * 100.0, 1)
@@ -256,31 +264,34 @@ def summarize_scanner_episodes(now_ts):
     tp3_c = sum(1 for _, c in parsed if c["tp3"])
     trail_c = sum(1 for _, c in parsed if c["trailing_closed"])
     sl_c = sum(1 for _, c in parsed if c["sl"])
-    closed_c = tp1_c + sl_c
-    win_r = round((tp1_c / closed_c) * 100.0, 1) if closed_c > 0 else 0.0
+    closed_c = tp2_c + sl_c
+    win_r = round((tp2_c / closed_c) * 100.0, 1) if closed_c > 0 else 0.0
 
+    # [수정 2] 신규 전량 홀딩 전략 기준 문구 및 승률 동기화
     lines = [
-        f"• [최근 7일 누적 성적]: 총 {tot}건 포착 | 실전 익절 승률 {win_r:.1f}%",
-        f"• 단계별 실제 달성: 1차익절(TP1·30%) {tp1_c}건 | 2차돌파(방어선) {tp2_c}건 | 3차돌파(TP3·30%+트레일링) {tp3_c}건 | 방어선/트레일링마감 {trail_c}건 | 손절 {sl_c}건",
+        f"• [최근 7일 누적 성적]: 총 {tot}건 포착 | 수익 확정 승률(TP2 방어선 이상) {win_r:.1f}%",
+        f"• 단계별 실제 달성: 1차돌파(전량홀딩) {tp1_c}건 | 2차돌파(TP1방어) {tp2_c}건 | 3차돌파(50%익절+트레일링) {tp3_c}건 | 수익마감 {trail_c}건 | 손절 {sl_c}건",
     ]
 
     best_eps = sorted(parsed, key=lambda x: x[1]["fav"], reverse=True)[:4]
     for b, c in best_eps:
         sym = b.get("symbol", "").replace("USDT", "")
+        h_tag = "[장기] " if (b.get("is_long_term") or b.get("track_type") == "TRACK_D") else ""
         fav = c["fav"]
         ep_p = to_float(b.get("entry_price"))
         mh_p = to_float(b.get("max_high_price"))
-        tag = "3차돌파(TP3)" if c["tp3"] else ("2차방어선(TP2)" if c["tp2"] else ("1차익절(TP1)" if c["tp1"] else "추적중"))
+        tag = "3차50%익절·트레일링" if c["tp3"] else ("2차돌파·TP1방어" if c["tp2"] else ("1차돌파·전량홀딩" if c["tp1"] else "추적중"))
         if fav > 0:
-            lines.append(f"  ↳ 🏆 베스트 타점: ${sym} 진입 {fmt_price(ep_p)} → 최고 {fmt_price(mh_p)} (+{fav:.1f}% | {tag})")
+            lines.append(f"  ↳ 🏆 베스트 타점: {h_tag}${sym} 진입 {fmt_price(ep_p)} → 최고 {fmt_price(mh_p)} (+{fav:.1f}% | {tag})")
 
     if active_list:
         lines.append(f"• 🔄 [현재 실시간 감시/보유 중 ({len(active_list)}종목)]:")
-        for sym, t in active_list[:4]:
+        for sym, t in sorted(active_list, key=lambda x: to_float(x[1].get("max_favorable_pct")), reverse=True)[:4]:
             base = sym.replace("USDT", "")
+            h_tag = "[장기] " if (t.get("is_long_term") or t.get("track_type") == "TRACK_D") else ""
             c = classify_episode_by_mfe(t)
-            st = "3차돌파·트레일링" if c["tp3"] else ("2차방어선홀딩" if c["tp2"] else ("1차방어선홀딩" if c["tp1"] else "초입추적중"))
-            lines.append(f"  ↳ 🟢 ${base}: 진입 {fmt_price(t.get('entry_price'))} | 최고 +{c['fav']:.1f}% ({st})")
+            st = "3차50%익절·트레일링" if c["tp3"] else ("2차돌파·TP1방어" if c["tp2"] else ("1차돌파·전량홀딩" if c["tp1"] else "초입추적중"))
+            lines.append(f"  ↳ 🟢 {h_tag}${base}: 진입 {fmt_price(t.get('entry_price'))} | 최고 +{c['fav']:.1f}% ({st})")
 
     if sls_recent:
         lines.append(f"• 📓 [손절(SL) 오답 노트 & 원인 해부 ({len(sls_recent)}건)]:")
@@ -290,8 +301,9 @@ def summarize_scanner_episodes(now_ts):
             max_f = to_float(s.get("max_favorable_pct", 0.0))
             rsi_v = to_float(s.get("rsi6_15m", 50.0))
             vol_m = to_float(s.get("vol_mult", 1.0))
+            sl_p_val = int(round(to_float(s.get("sl_pct"), 20 if s.get("track_type") == "TRACK_D" else FIXED_SL_PCT)))
             cause = "단기 고점 RSI 과열 추격" if rsi_v >= 70 else ("돌파 거래량 부족" if vol_m < 2.0 else "비트에 연동된 급격한 스탑헌팅")
-            lines.append(f"  ↳ ⚠️ ${sym}: 보유 {hold_m}분 후 -{FIXED_SL_PCT}% 손절 (최고 +{max_f:.1f}% 반등 | 원인: {cause})")
+            lines.append(f"  ↳ ⚠️ ${sym}: 보유 {hold_m}분 후 -{sl_p_val}% 손절 (최고 +{max_f:.1f}% 반등 | 원인: {cause})")
 
     return lines
 
