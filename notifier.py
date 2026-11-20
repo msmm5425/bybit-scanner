@@ -142,6 +142,8 @@ def build_x_hook_line(res):
     r_text = " ".join(str(x) for x in (res.get("reasons") or []))
     if "재진입" in str(res.get("track_title", "")) or "재탈환" in r_text:
         return "개미털기 바닥 확인 후 거래량 실리며 V자 반등 시도중"
+    if track_type == "TRACK_H":
+        return "최근 급등 대장주 Top 5 발사 직전 DNA 패턴과 일치하는 초입 포착"
     if track_type == "TRACK_E":
         return "24H 저점 유동성 스윕(개미털기) 직후 강한 반전 매수세 유입중"
     if track_type == "TRACK_F":
@@ -275,6 +277,7 @@ def _render_tradingview_lightweight_chart(df, res):
         "TRACK_E": "TRACK E · SFP Reversal",
         "TRACK_F": "TRACK F · BTC RS Leader",
         "TRACK_G": "TRACK G · Short Squeeze",
+        "TRACK_H": "TRACK H · Top5 DNA",
     }.get(track_type, track_type)
     decimals = 6 if price < 0.01 else (5 if price < 1 else (4 if price < 10 else (3 if price < 1000 else 2)))
     min_move = 10 ** (-decimals)
