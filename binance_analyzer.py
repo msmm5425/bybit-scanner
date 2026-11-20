@@ -15,11 +15,6 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
-try:
-    import postmortem
-except Exception:
-    postmortem = None
-
 from api import (
     get_scanner_candidates,
     fetch_klines,
@@ -121,6 +116,7 @@ def load_merged_state():
 
 
 def classify_episode_by_mfe(e):
+    """신규 전량 홀딩 전략(1차 홀딩 · 2차 TP1방어 · 3차 50%+50% 트레일링) 기준 분류"""
     fav = to_float(e.get("max_favorable_pct"))
     entry_p = to_float(e.get("entry_price"))
     max_h = to_float(e.get("max_high_price"))
@@ -132,7 +128,7 @@ def classify_episode_by_mfe(e):
     tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 19.5
 
     tp1 = fav >= max(6.5, tp1_req)
-    tp2 = fav >= max(12.0, tp2_req)
+    tp2 = fav >= max(12.5, tp2_req)
     tp3 = fav >= max(19.0, tp3_req)
     is_sl = bool(e.get("sl_alerted")) and not tp2
     trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and tp2 and not is_sl
@@ -165,6 +161,7 @@ def analyze_top_gainer_structure(coin):
 
     if not df_15m.empty and len(df_15m) >= 25:
         closes, vols = df_15m["close"], df_15m["volume"]
+        # [수정 2] 코인게코 백업 반올림 가격 대신 15분봉 최신 실측 종가로 정밀 교체
         live_p = to_float(closes.iloc[-1], 0.0)
         if live_p > 0 and (price <= 0 or 0.50 <= (live_p / price) <= 2.00):
             price = live_p
@@ -270,6 +267,7 @@ def summarize_scanner_episodes(now_ts):
     closed_c = tp2_c + sl_c
     win_r = round((tp2_c / closed_c) * 100.0, 1) if closed_c > 0 else 0.0
 
+    # [수정 2] 신규 전량 홀딩 전략 기준 문구 및 승률 동기화
     lines = [
         f"• [최근 7일 누적 성적]: 총 {tot}건 포착 | 수익 확정 승률(TP2 방어선 이상) {win_r:.1f}%",
         f"• 단계별 실제 달성: 1차돌파(전량홀딩) {tp1_c}건 | 2차돌파(TP1방어) {tp2_c}건 | 3차돌파(50%익절+트레일링) {tp3_c}건 | 수익마감 {trail_c}건 | 손절 {sl_c}건",
@@ -295,20 +293,17 @@ def summarize_scanner_episodes(now_ts):
             st = "3차50%익절·트레일링" if c["tp3"] else ("2차돌파·TP1방어" if c["tp2"] else ("1차돌파·전량홀딩" if c["tp1"] else "초입추적중"))
             lines.append(f"  ↳ 🟢 {h_tag}${base}: 진입 {fmt_price(t.get('entry_price'))} | 최고 +{c['fav']:.1f}% ({st})")
 
-    # postmortem.py 오답노트 자동 피드백 요약 연동
-    if postmortem is not None and hasattr(postmortem, "build_daily_postmortem_summary"):
-        try:
-            lines.extend(postmortem.build_daily_postmortem_summary(sls_recent))
-        except Exception:
-            pass
-    elif sls_recent:
+    if sls_recent:
         lines.append(f"• 📓 [손절(SL) 오답 노트 & 원인 해부 ({len(sls_recent)}건)]:")
         for s in sorted(sls_recent, key=lambda x: int(x.get("sl_at", 0)), reverse=True)[:3]:
             sym = s.get("symbol", "").replace("USDT", "")
             hold_m = int(s.get("hold_minutes", 0))
             max_f = to_float(s.get("max_favorable_pct", 0.0))
+            rsi_v = to_float(s.get("rsi6_15m", 50.0))
+            vol_m = to_float(s.get("vol_mult", 1.0))
             sl_p_val = int(round(to_float(s.get("sl_pct"), 20 if s.get("track_type") == "TRACK_D" else FIXED_SL_PCT)))
-            lines.append(f"  ↳ ⚠️ ${sym}: 보유 {hold_m}분 후 -{sl_p_val}% 손절 (최고 +{max_f:.1f}% 반등)")
+            cause = "단기 고점 RSI 과열 추격" if rsi_v >= 70 else ("돌파 거래량 부족" if vol_m < 2.0 else "비트에 연동된 급격한 스탑헌팅")
+            lines.append(f"  ↳ ⚠️ ${sym}: 보유 {hold_m}분 후 -{sl_p_val}% 손절 (최고 +{max_f:.1f}% 반등 | 원인: {cause})")
 
     return lines
 
