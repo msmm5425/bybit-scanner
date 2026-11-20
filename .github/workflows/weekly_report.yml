@@ -2,8 +2,13 @@ name: Weekly Performance Report
 
 on:
   schedule:
-    - cron: '0 0 * * 1'
+    # 매주 일요일 23:50 KST (월요일 00:00 정각 스캐너 시작 10분 전 실행)
+    - cron: '50 14 * * 0'
   workflow_dispatch:
+
+concurrency:
+  group: bybit-scanner-main
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -11,22 +16,22 @@ permissions:
 jobs:
   report:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - name: 1. 저장소 전체 히스토리 불러오기 (7일 로그 분석용)
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 2. 파이썬 설치
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 3. 필수 라이브러리 설치
+      - name: Install dependencies
         run: pip install --upgrade pip requests pandas numpy
 
-      - name: 4. 주간 실전 성과 및 3파동 심층 리포트 전송 및 상태 저장
+      - name: Run Weekly Report & Sync State
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
