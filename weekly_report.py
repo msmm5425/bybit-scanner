@@ -14,6 +14,11 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
+try:
+    import postmortem
+except Exception:
+    postmortem = None
+
 from api import get_scanner_candidates, fetch_klines
 
 try:
@@ -56,7 +61,6 @@ def fmt_price(price):
 
 
 def calc_weighted_realized_pct(e, c):
-    """신규 전량 홀딩(1·2차 0% / 3차 50% + 잔여 50% 트레일링) 기준 합산 수익률 산출"""
     saved_w = to_float(e.get("realized_weighted_pct"), 0.0)
     if saved_w > 0:
         return round(saved_w, 2)
@@ -84,7 +88,6 @@ def calc_weighted_realized_pct(e, c):
 
 
 def load_merged_state_readonly():
-    """상태 파일을 읽기 전용으로만 병합 조회 (디스크 및 GitHub에 절대 쓰지 않음)"""
     merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
     for path in STATE_CANDIDATE_FILES:
         if not os.path.exists(path):
@@ -124,7 +127,6 @@ def _backfill_single_ep(ep_k, e):
 
 
 def backfill_in_memory_only(episodes, now_ts):
-    """리포트 정확도를 위해 메모리 내에서만 최고가 보정 (파일 덮어쓰기 없음)"""
     to_bf = []
     for ep_k, e in list(episodes.items()):
         if not isinstance(e, dict):
@@ -194,10 +196,10 @@ def main():
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
     week_ago_ts = now_ts - (7 * 86400)
 
-    # [구멍 1 해결] 완전 읽기 전용 조회 (스캐너 상태 파일 덮어쓰기 원천 차단)
     state = load_merged_state_readonly()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
+    sl_history = state.get("sl_history") or {}
 
     for sym, t_item in list(tracked.items()):
         if is_stock_or_tradfi_symbol(sym):
@@ -239,7 +241,16 @@ def main():
     w2_retention = round(tp2_hits / max(tp1_hits, 1) * 100.0, 1) if tp1_hits > 0 else 0.0
     w3_retention = round(tp3_hits / max(tp2_hits, 1) * 100.0, 1) if tp2_hits > 0 else 0.0
 
-    track_stats = {"TRACK_A": [0, 0, 0, []], "TRACK_B": [0, 0, 0, []], "TRACK_C": [0, 0, 0, []], "TRACK_D": [0, 0, 0, []]}
+    track_names = {
+        "TRACK_A": "Track A (TTM 스퀴즈·델타)",
+        "TRACK_B": "Track B (24H 돌파·S-R Flip)",
+        "TRACK_C": "Track C (대장주 심층 눌림)",
+        "TRACK_D": "Track D (장기 포지션 · D1~D5)",
+        "TRACK_E": "Track E (SFP 유동성 스윕)",
+        "TRACK_F": "Track F (BTC 역행 RS 대장주)",
+        "TRACK_G": "Track G (숏스퀴즈 강제청산)",
+    }
+    track_stats = {tk: [0, 0, 0, []] for tk in track_names}
     for e, c in weekly_eps:
         tk = str(e.get("track_type", "TRACK_A"))
         if tk not in track_stats:
@@ -253,6 +264,7 @@ def main():
 
     best_5 = sorted(weekly_eps, key=lambda x: x[1]["fav"], reverse=True)[:5]
     sl_eps = [(e, c) for e, c in weekly_eps if c["sl"]]
+    sls_recent = [s for s in sl_history.values() if isinstance(s, dict) and not is_stock_or_tradfi_symbol(s.get("symbol", "")) and (now_ts - int(s.get("sl_at", 0))) <= (7 * 86400)]
 
     lines = [
         f"📅 [Bybit 멀티프레임 스캐너 주간 종합 & 3파동 심층 리포트] ({now_str})",
@@ -263,19 +275,15 @@ def main():
         f"• 단계별 실제 달성: 1차돌파(전량홀딩) {tp1_hits}건 | 2차돌파(TP1방어) {tp2_hits}건 | 3차돌파(50%익절+트레일링) {tp3_hits}건 | 수익마감 {trail_closes}건",
         f"• 포착 종목 평균 최고 상승폭(MFE): +{avg_mfe:.1f}% (중앙값 +{med_mfe:.1f}%)",
         "",
-        "🧭 [2. 트랙별(Track A·B·C·D) 성과 및 평균 상승폭]",
+        "🧭 [2. 트랙별(Track A~G) 성과 및 평균 상승폭]",
     ]
 
-    track_names = {
-        "TRACK_A": "Track A (눌림목/스퀴즈)",
-        "TRACK_B": "Track B (수급 돌파/리테스트)",
-        "TRACK_C": "Track C (대장주 Fib 되돌림)",
-        "TRACK_D": "Track D (장기 포지션 · 4H/1D 매집)",
-    }
-    best_track_label = "Track A (눌림목/스퀴즈)"
+    best_track_label = "Track A (TTM 스퀴즈·델타)"
     best_track_rate = -1.0
     for tk, label in track_names.items():
         tot_t, win_t, sl_t, mfes = track_stats.get(tk, [0, 0, 0, []])
+        if tot_t == 0 and tk in ("TRACK_E", "TRACK_F", "TRACK_G"):
+            continue
         closed_t = win_t + sl_t
         rate_t = round((win_t / closed_t) * 100.0, 1) if closed_t > 0 else 0.0
         avg_t = round(float(np.mean(mfes)), 1) if mfes else 0.0
@@ -309,8 +317,13 @@ def main():
     else:
         lines.append("• 집계된 주간 타점 기록이 아직 없습니다.")
 
-    lines.append(f"\n📓 [5. 주간 손절(SL) 오답노트 원인 해부 (총 {len(sl_eps)}건)]")
-    if sl_eps:
+    lines.append(f"\n📓 [5. 주간 손절(SL) 오답노트 v2.0 & 사후 부검 (총 {len(sl_eps)}건)]")
+    if postmortem is not None and hasattr(postmortem, "build_daily_postmortem_summary"):
+        try:
+            lines.extend(postmortem.build_daily_postmortem_summary(sls_recent))
+        except Exception:
+            pass
+    elif sl_eps:
         for s, c in sorted(sl_eps, key=lambda x: int(x[0].get("created_at", 0)), reverse=True)[:5]:
             base = str(s.get("symbol", "")).replace("USDT", "")
             fav = c["fav"]
