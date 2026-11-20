@@ -15,6 +15,11 @@ except Exception:
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
 
+try:
+    import postmortem
+except Exception:
+    postmortem = None
+
 from api import (
     get_scanner_candidates,
     fetch_klines,
@@ -25,7 +30,12 @@ from api import (
 
 SCHEME = "ht" + "tps://"
 HISTORY_FILE = "analyzer_history.json"
+DNA_PROFILE_FILE = "top5_dna_profile.json"
+DNA_RETENTION_SEC = 14 * 86400
 STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json"]))
+
+# [백그라운드 자동 학습 전용 모드] 일간 텔레그램 알림 OFF (필요 시 True로 변경 가능)
+SEND_DAILY_TELEGRAM = False
 
 
 def to_float(val, default=0.0):
@@ -44,6 +54,9 @@ def fmt_price(price):
 
 
 def send_telegram_report(text):
+    if not SEND_DAILY_TELEGRAM:
+        print("[일간 백그라운드 모드] 텔레그램 발송 생략 (Top 5 DNA 및 파라미터 자동 학습 완료)")
+        return False
     token = (os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or "").strip()
     chat_id = (os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or getattr(cfg, "TELEGRAM_CHAT_ID", "") or "").strip()
     if not text or not token or not chat_id:
@@ -61,6 +74,18 @@ def send_telegram_report(text):
                 pass
             time.sleep(1.0)
     return True
+
+
+def load_json_safe(path, default_val):
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+                if isinstance(d, type(default_val)):
+                    return d
+        except Exception:
+            pass
+    return default_val
 
 
 def load_history_safe():
@@ -115,24 +140,26 @@ def load_merged_state():
     return merged
 
 
-def classify_episode_by_mfe(e):
-    """신규 전량 홀딩 전략(1차 홀딩 · 2차 TP1방어 · 3차 50%+50% 트레일링) 기준 분류"""
-    fav = to_float(e.get("max_favorable_pct"))
-    entry_p = to_float(e.get("entry_price"))
-    max_h = to_float(e.get("max_high_price"))
-    if entry_p > 0 and max_h > entry_p:
-        fav = max(fav, round((max_h - entry_p) / entry_p * 100.0, 2))
-    tps = e.get("tps") or []
-    tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 6.8
-    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 13.0
-    tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 19.5
-
-    tp1 = fav >= max(6.5, tp1_req)
-    tp2 = fav >= max(12.5, tp2_req)
-    tp3 = fav >= max(19.0, tp3_req)
-    is_sl = bool(e.get("sl_alerted")) and not tp2
-    trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and tp2 and not is_sl
-    return {"fav": fav, "tp1": tp1, "tp2": tp2, "tp3": tp3, "sl": is_sl, "trailing_closed": trailing_closed}
+def get_recent_scanner_caught_map(state, now_ts, lookback_sec=172800):
+    """최근 48시간 내 스캐너가 포착한 종목 및 트랙 매핑 (사각지대 대조용)"""
+    caught = {}
+    for ep in (state.get("signal_episodes") or {}).values():
+        if not isinstance(ep, dict):
+            continue
+        sym = str(ep.get("symbol", "")).upper()
+        c_at = int(ep.get("created_at", 0))
+        if sym and c_at > 0 and (now_ts - c_at) <= lookback_sec:
+            if sym not in caught or c_at > caught[sym]["created_at"]:
+                caught[sym] = {"track_type": str(ep.get("track_type", "TRACK_A")), "created_at": c_at}
+    for sym, tv in (state.get("tracked") or {}).items():
+        if not isinstance(tv, dict):
+            continue
+        s_up = str(sym).upper()
+        c_at = int(tv.get("created_at", 0))
+        if s_up and c_at > 0 and (now_ts - c_at) <= lookback_sec:
+            if s_up not in caught or c_at > caught[s_up]["created_at"]:
+                caught[s_up] = {"track_type": str(tv.get("track_type", "TRACK_A")), "created_at": c_at}
+    return caught
 
 
 def calc_rsi(series, period=6):
@@ -143,7 +170,47 @@ def calc_rsi(series, period=6):
     return (100.0 - (100.0 / (1.0 + rs))).fillna(50.0)
 
 
-def analyze_top_gainer_structure(coin):
+def _find_launchpad_index(df_15m):
+    """
+    최근 24~36시간(15분봉) 내에서 급등 1파가 시작된 정확한 '발사 직전/초입 시점(Launch Index)' 역산
+    """
+    n = len(df_15m)
+    if n < 35:
+        return max(20, n - 4)
+
+    closes = df_15m["close"].astype(float).values
+    opens = df_15m["open"].astype(float).values
+    highs = df_15m["high"].astype(float).values
+    lows = df_15m["low"].astype(float).values
+    vols = df_15m["volume"].astype(float).fillna(0.0).values
+
+    vol_ma20 = pd.Series(vols).rolling(20, min_periods=5).mean().replace(0, np.nan).values
+
+    # 최근 96봉(24시간) 내 최고가와 그 이전 저점 탐색
+    search_start = max(22, n - 108)
+    peak_idx = search_start + int(np.argmax(highs[search_start:]))
+    pre_peak_start = max(22, peak_idx - 72)
+    if peak_idx <= pre_peak_start + 3:
+        pre_peak_start = max(22, n - 96)
+        peak_idx = n - 1
+
+    trough_idx = pre_peak_start + int(np.argmin(lows[pre_peak_start : peak_idx + 1]))
+
+    # 저점(trough_idx)부터 고점(peak_idx) 사이에서 첫 거래량 폭발 + 강한 양봉이 터진 발사 캔들 탐색
+    for i in range(max(22, trough_idx), min(peak_idx + 1, n - 1)):
+        v_ma = vol_ma20[i - 1] if i > 0 and not np.isnan(vol_ma20[i - 1]) else np.nanmean(vols[max(0, i - 20) : i])
+        v_ratio = vols[i] / max(v_ma, 1e-8) if v_ma and v_ma > 0 else 1.0
+        bar_gain = ((closes[i] - opens[i]) / max(opens[i], 1e-8)) * 100.0
+        gain_2bar = ((closes[min(i + 1, n - 1)] - opens[i]) / max(opens[i], 1e-8)) * 100.0
+        if v_ratio >= 1.8 and bar_gain >= 1.2 and gain_2bar >= 2.5:
+            return i
+
+    # 못 찾으면 저점 직후 첫 양봉 반등 지점 반환
+    return min(max(22, trough_idx + 1), n - 2)
+
+
+def analyze_top_gainer_with_dna(coin, caught_map):
+    """Top 5 급등주의 현재 상태 + 발사 직전(Pre-Pump Launchpad) 7대 DNA 정밀 역추적"""
     sym = coin["symbol"]
     base = coin.get("base_coin") or sym.replace("USDT", "")
     price = to_float(coin.get("price"))
@@ -153,67 +220,211 @@ def analyze_top_gainer_structure(coin):
     oi_ratio = round((oi_m / max(turn_m, 0.1)) * 100.0, 1)
     fund_pct = to_float(coin.get("funding_pct"))
 
-    df_15m = fetch_klines(sym, interval="15", limit=96)
-    df_1h = fetch_klines(sym, interval="60", limit=48)
+    df_15m = fetch_klines(sym, interval="15", limit=200)
+    df_1h = fetch_klines(sym, interval="60", limit=72)
 
-    vol_spike, rsi15, squeeze_pct = 1.5, 55.0, 3.8
+    vol_spike, rsi15, squeeze_pct = 1.5, 55.0, 4.5
     pattern_note = "수급 집중 돌파"
+    htf_trend = "1H 정배열 확산"
+    dna = None
 
-    if not df_15m.empty and len(df_15m) >= 25:
-        closes, vols = df_15m["close"], df_15m["volume"]
-        # [수정 2] 코인게코 백업 반올림 가격 대신 15분봉 최신 실측 종가로 정밀 교체
+    if not df_15m.empty and len(df_15m) >= 35:
+        closes = df_15m["close"].astype(float)
+        highs = df_15m["high"].astype(float)
+        lows = df_15m["low"].astype(float)
+        vols = df_15m["volume"].astype(float).fillna(0.0)
+
         live_p = to_float(closes.iloc[-1], 0.0)
         if live_p > 0 and (price <= 0 or 0.50 <= (live_p / price) <= 2.00):
             price = live_p
 
-        rsi15 = round(to_float(calc_rsi(closes, 6).iloc[-1], 55.0), 1)
-        avg_v = to_float(vols.iloc[-25:-5].mean(), 1.0)
-        max_v = to_float(vols.iloc[-12:].max(), avg_v)
-        vol_spike = round(max_v / max(avg_v, 1e-8), 1)
+        rsi6_s = calc_rsi(closes, 6)
+        rsi15 = round(to_float(rsi6_s.iloc[-1], 55.0), 1)
 
-        hi_w = to_float(df_15m["high"].iloc[-40:-15].max(), price)
-        lo_w = to_float(df_15m["low"].iloc[-40:-15].min(), price * 0.96)
-        if lo_w > 0:
-            squeeze_pct = round((hi_w - lo_w) / lo_w * 100.0, 1)
+        ma20_s = closes.rolling(20, min_periods=5).mean()
+        std20_s = closes.rolling(20, min_periods=5).std().fillna(0.0)
+        bb_width_s = ((std20_s * 4.0) / ma20_s.replace(0, np.nan) * 100.0).fillna(6.0)
 
-        if squeeze_pct <= 5.0 and vol_spike >= 2.5:
-            pattern_note = f"박스권 초응축({squeeze_pct:.1f}%) 후 거래량 {vol_spike:.1f}배 폭발"
-        elif fund_pct < 0:
-            pattern_note = f"음수 펀딩({fund_pct:+.4f}%) 숏스퀴즈 + 거래량 {vol_spike:.1f}배"
+        # 발사 직전 시점(Launch Index) 역산 및 7대 DNA 추출
+        l_idx = _find_launchpad_index(df_15m)
+        pre_idx = max(20, l_idx - 1)
+        l_ts = to_float(df_15m["timestamp"].iloc[l_idx], 0.0)
+        l_price = to_float(df_15m["open"].iloc[l_idx], price)
+
+        pre_bb_width = round(to_float(bb_width_s.iloc[max(0, pre_idx - 8) : pre_idx + 1].min(), 6.0), 2)
+        pre_rsi6 = round(to_float(rsi6_s.iloc[pre_idx], 50.0), 1)
+
+        v_pre_recent = to_float(vols.iloc[max(0, pre_idx - 5) : pre_idx + 1].mean(), 1.0)
+        v_pre_base = to_float(vols.iloc[max(0, pre_idx - 23) : max(1, pre_idx - 5)].mean(), v_pre_recent)
+        pre_vol_dry_ratio = round(float(np.clip(v_pre_recent / max(v_pre_base, 1e-8), 0.05, 3.0)), 2)
+
+        v_base_20 = to_float(vols.iloc[max(0, pre_idx - 19) : pre_idx + 1].mean(), 1.0)
+        v_launch_max = to_float(vols.iloc[l_idx : min(len(vols), l_idx + 2)].max(), v_base_20)
+        launch_vol_mult = round(float(np.clip(v_launch_max / max(v_base_20, 1e-8), 0.5, 25.0)), 2)
+
+        # 발사 시점의 1시간봉 20MA 대비 이격도 역산
+        pre_1h_ma20_dist = 0.0
+        if not df_1h.empty and len(df_1h) >= 20:
+            c1h = df_1h["close"].astype(float)
+            ma20_1h_s = c1h.rolling(20, min_periods=5).mean()
+            ma20_1h_now = to_float(ma20_1h_s.iloc[-1], price)
+            htf_trend = "1H 정배열 돌파·확산" if price >= ma20_1h_now else "1H 급등 후 중심선 눌림"
+
+            if "timestamp" in df_1h.columns and l_ts > 0:
+                before_1h = df_1h[df_1h["timestamp"] <= l_ts]
+                if len(before_1h) >= 20:
+                    ma20_at_launch = to_float(before_1h["close"].astype(float).rolling(20, min_periods=5).mean().iloc[-1], l_price)
+                    if ma20_at_launch > 0:
+                        pre_1h_ma20_dist = round(((l_price - ma20_at_launch) / ma20_at_launch) * 100.0, 2)
+
+        squeeze_pct = pre_bb_width
+        vol_spike = launch_vol_mult
+
+        if pre_bb_width <= 5.5 and launch_vol_mult >= 2.2:
+            pattern_tag = "초응축 돌파 폭발"
+            pattern_note = f"발사직전 초응축({pre_bb_width:.1f}%) 후 거래량 {launch_vol_mult:.1f}배 폭발"
+        elif fund_pct < -0.005:
+            pattern_tag = "음수펀딩 숏스퀴즈"
+            pattern_note = f"음수 펀딩({fund_pct:+.4f}%) 숏스퀴즈 + 발사 거래량 {launch_vol_mult:.1f}배"
+        elif pre_rsi6 <= 38.0 or pre_1h_ma20_dist <= -2.0:
+            pattern_tag = "과매도 바닥 급반전"
+            pattern_note = f"과매도 바닥(RSI {pre_rsi6:.1f}·1H이격 {pre_1h_ma20_dist:+.1f}%) 후 거래량 {launch_vol_mult:.1f}배 반전"
         else:
-            pattern_note = f"15분봉 거래량 {vol_spike:.1f}배 유입 + 추세 가속"
+            pattern_tag = "1H 지지 추세가속"
+            pattern_note = f"1H 추세선(이격 {pre_1h_ma20_dist:+.1f}%) 지지 + 발사 거래량 {launch_vol_mult:.1f}배 가속"
 
-    htf_trend = "1H 정배열 확산"
-    if not df_1h.empty and len(df_1h) >= 20:
-        ma20_1h = to_float(df_1h["close"].rolling(20).mean().iloc[-1], price)
-        htf_trend = "1H 정배열 돌파·확산" if price >= ma20_1h else "1H 급등 후 중심선 눌림"
+        caught_info = caught_map.get(sym)
+        dna = {
+            "symbol": sym,
+            "timestamp": int(time.time()),
+            "change_24h": round(chg_24h, 2),
+            "caught_by_scanner": bool(caught_info is not None),
+            "caught_track": caught_info["track_type"] if caught_info else "MISSED",
+            "pre_bb_width": pre_bb_width,
+            "pre_vol_dry_ratio": pre_vol_dry_ratio,
+            "launch_vol_mult": launch_vol_mult,
+            "pre_rsi6": pre_rsi6,
+            "pre_1h_ma20_dist": pre_1h_ma20_dist,
+            "oi_ratio": oi_ratio,
+            "funding_pct": round(fund_pct, 5),
+            "pattern_tag": pattern_tag,
+        }
 
     return {
         "symbol": sym, "base": base, "price": price, "change_24h": chg_24h,
         "turnover_m": turn_m, "oi_m": oi_m, "oi_ratio": oi_ratio, "funding_pct": fund_pct,
         "vol_spike": vol_spike, "rsi15": rsi15, "squeeze_pct": squeeze_pct,
-        "pattern_note": pattern_note, "htf_trend": htf_trend,
+        "pattern_note": pattern_note, "htf_trend": htf_trend, "dna": dna,
     }
+
+
+def update_top5_dna_profile(analyzed_top5, now_ts):
+    """
+    [폐쇄형 자가 진화 엔진]
+    - 최근 14일간 Top 5 급등주의 '발사 직전 DNA'를 누적 저장
+    - 우리 스캐너가 놓친(MISSED) 사각지대 대장주에 2배 가중치를 부여해
+      Track H가 실시간으로 사냥할 'active_dna_formula' 자동 산출
+    """
+    profile = load_json_safe(DNA_PROFILE_FILE, {"samples": [], "active_dna_formula": {}, "updated_at": 0})
+    samples = [
+        s for s in (profile.get("samples") or [])
+        if isinstance(s, dict)
+        and (now_ts - int(to_float(s.get("timestamp"), 0))) <= DNA_RETENTION_SEC
+        and not is_stock_or_tradfi_symbol(s.get("symbol", ""))
+    ]
+
+    for item in analyzed_top5:
+        dna = item.get("dna")
+        if not isinstance(dna, dict):
+            continue
+        sym = dna["symbol"]
+        dup_recent = any(
+            str(s.get("symbol", "")).upper() == sym and (now_ts - int(to_float(s.get("timestamp"), 0))) < 21600
+            for s in samples
+        )
+        if not dup_recent:
+            samples.insert(0, dna)
+
+    samples = samples[:120]
+
+    # 미포착(MISSED) 종목에 2배 가중치를 부여한 표본 풀 구성
+    weighted_pool = []
+    missed_cnt = 0
+    for s in samples:
+        weighted_pool.append(s)
+        if not s.get("caught_by_scanner"):
+            weighted_pool.append(s)
+            missed_cnt += 1
+
+    formula = {"enabled": False, "sample_count": len(samples), "missed_count": missed_cnt, "updated_at": now_ts}
+    if len(samples) >= 5 and weighted_pool:
+        bb_vals = [to_float(x.get("pre_bb_width"), 6.0) for x in weighted_pool]
+        dry_vals = [to_float(x.get("pre_vol_dry_ratio"), 0.8) for x in weighted_pool]
+        lvol_vals = [to_float(x.get("launch_vol_mult"), 2.0) for x in weighted_pool]
+        rsi_vals = [to_float(x.get("pre_rsi6"), 50.0) for x in weighted_pool]
+        dist_vals = [to_float(x.get("pre_1h_ma20_dist"), 0.0) for x in weighted_pool]
+        oi_vals = [to_float(x.get("oi_ratio"), 10.0) for x in weighted_pool]
+        fund_vals = [to_float(x.get("funding_pct"), 0.005) for x in weighted_pool]
+        tags = [str(x.get("pattern_tag") or "초응축 돌파 폭발") for x in weighted_pool]
+        dominant_tag = max(set(tags), key=tags.count)
+
+        formula = {
+            "enabled": True,
+            "sample_count": len(samples),
+            "missed_count": missed_cnt,
+            "dominant_tag": dominant_tag,
+            "bb_width_max": round(float(np.clip(np.percentile(bb_vals, 78), 4.5, 16.0)), 2),
+            "vol_dry_max": round(float(np.clip(np.percentile(dry_vals, 78), 0.55, 1.35)), 2),
+            "launch_vol_min": round(float(np.clip(np.percentile(lvol_vals, 30), 1.6, 3.8)), 2),
+            "pre_rsi_min": round(float(np.clip(np.percentile(rsi_vals, 15), 18.0, 48.0)), 1),
+            "pre_rsi_max": round(float(np.clip(np.percentile(rsi_vals, 85), 55.0, 72.0)), 1),
+            "ma20_1h_dist_min": round(float(np.clip(np.percentile(dist_vals, 15), -8.0, 0.5)), 2),
+            "ma20_1h_dist_max": round(float(np.clip(np.percentile(dist_vals, 85), 2.0, 9.0)), 2),
+            "oi_ratio_min": round(float(np.clip(np.percentile(oi_vals, 25), 4.0, 22.0)), 1),
+            "funding_max": round(float(np.clip(np.percentile(fund_vals, 80), -0.005, 0.015)), 5),
+            "updated_at": now_ts,
+        }
+
+    profile["samples"] = samples
+    profile["active_dna_formula"] = formula
+    profile["updated_at"] = now_ts
+    save_json_safe(DNA_PROFILE_FILE, profile)
+    return formula
 
 
 def verify_48h_history(history_data, current_map, now_ts):
     records = history_data.get("records", [])
-    verified_lines, updated_records, seen_syms = [], [], set()
-
-    for rec in sorted(records, key=lambda x: int(x.get("timestamp", 0)), reverse=True):
+    valid_recs = []
+    for rec in records:
         if not isinstance(rec, dict):
             continue
         rec_ts = int(rec.get("timestamp", 0))
         age_h = (now_ts - rec_ts) / 3600.0
         sym = str(rec.get("symbol", "")).upper()
         entry_p = to_float(rec.get("price"), 0.0)
-        if age_h > 96 or age_h < 0 or not sym or entry_p <= 0 or is_stock_or_tradfi_symbol(sym):
-            continue
+        if 0 <= age_h <= 96 and sym and entry_p > 0 and not is_stock_or_tradfi_symbol(sym):
+            valid_recs.append(rec)
+
+    def _display_priority(rec):
+        age_h = (now_ts - int(rec.get("timestamp", 0))) / 3600.0
+        if 6.0 <= age_h <= 54.0:
+            return (0, -int(rec.get("timestamp", 0)))
+        if 0.2 <= age_h < 6.0:
+            return (1, -int(rec.get("timestamp", 0)))
+        return (2, -int(rec.get("timestamp", 0)))
+
+    valid_recs.sort(key=_display_priority)
+    verified_lines, seen_syms = [], set()
+    for rec in valid_recs:
+        rec_ts = int(rec.get("timestamp", 0))
+        age_h = (now_ts - rec_ts) / 3600.0
+        sym = str(rec.get("symbol", "")).upper()
+        entry_p = to_float(rec.get("price"), 0.0)
 
         curr_p = to_float(current_map.get(sym, {}).get("price"), entry_p)
         max_h = max(to_float(rec.get("max_high_48h"), entry_p), curr_p)
 
-        if 0.2 <= age_h <= 54 and sym not in seen_syms and len(seen_syms) < 6:
+        if 0.2 <= age_h <= 54.0 and sym not in seen_syms and len(seen_syms) < 6:
             df_1h = fetch_klines(sym, interval="60", limit=48)
             if not df_1h.empty and "timestamp" in df_1h.columns:
                 live_1h_c = to_float(df_1h["close"].iloc[-1], 0.0)
@@ -227,7 +438,6 @@ def verify_48h_history(history_data, current_map, now_ts):
         max_gain = round((max_h - entry_p) / entry_p * 100.0, 1)
         curr_gain = round((curr_p - entry_p) / entry_p * 100.0, 1)
         rec["max_gain_pct"] = max_gain
-        updated_records.append(rec)
 
         if age_h >= 0.2 and sym not in seen_syms and len(verified_lines) < 6:
             seen_syms.add(sym)
@@ -237,80 +447,18 @@ def verify_48h_history(history_data, current_map, now_ts):
                 f"• ${base} ({age_h:.1f}h 경과 | {status}): 기준 {fmt_price(entry_p)} → 최고 {fmt_price(max_h)} (+{max_gain:.1f}%) | 현재 {curr_gain:+.1f}%"
             )
 
-    history_data["records"] = updated_records[:50]
+    valid_recs.sort(key=lambda x: int(x.get("timestamp", 0)), reverse=True)
+    history_data["records"] = valid_recs[:50]
     return verified_lines
-
-
-def summarize_scanner_episodes(now_ts):
-    state = load_merged_state()
-    episodes = state.get("signal_episodes") or {}
-    tracked = state.get("tracked") or {}
-    sl_history = state.get("sl_history") or {}
-
-    eps_list = [e for e in episodes.values() if isinstance(e, dict) and not is_stock_or_tradfi_symbol(e.get("symbol", "")) and (now_ts - int(e.get("created_at", 0))) <= (7 * 86400)]
-    sls_recent = [s for s in sl_history.values() if isinstance(s, dict) and not is_stock_or_tradfi_symbol(s.get("symbol", "")) and (now_ts - int(s.get("sl_at", 0))) <= (7 * 86400)]
-    active_list = [
-        (sym, t) for sym, t in tracked.items()
-        if isinstance(t, dict) and not is_stock_or_tradfi_symbol(sym) and not t.get("sl_alerted") and not t.get("tp3_completed") and not t.get("closed_alerted")
-    ]
-
-    if not eps_list and not sls_recent and not active_list:
-        return ["• 현재 기록된 스캐너 타점 에피소드가 없습니다."]
-
-    parsed = [(e, classify_episode_by_mfe(e)) for e in eps_list]
-    tot = len(parsed)
-    tp1_c = sum(1 for _, c in parsed if c["tp1"])
-    tp2_c = sum(1 for _, c in parsed if c["tp2"])
-    tp3_c = sum(1 for _, c in parsed if c["tp3"])
-    trail_c = sum(1 for _, c in parsed if c["trailing_closed"])
-    sl_c = sum(1 for _, c in parsed if c["sl"])
-    closed_c = tp2_c + sl_c
-    win_r = round((tp2_c / closed_c) * 100.0, 1) if closed_c > 0 else 0.0
-
-    # [수정 2] 신규 전량 홀딩 전략 기준 문구 및 승률 동기화
-    lines = [
-        f"• [최근 7일 누적 성적]: 총 {tot}건 포착 | 수익 확정 승률(TP2 방어선 이상) {win_r:.1f}%",
-        f"• 단계별 실제 달성: 1차돌파(전량홀딩) {tp1_c}건 | 2차돌파(TP1방어) {tp2_c}건 | 3차돌파(50%익절+트레일링) {tp3_c}건 | 수익마감 {trail_c}건 | 손절 {sl_c}건",
-    ]
-
-    best_eps = sorted(parsed, key=lambda x: x[1]["fav"], reverse=True)[:4]
-    for b, c in best_eps:
-        sym = b.get("symbol", "").replace("USDT", "")
-        h_tag = "[장기] " if (b.get("is_long_term") or b.get("track_type") == "TRACK_D") else ""
-        fav = c["fav"]
-        ep_p = to_float(b.get("entry_price"))
-        mh_p = to_float(b.get("max_high_price"))
-        tag = "3차50%익절·트레일링" if c["tp3"] else ("2차돌파·TP1방어" if c["tp2"] else ("1차돌파·전량홀딩" if c["tp1"] else "추적중"))
-        if fav > 0:
-            lines.append(f"  ↳ 🏆 베스트 타점: {h_tag}${sym} 진입 {fmt_price(ep_p)} → 최고 {fmt_price(mh_p)} (+{fav:.1f}% | {tag})")
-
-    if active_list:
-        lines.append(f"• 🔄 [현재 실시간 감시/보유 중 ({len(active_list)}종목)]:")
-        for sym, t in sorted(active_list, key=lambda x: to_float(x[1].get("max_favorable_pct")), reverse=True)[:4]:
-            base = sym.replace("USDT", "")
-            h_tag = "[장기] " if (t.get("is_long_term") or t.get("track_type") == "TRACK_D") else ""
-            c = classify_episode_by_mfe(t)
-            st = "3차50%익절·트레일링" if c["tp3"] else ("2차돌파·TP1방어" if c["tp2"] else ("1차돌파·전량홀딩" if c["tp1"] else "초입추적중"))
-            lines.append(f"  ↳ 🟢 {h_tag}${base}: 진입 {fmt_price(t.get('entry_price'))} | 최고 +{c['fav']:.1f}% ({st})")
-
-    if sls_recent:
-        lines.append(f"• 📓 [손절(SL) 오답 노트 & 원인 해부 ({len(sls_recent)}건)]:")
-        for s in sorted(sls_recent, key=lambda x: int(x.get("sl_at", 0)), reverse=True)[:3]:
-            sym = s.get("symbol", "").replace("USDT", "")
-            hold_m = int(s.get("hold_minutes", 0))
-            max_f = to_float(s.get("max_favorable_pct", 0.0))
-            rsi_v = to_float(s.get("rsi6_15m", 50.0))
-            vol_m = to_float(s.get("vol_mult", 1.0))
-            sl_p_val = int(round(to_float(s.get("sl_pct"), 20 if s.get("track_type") == "TRACK_D" else FIXED_SL_PCT)))
-            cause = "단기 고점 RSI 과열 추격" if rsi_v >= 70 else ("돌파 거래량 부족" if vol_m < 2.0 else "비트에 연동된 급격한 스탑헌팅")
-            lines.append(f"  ↳ ⚠️ ${sym}: 보유 {hold_m}분 후 -{sl_p_val}% 손절 (최고 +{max_f:.1f}% 반등 | 원인: {cause})")
-
-    return lines
 
 
 def main():
     now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
+
+    state = load_merged_state()
+    caught_map = get_recent_scanner_caught_map(state, now_ts)
+
     candidates, _, _ = get_scanner_candidates()
     valid_syms, _ = get_valid_bybit_linear_symbols()
     if valid_syms:
@@ -323,7 +471,7 @@ def main():
     top5 = sorted(candidates, key=lambda x: to_float(x.get("change_24h")), reverse=True)[:5]
     analyzed_top5 = []
     with ThreadPoolExecutor(max_workers=5) as ex:
-        f_map = {ex.submit(analyze_top_gainer_structure, c): idx for idx, c in enumerate(top5)}
+        f_map = {ex.submit(analyze_top_gainer_with_dna, c, caught_map): idx for idx, c in enumerate(top5)}
         temp_list = [None] * len(top5)
         for fut in as_completed(f_map):
             idx = f_map[fut]
@@ -333,13 +481,24 @@ def main():
                 pass
         analyzed_top5 = [x for x in temp_list if x is not None]
 
-    for info in analyzed_top5:
-        history_data["records"].insert(0, {
-            "symbol": info["symbol"], "price": info["price"], "change_24h": info["change_24h"],
-            "max_high_48h": info["price"], "max_gain_pct": 0.0, "timestamp": now_ts,
-        })
+    # Top 5 발사 직전 DNA 프로필 갱신 (Track H 실시간 연동)
+    dna_formula = update_top5_dna_profile(analyzed_top5, now_ts)
 
-    scanner_lines = summarize_scanner_episodes(now_ts)
+    # 48시간 사후검증용 기록 추가 (6시간 내 중복 기록 방지)
+    for info in analyzed_top5:
+        already_recent = any(
+            isinstance(r, dict)
+            and str(r.get("symbol", "")).upper() == info["symbol"]
+            and (now_ts - int(r.get("timestamp", 0))) < 21600
+            for r in history_data["records"]
+        )
+        if not already_recent:
+            history_data["records"].insert(0, {
+                "symbol": info["symbol"], "price": info["price"], "change_24h": info["change_24h"],
+                "max_high_48h": info["price"], "max_gain_pct": 0.0, "timestamp": now_ts,
+            })
+
+    # 자율 학습 백업 TP 파라미터 갱신
     gains = [to_float(x.get("max_gain_pct")) for x in history_data.get("records", []) if to_float(x.get("max_gain_pct")) >= 6.0]
     p1_l, p2_l, p3_l = (
         (float(np.clip(np.percentile(gains, 35), 7.5, 11.0)),
@@ -355,44 +514,32 @@ def main():
     history_data["dynamic_tp_tuning"] = tp_obj
     save_json_safe(HISTORY_FILE, history_data)
 
-    report = [
-        f"📊 [Bybit 선물 Top 5 일간 분석 & 48h 사후검증] ({now_str})",
-        "",
-        "🔥 [금일 바이비트 선물 급등 Top 5 초입 패턴 정밀 해부]",
+    # GitHub Actions 실행 로그용 백그라운드 학습 요약 출력
+    log_lines = [
+        f"🧬 [Bybit Top 5 백그라운드 DNA 학습 완료] ({now_str})",
+        f"• 48h 사후검증 추적: {len(verified_48h_lines)}건 | 백업 TP: +{p1_l:.1f}% / +{p2_l:.1f}% / +{p3_l:.1f}%",
     ]
     for idx, it in enumerate(analyzed_top5, 1):
-        report.append(
-            f"{idx}. ${it['base']} ({it['symbol']}) | 24h {it['change_24h']:+.1f}%\n"
-            f"   • 현재가: {fmt_price(it['price'])} USDT | 거래대금 {it['turnover_m']:.1f}M | OI {it['oi_m']:.1f}M (비중 {it['oi_ratio']:.0f}%)\n"
-            f"   • 수급/지표: 펀딩 {it['funding_pct']:+.4f}% | 15m RSI6 {it['rsi15']:.1f} | 응축폭 {it['squeeze_pct']:.1f}%\n"
-            f"   • 초입 특징: {it['pattern_note']} ({it['htf_trend']})"
+        dna = it.get("dna") or {}
+        c_tag = f"✅포착({dna.get('caught_track')})" if dna.get("caught_by_scanner") else "❌미포착 사각지대"
+        log_lines.append(
+            f"  {idx}. ${it['base']} ({it['change_24h']:+.1f}%) [{c_tag}] | "
+            f"직전응축 {dna.get('pre_bb_width', 0)}% · 발사거래량 {dna.get('launch_vol_mult', 0)}x · "
+            f"직전RSI {dna.get('pre_rsi6', 0)} · 1H이격 {dna.get('pre_1h_ma20_dist', 0):+}%"
         )
-
-    if analyzed_top5:
-        avg_sq = np.mean([x["squeeze_pct"] for x in analyzed_top5])
-        avg_vol = np.mean([x["vol_spike"] for x in analyzed_top5])
-        neg_f = sum(1 for x in analyzed_top5 if x["funding_pct"] < 0)
-        report.extend([
-            "",
-            "💡 [금일 급등 대장주 공통 초입 공식 요약]",
-            f"• 평균 박스권 응축폭 {avg_sq:.1f}% 수렴 후 15분봉 거래량 평균 {avg_vol:.1f}배 폭발",
-            f"• Top 5 중 음수 펀딩비(숏스퀴즈 연료) 종목 비중: {neg_f}/5종목",
-        ])
-
-    report.append("\n⏱️ [48시간 사후검증 추적 결과 (이전 급등주 사후 흐름)]")
-    if verified_48h_lines:
-        report.extend(verified_48h_lines)
+    if dna_formula.get("enabled"):
+        log_lines.append(
+            f"• 🧬 Track H 활성 DNA 공식 (14일 표본 {dna_formula['sample_count']}건 / 미포착 {dna_formula['missed_count']}건): "
+            f"주력 [{dna_formula['dominant_tag']}] | 응축 <= {dna_formula['bb_width_max']}% · "
+            f"발사거래량 >= {dna_formula['launch_vol_min']}x · 직전RSI {dna_formula['pre_rsi_min']}~{dna_formula['pre_rsi_max']} · "
+            f"1H이격 {dna_formula['ma20_1h_dist_min']:+}~{dna_formula['ma20_1h_dist_max']:+}% · OI >= {dna_formula['oi_ratio_min']}%"
+        )
     else:
-        for it in analyzed_top5[:3]:
-            report.append(f"• ${it['base']} (신규 추적 등록): 기준가 {fmt_price(it['price'])} USDT (24h {it['change_24h']:+.1f}%)")
+        log_lines.append(f"• 🧬 Track H 학습 대기 중 (현재 표본 {dna_formula.get('sample_count', 0)}/5건)")
 
-    report.append("\n🎯 [스캐너 실전 타점 성적표 & 오답노트 해부]")
-    report.extend(scanner_lines)
-    report.append(f"\n⚙️ [자율 학습 기준 파라미터]: TP1 +{p1_l:.1f}% / TP2 +{p2_l:.1f}% / TP3 +{p3_l:.1f}% (실전 타점은 개별 차트 저항선 적용)")
-
-    full_msg = "\n".join(report)
-    print(full_msg)
-    send_telegram_report(full_msg)
+    full_log = "\n".join(log_lines)
+    print(full_log)
+    send_telegram_report(full_log)
 
 
 if __name__ == "__main__":
