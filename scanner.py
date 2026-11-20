@@ -52,12 +52,15 @@ RE_ALERT_COOLDOWN_SEC = 86400
 SL_RECOVERY_COOLDOWN_SEC = 14400
 HISTORY_RETENTION_SEC = 259200
 EPISODE_RETENTION_SEC = 604800
-# [수정 1] 1회 스캔당 신규 발송 최대 2건으로 압축
 MAX_NEW_ALERTS_PER_SCAN = 2
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 DEFAULT_LONGTERM_SL_PCT = 20
+BTC_DUMP_DROP_15M_PCT = to_float(getattr(cfg, "BTC_DUMP_DROP_15M_PCT", -0.70), -0.70)
+BTC_DUMP_DROP_1H_PCT = to_float(getattr(cfg, "BTC_DUMP_DROP_1H_PCT", -1.50), -1.50)
+
 LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
 ALL_STATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json", LOCAL_RUNTIME_CACHE]))
+POSTMORTEM_DB_FILE = getattr(postmortem, "POSTMORTEM_DB_FILE", "postmortem_db.json") if postmortem else "postmortem_db.json"
 
 ALL_LOCK_FLAGS = (
     "tp1_hit", "tp2_hit", "tp3_hit",
@@ -105,6 +108,88 @@ def _read_json(path):
     return {}
 
 
+def check_btc_market_regime():
+    """
+    [BTC Regime Condition · 비트코인 마스터 스위치]
+    - BTC 15분봉 하락 <= -0.70% 또는 1시간봉 하락 <= -1.50% 감지 시
+      신규 알트 진입을 전면 차단(gate_locked=True). 기존 보유 포지션 감시는 정상 유지.
+    """
+    regime = {"gate_locked": False, "btc_15m_pct": 0.0, "btc_1h_pct": 0.0, "reason": "정상"}
+    try:
+        df15 = fetch_klines("BTCUSDT", interval="15", limit=20)
+        df1h = fetch_klines("BTCUSDT", interval="60", limit=10)
+
+        if not df15.empty and len(df15) >= 2:
+            c_now = to_float(df15["close"].iloc[-1])
+            o_now = to_float(df15["open"].iloc[-1], c_now)
+            c_prev = to_float(df15["close"].iloc[-2], c_now)
+            if o_now > 0 and c_prev > 0:
+                chg_oc = (c_now - o_now) / o_now * 100.0
+                chg_cc = (c_now - c_prev) / c_prev * 100.0
+                regime["btc_15m_pct"] = round(min(chg_oc, chg_cc), 2)
+
+        if not df1h.empty and len(df1h) >= 2:
+            c_now_h = to_float(df1h["close"].iloc[-1])
+            o_now_h = to_float(df1h["open"].iloc[-1], c_now_h)
+            c_prev_h = to_float(df1h["close"].iloc[-2], c_now_h)
+            if o_now_h > 0 and c_prev_h > 0:
+                chg_oc_h = (c_now_h - o_now_h) / o_now_h * 100.0
+                chg_cc_h = (c_now_h - c_prev_h) / c_prev_h * 100.0
+                regime["btc_1h_pct"] = round(min(chg_oc_h, chg_cc_h), 2)
+
+        if regime["btc_15m_pct"] <= BTC_DUMP_DROP_15M_PCT or regime["btc_1h_pct"] <= BTC_DUMP_DROP_1H_PCT:
+            regime["gate_locked"] = True
+            regime["reason"] = f"BTC 급락 감지 (15m {regime['btc_15m_pct']:+.2f}%, 1H {regime['btc_1h_pct']:+.2f}%)"
+    except Exception:
+        pass
+    return regime
+
+
+def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
+    """
+    종목별 5분 주기 [ts, price, oi_m] 스냅샷을 최대 4개 보관하고,
+    직전 10~90분 전 기준 스냅샷을 OI 4분면 분석용으로 반환
+    """
+    ref_map = {}
+    for sym in list(oi_snapshot.keys()):
+        if is_stock_or_tradfi_symbol(sym):
+            del oi_snapshot[sym]
+            continue
+        hist = oi_snapshot.get(sym)
+        if not isinstance(hist, list):
+            del oi_snapshot[sym]
+            continue
+        hist = [h for h in hist if isinstance(h, list) and len(h) == 3 and (now_ts - int(h[0])) <= 7200]
+        if hist:
+            oi_snapshot[sym] = hist[-4:]
+        else:
+            del oi_snapshot[sym]
+
+    for c in candidates:
+        sym = c.get("symbol", "")
+        p = to_float(c.get("price"))
+        oi = to_float(c.get("oi_m"))
+        if not sym or p <= 0 or oi <= 0:
+            continue
+
+        hist = oi_snapshot.get(sym, [])
+        # 10~90분 전 스냅샷 중 가장 20~30분에 가까운 기록 선택
+        best_ref = None
+        for h in hist:
+            age = now_ts - int(h[0])
+            if 600 <= age <= 5400:
+                best_ref = {"ts": int(h[0]), "price": to_float(h[1]), "oi_m": to_float(h[2])}
+                break
+        if best_ref:
+            ref_map[sym] = best_ref
+
+        if not hist or (now_ts - int(hist[-1][0])) >= 240:
+            hist.append([now_ts, round(p, 6), round(oi, 3)])
+            oi_snapshot[sym] = hist[-4:]
+
+    return ref_map
+
+
 def sanitize_flags_by_mfe(item):
     if not isinstance(item, dict):
         return item
@@ -138,6 +223,11 @@ def _merge_state_dicts(base_state, incoming_state):
     for k, v in (incoming_state.get("sl_history") or {}).items():
         if isinstance(v, dict) and not is_stock_or_tradfi_symbol(v.get("symbol", "")):
             base_state["sl_history"][k] = v
+    for s, h_list in (incoming_state.get("oi_snapshot") or {}).items():
+        if not is_stock_or_tradfi_symbol(s) and isinstance(h_list, list):
+            cur_list = base_state.setdefault("oi_snapshot", {}).get(s, [])
+            by_ts = {int(x[0]): x for x in cur_list + h_list if isinstance(x, list) and len(x) == 3}
+            base_state["oi_snapshot"][s] = [by_ts[t] for t in sorted(by_ts.keys())][-4:]
     for ek, ev in (incoming_state.get("signal_episodes") or {}).items():
         if not isinstance(ev, dict) or is_stock_or_tradfi_symbol(ev.get("symbol", "")):
             continue
@@ -179,7 +269,7 @@ def _merge_state_dicts(base_state, incoming_state):
 
 
 def load_state():
-    merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
+    merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}, "oi_snapshot": {}}
     for path in ALL_STATE_FILES:
         _merge_state_dicts(merged, _read_json(path))
     return merged
@@ -274,8 +364,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     post_1m = df_1m[df_1m["timestamp"] >= created_ms].copy() if not df_1m.empty else df_1m
 
     base = symbol.replace("USDT", "")
-    has_live_1m = False
-    has_live_price = False
+    has_live_1m, has_live_price = False, False
     last_close, last_ts_ms = 0.0, 0
     min_1m_low, min_1m_close = None, None
 
@@ -290,14 +379,12 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
         min_1m_low = to_float(post_1m["low"].min(), default=0.0)
         min_1m_close = to_float(post_1m["close"].min(), default=0.0)
         if last_close > 0 and last_ts_ms > 0:
-            has_live_1m = True
-            has_live_price = True
+            has_live_1m, has_live_price = True, True
     else:
         max_high, peak_ts_ms = max(prev_max_h, entry_ref), prev_peak_ms
         if hist_last_close > 0 and hist_last_ts_ms > 0:
             has_live_price = True
-            last_close = hist_last_close
-            last_ts_ms = hist_last_ts_ms
+            last_close, last_ts_ms = hist_last_close, hist_last_ts_ms
 
     max_fav = round((max_high - entry_ref) / entry_ref * 100.0, 2)
     t_item["max_high_price"] = max_high
@@ -312,7 +399,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     tp3_p = to_float(tps[2]) if len(tps) > 2 and to_float(tps[2]) > 0 else entry_ref * (1.0 + tp_params["tp3_min_pct"] / 100.0)
 
     g1 = round(max(6.5, (tp1_p - entry_ref) / entry_ref * 100.0), 1)
-    g2 = round(max(12.5, (tp2_p - entry_ref) / entry_ref * 100.0), 1)
+    g2 = round(max(12.0, (tp2_p - entry_ref) / entry_ref * 100.0), 1)
     g3 = round(max(19.5, (tp3_p - entry_ref) / entry_ref * 100.0), 1)
     msgs = []
 
@@ -396,8 +483,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     valid_lows = [v for v in (hist_min_low, min_1m_low) if v is not None and v > 0]
     valid_closes = [v for v in (hist_min_close, min_1m_close) if v is not None and v > 0]
     if has_live_price and valid_lows and valid_closes:
-        min_low = min(valid_lows)
-        min_close = min(valid_closes)
+        min_low, min_close = min(valid_lows), min(valid_closes)
         if min_low <= init_stop_p and (min_close <= init_stop_p or (last_close > 0 and last_close <= init_stop_p)):
             trig = min(min_close, last_close) if last_close > 0 else min_close
             t_item["sl_alerted"] = True
@@ -440,6 +526,7 @@ def _send_signal_notifications(res, now_str):
 
 
 def _git_sync_state():
+    """bot_state.json + scanner_state.json + postmortem_db.json 안전 병합 후 Git 영구 동기화"""
     try:
         subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
         subprocess.run(["git", "config", "--local", "user.name", "GitHub Actions"], check=False)
@@ -454,6 +541,15 @@ def _git_sync_state():
                     except Exception:
                         pass
             save_state(loc_dict)
+
+            pm_raw = None
+            if os.path.exists(POSTMORTEM_DB_FILE):
+                try:
+                    with open(POSTMORTEM_DB_FILE, "r", encoding="utf-8") as pf:
+                        pm_raw = pf.read()
+                except Exception:
+                    pass
+
             subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
             with open(LOCAL_RUNTIME_CACHE, "r", encoding="utf-8") as s:
                 raw_txt = s.read()
@@ -461,6 +557,11 @@ def _git_sync_state():
                 with open(target_f, "w", encoding="utf-8") as d:
                     d.write(raw_txt)
                 subprocess.run(["git", "add", target_f], check=False)
+            if pm_raw:
+                with open(POSTMORTEM_DB_FILE, "w", encoding="utf-8") as pf:
+                    pf.write(pm_raw)
+                subprocess.run(["git", "add", POSTMORTEM_DB_FILE], check=False)
+
             if subprocess.run(["git", "diff", "--staged", "--quiet"], check=False).returncode != 0:
                 subprocess.run(["git", "commit", "-m", "chore: update scanner state [skip ci]"], check=False)
                 if subprocess.run(["git", "push", "origin", "HEAD:main"], check=False).returncode == 0:
@@ -477,6 +578,7 @@ def main():
     state = load_state()
     tracked, alert_history = state["tracked"], state["alert_history"]
     sl_history, signal_episodes = state["sl_history"], state["signal_episodes"]
+    oi_snapshot = state.setdefault("oi_snapshot", {})
     now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
@@ -503,6 +605,7 @@ def main():
         if sym_ep and c_at > int(alert_history.get(sym_ep, 0)):
             alert_history[sym_ep] = c_at
 
+    # [1단계] 기존 보유 포지션 감시 (BTC 마스터 스위치와 무관하게 항상 최우선 실행)
     active_syms = []
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
@@ -551,6 +654,16 @@ def main():
         save_state(state)
         return
 
+    # OI 4분면 계산용 스냅샷 갱신 (BTC 잠금 시에도 스냅샷은 계속 누적)
+    oi_ref_map = _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts)
+
+    # [2단계] BTC 마스터 스위치 점검 — 급락 시 신규 알트 진입만 전면 차단
+    market_regime = check_btc_market_regime()
+    if market_regime["gate_locked"]:
+        save_state(state)
+        print(f"[{now_str}] 🛑 [BTC 마스터 스위치 발동] {market_regime['reason']} → 신규 진입 전면 차단 (기존 감시 {sent_count}건 완료)")
+        return
+
     def _recent_sl_count(sym_check):
         return sum(
             1 for v in sl_history.values()
@@ -571,7 +684,6 @@ def main():
         prev_t = tracked.get(sym)
         if prev_t and not prev_t.get("sl_alerted") and not prev_t.get("tp3_completed") and not prev_t.get("closed_alerted"):
             continue
-        # [수정 3] 최근 24시간 내 이미 2회 이상 손절된 종목은 24시간 완전 차단
         sl_cnt = _recent_sl_count(sym)
         cd = SL_RECOVERY_COOLDOWN_SEC if (_was_stopped_recently(sym) and sl_cnt < 2) else RE_ALERT_COOLDOWN_SEC
         if (now_ts - int(alert_history.get(sym, 0))) < cd:
@@ -580,7 +692,10 @@ def main():
 
     results = []
     with ThreadPoolExecutor(max_workers=8) as ex:
-        f_map = {ex.submit(analyze_symbol, c): c["symbol"] for c in to_analyze}
+        f_map = {
+            ex.submit(analyze_symbol, c, oi_ref_map.get(c["symbol"]), market_regime): c["symbol"]
+            for c in to_analyze
+        }
         for fut in as_completed(f_map):
             try:
                 r = fut.result()
@@ -605,7 +720,6 @@ def main():
         was_sl = _was_stopped_recently(sym)
         sl_cnt = _recent_sl_count(sym)
 
-        # [수정 3] 손절 후 4~24시간 V자 재진입 엄격화: 92점 이상 + RSI6 < 68 비과열 + 2연속 손절 방지
         if was_sl and elapsed_alert < RE_ALERT_COOLDOWN_SEC:
             if sl_cnt >= 2 or elapsed_alert < SL_RECOVERY_COOLDOWN_SEC or res["score"] < 92 or to_float(res.get("rsi6_15m"), 50.0) >= 68.0:
                 continue
@@ -637,7 +751,7 @@ def main():
         sent_count += 1
 
     save_state(state)
-    print(f"[{now_str}] 스캔 완료 ({time.time() - start_t:.1f}초) - 전송 {sent_count}건")
+    print(f"[{now_str}] 스캔 완료 ({time.time() - start_t:.1f}초 | BTC 15m {market_regime['btc_15m_pct']:+.2f}%) - 전송 {sent_count}건")
 
 
 def run_loop_mode(iterations=9, sleep_sec=295):
