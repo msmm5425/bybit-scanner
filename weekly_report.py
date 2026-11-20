@@ -1,4 +1,4 @@
-import os, json, time, subprocess, requests
+import os, json, time, requests
 import numpy as np
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,8 +22,8 @@ except ImportError:
     import re
     _FALLBACK_STOCKS = {
         "SAMSUNG", "HYNIX", "SKHYNIX", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
-        "KOSPI", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "AMZN", "META", "NFLX",
-        "MSTR", "COIN", "SPY", "QQQ", "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX",
+        "KOSPI", "LITE", "ANTA", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "AMZN",
+        "META", "NFLX", "MSTR", "COIN", "SPY", "QQQ", "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX",
     }
     def is_stock_or_tradfi_symbol(sym_or_base):
         s = str(sym_or_base or "").upper().strip()
@@ -83,7 +83,8 @@ def calc_weighted_realized_pct(e, c):
     return round(c["fav"], 2) if c["tp1"] else 0.0
 
 
-def load_merged_state():
+def load_merged_state_readonly():
+    """상태 파일을 읽기 전용으로만 병합 조회 (디스크 및 GitHub에 절대 쓰지 않음)"""
     merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
     for path in STATE_CANDIDATE_FILES:
         if not os.path.exists(path):
@@ -101,58 +102,10 @@ def load_merged_state():
                         if is_stock_or_tradfi_symbol(sym_chk):
                             continue
                         if sk not in merged[k] or (isinstance(sv, dict) and to_float(sv.get("max_favorable_pct")) > to_float((merged[k].get(sk) or {}).get("max_favorable_pct"))):
-                            merged[k][sk] = sv
+                            merged[k][sk] = dict(sv) if isinstance(sv, dict) else sv
         except Exception:
             pass
     return merged
-
-
-def save_merged_state(state):
-    for path in STATE_CANDIDATE_FILES:
-        tmp = f"{path}.tmp"
-        try:
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(state, f, ensure_ascii=False, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp, path)
-        except Exception:
-            pass
-
-
-def git_push_saved_files(extra_files=None):
-    target_files = list(STATE_CANDIDATE_FILES)
-    if extra_files:
-        for ef in extra_files:
-            if ef not in target_files:
-                target_files.append(ef)
-    try:
-        subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
-        subprocess.run(["git", "config", "--local", "user.name", "GitHub Actions"], check=False)
-        existing = [f for f in target_files if os.path.exists(f)]
-        if not existing:
-            return
-        raw_backups = {}
-        for f in existing:
-            with open(f, "r", encoding="utf-8") as fp:
-                raw_backups[f] = fp.read()
-
-        for _ in range(2):
-            subprocess.run(["git", "fetch", "origin", "main"], check=False)
-            subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
-            for f, content in raw_backups.items():
-                with open(f, "w", encoding="utf-8") as fp:
-                    fp.write(content)
-                subprocess.run(["git", "add", f], check=False)
-            if subprocess.run(["git", "diff", "--staged", "--quiet"], check=False).returncode != 0:
-                subprocess.run(["git", "commit", "-m", "chore: sync backfilled state [skip ci]"], check=False)
-                if subprocess.run(["git", "push", "origin", "HEAD:main"], check=False).returncode == 0:
-                    break
-            else:
-                break
-            time.sleep(1.5)
-    except Exception:
-        pass
 
 
 def _backfill_single_ep(ep_k, e):
@@ -164,13 +117,14 @@ def _backfill_single_ep(ep_k, e):
         post_df = df_15m[df_15m["timestamp"] >= (c_at * 1000 - 900000)]
         if not post_df.empty:
             h_max = to_float(post_df["high"].max(), entry_p)
-            if 0.40 <= (h_max / entry_p) <= 4.00 and h_max > to_float(e.get("max_high_price"), entry_p):
+            if 0.40 <= (h_max / entry_p) <= 15.0 and h_max > to_float(e.get("max_high_price"), entry_p):
                 e["max_high_price"] = h_max
                 e["max_favorable_pct"] = round((h_max - entry_p) / entry_p * 100.0, 2)
     return ep_k, e
 
 
-def ensure_missing_icnt_and_backfill(episodes, tracked, now_ts):
+def backfill_in_memory_only(episodes, now_ts):
+    """리포트 정확도를 위해 메모리 내에서만 최고가 보정 (파일 덮어쓰기 없음)"""
     to_bf = []
     for ep_k, e in list(episodes.items()):
         if not isinstance(e, dict):
@@ -208,7 +162,7 @@ def classify_episode_by_mfe(e):
     tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 19.5
 
     tp1 = fav >= max(6.5, tp1_req)
-    tp2 = fav >= max(12.5, tp2_req)
+    tp2 = fav >= max(12.0, tp2_req)
     tp3 = fav >= max(19.0, tp3_req)
     is_sl = bool(e.get("sl_alerted")) and not tp2
     trailing_closed = bool(e.get("tp3_completed") or e.get("closed_alerted")) and tp2 and not is_sl
@@ -240,13 +194,13 @@ def main():
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
     week_ago_ts = now_ts - (7 * 86400)
 
-    state = load_merged_state()
+    # [구멍 1 해결] 완전 읽기 전용 조회 (스캐너 상태 파일 덮어쓰기 원천 차단)
+    state = load_merged_state_readonly()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
 
     for sym, t_item in list(tracked.items()):
         if is_stock_or_tradfi_symbol(sym):
-            del tracked[sym]
             continue
         if isinstance(t_item, dict):
             c_at = int(t_item.get("created_at", 0))
@@ -254,11 +208,7 @@ def main():
             if c_at > 0 and ep_k not in episodes:
                 episodes[ep_k] = dict(t_item, symbol=sym)
 
-    ensure_missing_icnt_and_backfill(episodes, tracked, now_ts)
-    state["signal_episodes"] = episodes
-    state["tracked"] = tracked
-    save_merged_state(state)
-
+    backfill_in_memory_only(episodes, now_ts)
     candidates, _, _ = get_scanner_candidates()
 
     weekly_eps = []
@@ -289,15 +239,17 @@ def main():
     w2_retention = round(tp2_hits / max(tp1_hits, 1) * 100.0, 1) if tp1_hits > 0 else 0.0
     w3_retention = round(tp3_hits / max(tp2_hits, 1) * 100.0, 1) if tp2_hits > 0 else 0.0
 
-    track_stats = {"TRACK_A": [0, 0, []], "TRACK_B": [0, 0, []], "TRACK_C": [0, 0, []], "TRACK_D": [0, 0, []]}
+    track_stats = {"TRACK_A": [0, 0, 0, []], "TRACK_B": [0, 0, 0, []], "TRACK_C": [0, 0, 0, []], "TRACK_D": [0, 0, 0, []]}
     for e, c in weekly_eps:
         tk = str(e.get("track_type", "TRACK_A"))
         if tk not in track_stats:
-            track_stats[tk] = [0, 0, []]
+            track_stats[tk] = [0, 0, 0, []]
         track_stats[tk][0] += 1
         if c["tp2"]:
             track_stats[tk][1] += 1
-        track_stats[tk][2].append(c["fav"])
+        if c["sl"]:
+            track_stats[tk][2] += 1
+        track_stats[tk][3].append(c["fav"])
 
     best_5 = sorted(weekly_eps, key=lambda x: x[1]["fav"], reverse=True)[:5]
     sl_eps = [(e, c) for e, c in weekly_eps if c["sl"]]
@@ -323,13 +275,14 @@ def main():
     best_track_label = "Track A (눌림목/스퀴즈)"
     best_track_rate = -1.0
     for tk, label in track_names.items():
-        tot_t, win_t, mfes = track_stats.get(tk, [0, 0, []])
-        rate_t = round((win_t / tot_t) * 100.0, 1) if tot_t > 0 else 0.0
+        tot_t, win_t, sl_t, mfes = track_stats.get(tk, [0, 0, 0, []])
+        closed_t = win_t + sl_t
+        rate_t = round((win_t / closed_t) * 100.0, 1) if closed_t > 0 else 0.0
         avg_t = round(float(np.mean(mfes)), 1) if mfes else 0.0
-        if tot_t > 0 and rate_t > best_track_rate:
+        if closed_t > 0 and rate_t > best_track_rate:
             best_track_rate = rate_t
             best_track_label = label
-        lines.append(f"• {label}: {tot_t}건 중 {win_t}건 수익확보 (승률 {rate_t:.1f}% | 평균 최고 +{avg_t:.1f}%)")
+        lines.append(f"• {label}: 총 {tot_t}건 (수익확보 {win_t}건 vs 손절 {sl_t}건 | 확정승률 {rate_t:.1f}% | 평균 최고 +{avg_t:.1f}%)")
 
     lines.extend([
         "",
@@ -361,7 +314,7 @@ def main():
         for s, c in sorted(sl_eps, key=lambda x: int(x[0].get("created_at", 0)), reverse=True)[:5]:
             base = str(s.get("symbol", "")).replace("USDT", "")
             fav = c["fav"]
-            sc = int(s.get("score", 85))
+            sc = int(s.get("score", 90))
             tk = str(s.get("track_type", "TRACK_A"))
             sl_p_val = int(round(to_float(s.get("sl_pct"), 20 if tk == "TRACK_D" else FIXED_SL_PCT)))
             cause = "돌파 직후 매수세 실종(가짜 돌파)" if fav < 1.5 else f"+{fav:.1f}% 반등 후 차익 매물 출회"
@@ -372,7 +325,7 @@ def main():
     lines.extend([
         "",
         "⚙️ [6. 차주 매매 전략 & 운용 가이드]",
-        f"• 주력 우위 트랙: 현재 장세에서는 [{best_track_label}] 타점의 성과가 가장 우수합니다.",
+        f"• 주력 우위 트랙: 현재 장세에서는 [{best_track_label}] 타점의 확정 승률이 가장 우수합니다.",
         "• 운용 원칙: 단기(-6% SL) · 장기(-20% SL) | 1차 돌파(전량 홀딩) → 2차 돌파(전량 홀딩 · 방어선 TP1) → 3차 돌파(50% 익절 · 방어선 TP2 & 잔여 50% 단기 -4% / 장기 -10% 자동 트레일링).",
     ])
 
@@ -384,7 +337,6 @@ def main():
     report_text = "\n".join(lines)
     print(report_text)
     send_telegram_weekly(report_text)
-    git_push_saved_files()
 
 
 if __name__ == "__main__":
