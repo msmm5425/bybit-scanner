@@ -3398,6 +3398,46 @@
       "peak_ts_ms": 1795190721000,
       "max_favorable_pct": 0.0
     },
+    "ARUSDT": {
+      "created_at": 1795190721,
+      "track_type": "TRACK_E",
+      "is_long_term": false,
+      "score": 99,
+      "entry_price": 2.183,
+      "swing_high_line": 2.416,
+      "entry_low": 2.176451,
+      "entry_high": 2.186275,
+      "initial_stop_price": 2.05202,
+      "stop_price": 2.05202,
+      "sl_pct": 6,
+      "tps": [
+        2.4013,
+        2.551927,
+        2.759312
+      ],
+      "tp_pcts": [
+        10.0,
+        16.9,
+        26.4
+      ],
+      "vol_mult": 5.77,
+      "rsi6_15m": 18.9,
+      "oi_m": 0.8,
+      "oi_ratio": 23.5,
+      "turnover_m": 3.3,
+      "change_24h": -11.44,
+      "funding_pct": 0.01,
+      "btc_1h_pct": 0.0,
+      "reasons": [
+        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 86%)",
+        "바닥 반전 거래량 5.8배 폭발 + KDJ 바닥 급반전",
+        "OI 집중도 최상(24%)",
+        "롱 청산 매물 소화(OI -7.2%)"
+      ],
+      "max_high_price": 2.183,
+      "peak_ts_ms": 1795190721000,
+      "max_favorable_pct": 0.0
+    },
     "TRUMPUSDT": {
       "created_at": 1794743038,
       "track_type": "TRACK_B",
@@ -3729,7 +3769,8 @@
     "MELANIAUSDT": 1795002600,
     "TAIKOUSDT": 1795004016,
     "LAUSDT": 1795004377,
-    "FFUSDT": 1795006367
+    "FFUSDT": 1795006367,
+    "ARUSDT": 1795190721
   },
   "sl_history": {
     "PYTHUSDT_1794739168": {
@@ -13647,6 +13688,49 @@
       "oi_ratio": 37.0,
       "funding_pct": 0.0017,
       "change_24h": -8.79,
+      "btc_1h_pct": 0.0,
+      "hold_minutes": 0,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp3_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "trailing_closed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "ARUSDT_1795190721": {
+      "symbol": "ARUSDT",
+      "created_at": 1795190721,
+      "track_type": "TRACK_E",
+      "is_long_term": false,
+      "score": 99,
+      "entry_price": 2.183,
+      "initial_stop_price": 2.05202,
+      "stop_price": 2.05202,
+      "sl_pct": 6.0,
+      "tps": [
+        2.4013,
+        2.551927,
+        2.759312
+      ],
+      "tp_pcts": [
+        10.0,
+        16.9,
+        26.4
+      ],
+      "max_high_price": 2.183,
+      "max_favorable_pct": 0.0,
+      "realized_weighted_pct": 0.0,
+      "vol_mult": 5.77,
+      "rsi6_15m": 18.9,
+      "oi_m": 0.8,
+      "oi_ratio": 23.5,
+      "funding_pct": 0.01,
+      "change_24h": -11.44,
       "btc_1h_pct": 0.0,
       "hold_minutes": 0,
       "tp1_hit": false,
