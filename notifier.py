@@ -88,7 +88,7 @@ def build_briefing_message(res, now_str):
     is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
     title = res.get("track_title", "🐋 [장기 포지션 · 세력 대시세 매집 초입]" if is_long else "🚀 [타점 포착]")
     horizon = res.get("position_horizon", "장기 포지션 (1개월 이상 홀딩 예상)" if is_long else "단기·스윙 포지션")
-    score = res.get("score", 85)
+    score = res.get("score", 90)
     price = to_float(res.get("price"))
     chg = to_float(res.get("change_24h"))
     turn_m = to_float(res.get("turnover_m"))
@@ -142,10 +142,16 @@ def build_x_hook_line(res):
     r_text = " ".join(str(x) for x in (res.get("reasons") or []))
     if "재진입" in str(res.get("track_title", "")) or "재탈환" in r_text:
         return "개미털기 바닥 확인 후 거래량 실리며 V자 반등 시도중"
+    if track_type == "TRACK_E":
+        return "24H 저점 유동성 스윕(개미털기) 직후 강한 반전 매수세 유입중"
+    if track_type == "TRACK_F":
+        return "비트코인 흔들림 속에서도 역행 강세 보이는 상대강도 대장주 포착"
+    if track_type == "TRACK_G":
+        return "깊은 음수 펀딩비와 OI 집중 속 숏스퀴즈 강제청산 초입 포착"
     if track_type == "TRACK_C":
         return "급등 대장주 핵심 눌림목 지지 후 2차 파동 시도중"
     if track_type == "TRACK_B":
-        return "거래량이 살아나면서 전고점 돌파 시도중"
+        return "거래량이 살아나면서 24H 전고점 돌파 시도중"
     if "응축" in r_text or "스퀴즈" in r_text:
         return "박스권 에너지 응축 후 거래량 살아나며 추세 전환중"
     if "음수 펀딩" in r_text:
@@ -211,7 +217,7 @@ def _render_tradingview_lightweight_chart(df, res):
         return None
     symbol = res.get("symbol", "")
     base = res.get("base_coin") or res.get("base") or symbol.replace("USDT", "")
-    score = res.get("score", 85)
+    score = res.get("score", 90)
     track_type = res.get("track_type", "TRACK_A")
     is_long = bool(res.get("is_long_term") or track_type == "TRACK_D")
 
@@ -262,10 +268,13 @@ def _render_tradingview_lightweight_chart(df, res):
     kst_str = datetime.fromtimestamp(to_float(latest_row["timestamp"]) / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST")
     tf_label = "4H · LONG-TERM" if is_long else "15m · BYBIT"
     track_badge = {
-        "TRACK_A": "TRACK A · Pullback",
-        "TRACK_B": "TRACK B · Breakout",
-        "TRACK_C": "TRACK C · Leader Fib 0.5",
+        "TRACK_A": "TRACK A · TTM Squeeze",
+        "TRACK_B": "TRACK B · 24H Breakout",
+        "TRACK_C": "TRACK C · Deep Pullback",
         "TRACK_D": "LONG-TERM · Track D Macro",
+        "TRACK_E": "TRACK E · SFP Reversal",
+        "TRACK_F": "TRACK F · BTC RS Leader",
+        "TRACK_G": "TRACK G · Short Squeeze",
     }.get(track_type, track_type)
     decimals = 6 if price < 0.01 else (5 if price < 1 else (4 if price < 10 else (3 if price < 1000 else 2)))
     min_move = 10 ** (-decimals)
