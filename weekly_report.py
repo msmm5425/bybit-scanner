@@ -42,6 +42,7 @@ except ImportError:
         return s.replace("[", "").replace("]", "")
 
 SCHEME = "ht" + "tps://"
+DNA_PROFILE_FILE = "top5_dna_profile.json"
 STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json"]))
 
 
@@ -109,6 +110,24 @@ def load_merged_state_readonly():
         except Exception:
             pass
     return merged
+
+
+def _load_dna_summary_line():
+    if not os.path.exists(DNA_PROFILE_FILE):
+        return ""
+    try:
+        with open(DNA_PROFILE_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        af = (raw or {}).get("active_dna_formula") or {}
+        if af.get("enabled"):
+            return (
+                f"• 🧬 Top 5 자동학습 DNA (Track H): 14일 표본 {af.get('sample_count', 0)}건(사각지대 {af.get('missed_count', 0)}건) | "
+                f"주력 [{af.get('dominant_tag', '-')}] · 응축<={af.get('bb_width_max', 0)}% · "
+                f"발사거래량>={af.get('launch_vol_min', 0)}x · OI>={af.get('oi_ratio_min', 0)}%"
+            )
+    except Exception:
+        pass
+    return ""
 
 
 def _backfill_single_ep(ep_k, e):
@@ -249,6 +268,7 @@ def main():
         "TRACK_E": "Track E (SFP 유동성 스윕)",
         "TRACK_F": "Track F (BTC 역행 RS 대장주)",
         "TRACK_G": "Track G (숏스퀴즈 강제청산)",
+        "TRACK_H": "Track H (Top 5 급등 DNA 자동학습)",
     }
     track_stats = {tk: [0, 0, 0, []] for tk in track_names}
     for e, c in weekly_eps:
@@ -275,14 +295,14 @@ def main():
         f"• 단계별 실제 달성: 1차돌파(전량홀딩) {tp1_hits}건 | 2차돌파(TP1방어) {tp2_hits}건 | 3차돌파(50%익절+트레일링) {tp3_hits}건 | 수익마감 {trail_closes}건",
         f"• 포착 종목 평균 최고 상승폭(MFE): +{avg_mfe:.1f}% (중앙값 +{med_mfe:.1f}%)",
         "",
-        "🧭 [2. 트랙별(Track A~G) 성과 및 평균 상승폭]",
+        "🧭 [2. 트랙별(Track A~H) 성과 및 평균 상승폭]",
     ]
 
     best_track_label = "Track A (TTM 스퀴즈·델타)"
     best_track_rate = -1.0
     for tk, label in track_names.items():
         tot_t, win_t, sl_t, mfes = track_stats.get(tk, [0, 0, 0, []])
-        if tot_t == 0 and tk in ("TRACK_E", "TRACK_F", "TRACK_G"):
+        if tot_t == 0 and tk in ("TRACK_E", "TRACK_F", "TRACK_G", "TRACK_H"):
             continue
         closed_t = win_t + sl_t
         rate_t = round((win_t / closed_t) * 100.0, 1) if closed_t > 0 else 0.0
@@ -337,10 +357,15 @@ def main():
 
     lines.extend([
         "",
-        "⚙️ [6. 차주 매매 전략 & 운용 가이드]",
+        "⚙️ [6. 차주 매매 전략 & 자율 학습 현황]",
         f"• 주력 우위 트랙: 현재 장세에서는 [{best_track_label}] 타점의 확정 승률이 가장 우수합니다.",
-        "• 운용 원칙: 단기(-6% SL) · 장기(-20% SL) | 1차 돌파(전량 홀딩) → 2차 돌파(전량 홀딩 · 방어선 TP1) → 3차 돌파(50% 익절 · 방어선 TP2 & 잔여 50% 단기 -4% / 장기 -10% 자동 트레일링).",
     ])
+    dna_line = _load_dna_summary_line()
+    if dna_line:
+        lines.append(dna_line)
+    lines.append(
+        "• 운용 원칙: 단기(-6% SL) · 장기(-20% SL) | 1차 돌파(전량 홀딩) → 2차 돌파(전량 홀딩 · 방어선 TP1) → 3차 돌파(50% 익절 · 방어선 TP2 & 잔여 50% 단기 -4% / 장기 -10% 자동 트레일링)."
+    )
 
     if candidates:
         top_mkt = candidates[:3]
