@@ -57,6 +57,8 @@ DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 DEFAULT_LONGTERM_SL_PCT = 20
 BTC_DUMP_DROP_15M_PCT = to_float(getattr(cfg, "BTC_DUMP_DROP_15M_PCT", -0.70), -0.70)
 BTC_DUMP_DROP_1H_PCT = to_float(getattr(cfg, "BTC_DUMP_DROP_1H_PCT", -1.50), -1.50)
+BTC_CRASH_1H_PCT = -2.50
+BTC_CRASH_15M_PCT = -1.50
 
 LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
 ALL_STATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json", LOCAL_RUNTIME_CACHE]))
@@ -109,32 +111,50 @@ def _read_json(path):
 
 
 def check_btc_market_regime():
-    regime = {"gate_locked": False, "btc_15m_pct": 0.0, "btc_1h_pct": 0.0, "reason": "정상"}
+    """
+    [BTC 3단계 마켓 레짐 게이트 · A안 반영]
+    - OPEN: 정상 구간 → 전체 트랙(A~G, D1~D5) 탐색
+    - COUNTER_TREND_ONLY: 완만 조정(15m <= -0.7% 또는 1H <= -1.5%, 단 1H > -2.5%) → Track E(SFP)·Track F(RS)만 예외 허용
+    - FULL_LOCK: 폭락 구간(1H <= -2.5% 또는 15m <= -1.5%) → 모든 신규 진입 100% 전면 차단
+    """
+    regime = {
+        "gate_mode": "OPEN",
+        "gate_locked": False,
+        "btc_15m_pct": 0.0,
+        "btc_1h_pct": 0.0,
+        "btc_4h_pct": 0.0,
+        "reason": "정상",
+    }
     try:
         df15 = fetch_klines("BTCUSDT", interval="15", limit=20)
-        df1h = fetch_klines("BTCUSDT", interval="60", limit=10)
+        df1h = fetch_klines("BTCUSDT", interval="60", limit=12)
 
         if not df15.empty and len(df15) >= 2:
             c_now = to_float(df15["close"].iloc[-1])
             o_now = to_float(df15["open"].iloc[-1], c_now)
             c_prev = to_float(df15["close"].iloc[-2], c_now)
             if o_now > 0 and c_prev > 0:
-                chg_oc = (c_now - o_now) / o_now * 100.0
-                chg_cc = (c_now - c_prev) / c_prev * 100.0
-                regime["btc_15m_pct"] = round(min(chg_oc, chg_cc), 2)
+                regime["btc_15m_pct"] = round(min((c_now - o_now) / o_now * 100.0, (c_now - c_prev) / c_prev * 100.0), 2)
 
         if not df1h.empty and len(df1h) >= 2:
             c_now_h = to_float(df1h["close"].iloc[-1])
             o_now_h = to_float(df1h["open"].iloc[-1], c_now_h)
             c_prev_h = to_float(df1h["close"].iloc[-2], c_now_h)
             if o_now_h > 0 and c_prev_h > 0:
-                chg_oc_h = (c_now_h - o_now_h) / o_now_h * 100.0
-                chg_cc_h = (c_now_h - c_prev_h) / c_prev_h * 100.0
-                regime["btc_1h_pct"] = round(min(chg_oc_h, chg_cc_h), 2)
+                regime["btc_1h_pct"] = round(min((c_now_h - o_now_h) / o_now_h * 100.0, (c_now_h - c_prev_h) / c_prev_h * 100.0), 2)
+            if len(df1h) >= 5:
+                c_4h_ago = to_float(df1h["close"].iloc[-5], c_now_h)
+                if c_4h_ago > 0:
+                    regime["btc_4h_pct"] = round(((c_now_h - c_4h_ago) / c_4h_ago) * 100.0, 2)
 
-        if regime["btc_15m_pct"] <= BTC_DUMP_DROP_15M_PCT or regime["btc_1h_pct"] <= BTC_DUMP_DROP_1H_PCT:
+        if regime["btc_1h_pct"] <= BTC_CRASH_1H_PCT or regime["btc_15m_pct"] <= BTC_CRASH_15M_PCT:
+            regime["gate_mode"] = "FULL_LOCK"
             regime["gate_locked"] = True
-            regime["reason"] = f"BTC 급락 감지 (15m {regime['btc_15m_pct']:+.2f}%, 1H {regime['btc_1h_pct']:+.2f}%)"
+            regime["reason"] = f"BTC 폭락 전면 차단 (15m {regime['btc_15m_pct']:+.2f}%, 1H {regime['btc_1h_pct']:+.2f}%)"
+        elif regime["btc_15m_pct"] <= BTC_DUMP_DROP_15M_PCT or regime["btc_1h_pct"] <= BTC_DUMP_DROP_1H_PCT:
+            regime["gate_mode"] = "COUNTER_TREND_ONLY"
+            regime["gate_locked"] = False
+            regime["reason"] = f"BTC 완만 조정 · A안 역추세(Track E·F) 전용 모드 (15m {regime['btc_15m_pct']:+.2f}%, 1H {regime['btc_1h_pct']:+.2f}%)"
     except Exception:
         pass
     return regime
@@ -256,7 +276,6 @@ def _merge_state_dicts(base_state, incoming_state):
                     pt[fg] = True
             base_state["tracked"][s] = sanitize_flags_by_mfe(pt)
 
-        # [안전 보강] signal_episodes 원장과 tracked 간 마감/손절 잠금 플래그 교차 강제 동기화
         cur_t = base_state["tracked"].get(s)
         if isinstance(cur_t, dict):
             ep_ref = base_state["signal_episodes"].get(f"{s}_{int(cur_t.get('created_at', 0))}")
@@ -313,11 +332,35 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
         "max_high_price": t_item["max_high_price"], "max_favorable_pct": t_item["max_favorable_pct"],
         "realized_weighted_pct": to_float(t_item.get("realized_weighted_pct", 0.0)),
         "vol_mult": to_float(t_item.get("vol_mult", 1.0)), "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
-        "oi_m": to_float(t_item.get("oi_m", 0.0)), "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
+        "oi_m": to_float(t_item.get("oi_m", 0.0)), "oi_ratio": to_float(t_item.get("oi_ratio", 0.0)),
+        "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
+        "change_24h": to_float(t_item.get("change_24h", 0.0)),
+        "btc_1h_pct": to_float(t_item.get("btc_1h_pct", 0.0)),
         "hold_minutes": int(t_item.get("hold_minutes", 0)),
         **{fg: bool(t_item.get(fg, False)) for fg in ALL_LOCK_FLAGS},
         "sl_at": int(t_item.get("sl_at", 0)),
     }
+
+
+def _record_pm_win(symbol, t_item, now_ts, max_fav):
+    if postmortem is not None and hasattr(postmortem, "record_win_postmortem"):
+        try:
+            postmortem.record_win_postmortem({
+                "symbol": symbol,
+                "track_type": t_item.get("track_type", "TRACK_A"),
+                "score": int(t_item.get("score", 90)),
+                "created_at": int(t_item.get("created_at", now_ts)),
+                "win_at": now_ts,
+                "max_favorable_pct": max_fav,
+                "vol_mult": to_float(t_item.get("vol_mult", 1.0)),
+                "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
+                "oi_ratio": to_float(t_item.get("oi_ratio", 0.0)),
+                "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
+                "change_24h": to_float(t_item.get("change_24h", 0.0)),
+                "btc_1h_pct": to_float(t_item.get("btc_1h_pct", 0.0)),
+            })
+        except Exception:
+            pass
 
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
@@ -413,6 +456,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
         if not t_item.get("tp3_alerted"):
             t_item["tp3_alerted"] = True
+            _record_pm_win(symbol, t_item, now_ts, max_fav)
             w3 = round(g3 * 0.50, 2)
             tr_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
             msgs.append(
@@ -448,6 +492,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
         if not t_item.get("tp2_alerted"):
             t_item["tp2_alerted"] = True
+            _record_pm_win(symbol, t_item, now_ts, max_fav)
             msgs.append(
                 f"✅ {horizon_tag}[2차 구간(TP2) 돌파! 100% 홀딩 & 방어선 TP1 상향 고정] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
@@ -489,6 +534,9 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             t_item["sl_alerted"] = True
             t_item["closed_alerted"] = True
             t_item["sl_at"] = now_ts
+            oi_r_val = to_float(t_item.get("oi_ratio"), 0.0)
+            if oi_r_val <= 0 and to_float(t_item.get("turnover_m"), 0.0) > 0:
+                oi_r_val = round(to_float(t_item.get("oi_m"), 0.0) / to_float(t_item.get("turnover_m"), 1.0) * 100.0, 1)
             sl_payload = {
                 "symbol": symbol, "track_type": t_item.get("track_type", "TRACK_A"),
                 "score": int(t_item.get("score", 90)), "entry_price": entry_ref,
@@ -496,7 +544,10 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 "sl_pct": sl_pct_use, "created_at": created_at, "sl_at": now_ts,
                 "hold_minutes": hold_min, "max_high_price": max_high, "max_favorable_pct": max_fav,
                 "vol_mult": to_float(t_item.get("vol_mult", 1.0)), "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
-                "oi_m": to_float(t_item.get("oi_m", 0.0)), "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
+                "oi_m": to_float(t_item.get("oi_m", 0.0)), "oi_ratio": oi_r_val,
+                "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
+                "change_24h": to_float(t_item.get("change_24h", 0.0)),
+                "btc_1h_pct": to_float(t_item.get("btc_1h_pct", 0.0)),
                 "reasons": t_item.get("reasons", []),
             }
             if postmortem is not None and hasattr(postmortem, "record_sl_postmortem"):
@@ -526,10 +577,6 @@ def _send_signal_notifications(res, now_str):
 
 
 def _git_sync_state():
-    """
-    [구멍 3 해결] 최대 4회 재시도 후 실제 원격 푸시 성공 여부(True/False) 반환.
-    로컬 테스트 환경(GITHUB_ACTIONS 미설정)에서는 True를 반환해 정상 실행 허용.
-    """
     is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
     try:
         subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
@@ -583,7 +630,6 @@ def _git_sync_state():
 
 
 def _ensure_synced_before_alert():
-    """텔레그램 발송 직전 Git 영구 저장이 성공했는지 이중 검증"""
     if _git_sync_state():
         return True
     time.sleep(2.0)
@@ -622,7 +668,7 @@ def main():
         if sym_ep and c_at > int(alert_history.get(sym_ep, 0)):
             alert_history[sym_ep] = c_at
 
-    # [구멍 2 해결] API 백업 축소(valid_syms 누락) 시에도 진행 중인 암호화폐 보유 종목은 절대 삭제하지 않음
+    # [1단계] 기존 보유 포지션 감시 (보유 암호화폐 보호 + BTC 게이트와 무관하게 항상 실행)
     active_syms = []
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
@@ -662,7 +708,6 @@ def main():
                     print(f"[1분봉 감시 예외] {s}: {e}")
         save_state(state)
         if pending_msgs:
-            # [구멍 3 해결] GitHub 영구 저장 성공이 확인된 경우에만 텔레그램 발송
             if _ensure_synced_before_alert():
                 for m in pending_msgs:
                     send_telegram_reliable(m)
@@ -670,17 +715,29 @@ def main():
             else:
                 print(f"[중복방지 보류] Git 동기화 실패로 추적 알림 {len(pending_msgs)}건 발송 보류")
 
+    # [오답노트 v2.0] 손절 후 2시간+ 경과 종목 자동 사후 부검 (스캔당 최대 4건 경량 처리)
+    if postmortem is not None and hasattr(postmortem, "run_post_sl_autopsy"):
+        try:
+            autopsied = postmortem.run_post_sl_autopsy(fetch_klines, max_checks=4)
+            if autopsied:
+                print(f"[사후 부검 완료] {autopsied}건 분석 반영")
+        except Exception:
+            pass
+
     if not candidates:
         save_state(state)
         return
 
     oi_ref_map = _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts)
 
+    # [2단계] BTC 3단계 레짐 체크 (A안: 폭락 시 전면 차단 / 완만 조정 시 Track E·F만 예외 허용)
     market_regime = check_btc_market_regime()
-    if market_regime["gate_locked"]:
+    if market_regime["gate_mode"] == "FULL_LOCK":
         save_state(state)
-        print(f"[{now_str}] 🛑 [BTC 마스터 스위치 발동] {market_regime['reason']} → 신규 진입 전면 차단 (기존 감시 {sent_count}건 완료)")
+        print(f"[{now_str}] 🛑 [BTC 폭락 전면 차단] {market_regime['reason']} (기존 감시 {sent_count}건 완료)")
         return
+    if market_regime["gate_mode"] == "COUNTER_TREND_ONLY":
+        print(f"[{now_str}] ⚠️ {market_regime['reason']}")
 
     def _recent_sl_count(sym_check):
         return sum(
@@ -756,15 +813,16 @@ def main():
             "initial_stop_price": res["stop_price"], "stop_price": res["stop_price"],
             "sl_pct": res["sl_pct"], "tps": res["tps"], "tp_pcts": res["tp_pcts"],
             "vol_mult": res.get("vol_mult", 1.0), "rsi6_15m": res.get("rsi6_15m", 50.0),
-            "oi_m": res.get("oi_m", 0.0), "turnover_m": res.get("turnover_m", 0.0),
-            "funding_pct": res.get("funding_pct", 0.0), "reasons": res.get("reasons", []),
+            "oi_m": res.get("oi_m", 0.0), "oi_ratio": res.get("oi_ratio", 0.0),
+            "turnover_m": res.get("turnover_m", 0.0), "change_24h": res.get("change_24h", 0.0),
+            "funding_pct": res.get("funding_pct", 0.0), "btc_1h_pct": res.get("btc_1h_pct", 0.0),
+            "reasons": res.get("reasons", []),
             "max_high_price": res["price"], "peak_ts_ms": now_ts * 1000, "max_favorable_pct": 0.0,
         }
         alert_history[sym] = now_ts
         sync_episode_ledger(signal_episodes, sym, tracked[sym], sl_history)
         save_state(state)
 
-        # [구멍 3 해결] 신규 포착 알림도 GitHub 영구 저장 성공 확인 후에만 발송
         if _ensure_synced_before_alert():
             _send_signal_notifications(res, now_str)
             new_sent += 1
@@ -773,7 +831,7 @@ def main():
             print(f"[중복방지 보류] Git 동기화 실패로 {sym} 신규 알림 발송 보류")
 
     save_state(state)
-    print(f"[{now_str}] 스캔 완료 ({time.time() - start_t:.1f}초 | BTC 15m {market_regime['btc_15m_pct']:+.2f}%) - 전송 {sent_count}건")
+    print(f"[{now_str}] 스캔 완료 ({time.time() - start_t:.1f}초 | BTC 15m {market_regime['btc_15m_pct']:+.2f}% / 4H {market_regime['btc_4h_pct']:+.2f}%) - 전송 {sent_count}건")
 
 
 def run_loop_mode(iterations=9, sleep_sec=295):
