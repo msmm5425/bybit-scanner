@@ -1,9 +1,9 @@
-name: Bybit Top 5 Daily Analyzer
+name: Bybit Top 5 Daily DNA Learner
 
 on:
   schedule:
-    # 매일 08:45 KST (정각 스캐너 시작 15분 전 실행)
-    - cron: '45 3 * * *'
+    # 매일 08:45 KST (정각 스캐너 시작 15분 전 백그라운드 자동 학습 실행)
+    - cron: '45 23 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: pip install --upgrade pip requests pandas numpy
 
-      - name: Run Daily Analyzer (binance_analyzer.py)
+      - name: Run Daily Top 5 DNA Learner (Background)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -39,13 +39,13 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python binance_analyzer.py
 
-      - name: Commit & Push Updated History
+      - name: Commit & Push Learned DNA Profile & History
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
-          git add analyzer_history.json || true
+          git add analyzer_history.json top5_dna_profile.json || true
           if ! git diff --staged --quiet; then
-            git commit -m "chore: update daily analyzer history [skip ci]"
+            git commit -m "chore: update top5 dna profile & daily history [skip ci]"
             for i in 1 2 3; do
               git fetch origin main && git rebase origin/main || true
               if git push origin HEAD:main; then
