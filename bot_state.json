@@ -3399,6 +3399,43 @@
       "max_favorable_pct": 0.16,
       "hold_minutes": 67
     },
+    "CTRUSDT": {
+      "created_at": 1795160485,
+      "track_type": "TRACK_C",
+      "is_long_term": false,
+      "score": 99,
+      "entry_price": 0.01697,
+      "swing_high_line": 0.01866,
+      "entry_low": 0.016919,
+      "entry_high": 0.016995,
+      "initial_stop_price": 0.015952,
+      "stop_price": 0.015952,
+      "sl_pct": 6,
+      "tps": [
+        0.018582,
+        0.019685,
+        0.021009
+      ],
+      "tp_pcts": [
+        9.5,
+        16.0,
+        23.8
+      ],
+      "vol_mult": 3.03,
+      "rsi6_15m": 31.3,
+      "oi_m": 0.6,
+      "turnover_m": 2.6,
+      "funding_pct": 0.005,
+      "reasons": [
+        "대장주(+12.6%) 고점대비 -9.1% · Fib 0.76 심층 눌림",
+        "과매도 털기(저점 RSI 18.4) 완료 후 바닥 반등 턴",
+        "OI 집중도 최상(23%)",
+        "15m 아래꼬리 스탑헌팅 매물 흡수 확인"
+      ],
+      "max_high_price": 0.01697,
+      "peak_ts_ms": 1795160485000,
+      "max_favorable_pct": 0.0
+    },
     "ZORAUSDT": {
       "created_at": 1794996051,
       "track_type": "TRACK_C",
@@ -3628,7 +3665,8 @@
     "PHAUSDT": 1794986780,
     "BLURUSDT": 1794986780,
     "TRUSTUSDT": 1794987363,
-    "SKRUSDT": 1794987363
+    "SKRUSDT": 1794987363,
+    "CTRUSDT": 1795160485
   },
   "sl_history": {
     "PYTHUSDT_1794739168": {
@@ -11963,6 +12001,46 @@
       "oi_m": 2.3,
       "funding_pct": 0.005,
       "hold_minutes": 11,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp3_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "trailing_closed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "CTRUSDT_1795160485": {
+      "symbol": "CTRUSDT",
+      "created_at": 1795160485,
+      "track_type": "TRACK_C",
+      "is_long_term": false,
+      "score": 99,
+      "entry_price": 0.01697,
+      "initial_stop_price": 0.015952,
+      "stop_price": 0.015952,
+      "sl_pct": 6.0,
+      "tps": [
+        0.018582,
+        0.019685,
+        0.021009
+      ],
+      "tp_pcts": [
+        9.5,
+        16.0,
+        23.8
+      ],
+      "max_high_price": 0.01697,
+      "max_favorable_pct": 0.0,
+      "realized_weighted_pct": 0.0,
+      "vol_mult": 3.03,
+      "rsi6_15m": 31.3,
+      "oi_m": 0.6,
+      "funding_pct": 0.005,
+      "hold_minutes": 0,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
