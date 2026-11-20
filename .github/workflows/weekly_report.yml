@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: bybit-scanner-main
-  cancel-in-progress: false
+  group: bybit-weekly-report
+  cancel-in-progress: true
 
 permissions:
   contents: write
