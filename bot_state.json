@@ -39,7 +39,7 @@
       "max_high_price": 0.04694,
       "peak_ts_ms": 1795244400000,
       "max_favorable_pct": 3.01,
-      "hold_minutes": 194
+      "hold_minutes": 200
     },
     "VVVUSDT": {
       "created_at": 1795162274,
@@ -119,7 +119,7 @@
       "max_high_price": 0.0469,
       "peak_ts_ms": 1795243500000,
       "max_favorable_pct": 4.41,
-      "hold_minutes": 104
+      "hold_minutes": 110
     },
     "PONSUSDT": {
       "created_at": 1795226403,
@@ -205,7 +205,7 @@
       "max_high_price": 0.004377,
       "peak_ts_ms": 1795217400000,
       "max_favorable_pct": 1.16,
-      "hold_minutes": 623
+      "hold_minutes": 629
     },
     "VIRTUALUSDT": {
       "created_at": 1795110099,
@@ -327,7 +327,7 @@
       "max_high_price": 0.2482,
       "peak_ts_ms": 1795246980000,
       "max_favorable_pct": 2.22,
-      "hold_minutes": 206
+      "hold_minutes": 212
     },
     "USUALUSDT": {
       "created_at": 1795038187,
@@ -363,7 +363,7 @@
       "max_high_price": 0.01112,
       "peak_ts_ms": 1795210200000,
       "max_favorable_pct": 6.41,
-      "hold_minutes": 3509
+      "hold_minutes": 3515
     },
     "ALLOUSDT": {
       "created_at": 1794980736,
@@ -440,10 +440,10 @@
       "reasons": [
         "15분봉 거래량 2.6배 포켓피벗 돌파"
       ],
-      "max_high_price": 0.74541,
-      "peak_ts_ms": 1795247760000,
-      "max_favorable_pct": 27.71,
-      "hold_minutes": 2292,
+      "max_high_price": 0.74584,
+      "peak_ts_ms": 1795249020000,
+      "max_favorable_pct": 27.78,
+      "hold_minutes": 2298,
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_hit": true,
@@ -652,7 +652,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 4429
+      "hold_minutes": 4435
     },
     "WUSDT": {
       "created_at": 1795192199,
@@ -736,7 +736,7 @@
       "max_high_price": 1.645,
       "peak_ts_ms": 1795246440000,
       "max_favorable_pct": 4.84,
-      "hold_minutes": 235
+      "hold_minutes": 241
     },
     "DGAIUSDT": {
       "created_at": 1794984957,
@@ -777,7 +777,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 4397,
+      "hold_minutes": 4403,
       "be_armed": true
     },
     "MAGMAUSDT": {
@@ -896,7 +896,7 @@
       "max_high_price": 0.0787,
       "peak_ts_ms": 1795171500000,
       "max_favorable_pct": 13.79,
-      "hold_minutes": 3451,
+      "hold_minutes": 3457,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -940,7 +940,7 @@
       "max_high_price": 0.0944,
       "peak_ts_ms": 1795221900000,
       "max_favorable_pct": 6.31,
-      "hold_minutes": 680
+      "hold_minutes": 686
     },
     "BLESSUSDT": {
       "created_at": 1795159785,
@@ -976,10 +976,12 @@
         "조정 구간 거래량 70% 이상 건조(세력 이탈 없음)",
         "매집봉 지지선 & 4H 20MA 위 양봉 반등 턴"
       ],
-      "max_high_price": 0.017938,
-      "peak_ts_ms": 1795244400000,
-      "max_favorable_pct": 35.21,
-      "hold_minutes": 1483
+      "max_high_price": 0.01881,
+      "peak_ts_ms": 1795249080000,
+      "max_favorable_pct": 41.78,
+      "hold_minutes": 1489,
+      "tp1_hit": true,
+      "tp1_alerted": true
     },
     "BLURUSDT": {
       "created_at": 1794986780,
@@ -1066,7 +1068,7 @@
       "max_high_price": 0.000823,
       "peak_ts_ms": 1795243500000,
       "max_favorable_pct": 1.35,
-      "hold_minutes": 450
+      "hold_minutes": 456
     },
     "SKRUSDT": {
       "created_at": 1794987363,
@@ -1108,7 +1110,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 4357
+      "hold_minutes": 4362
     },
     "ZKPUSDT": {
       "created_at": 1795107290,
@@ -1146,7 +1148,7 @@
       "max_high_price": 0.03365,
       "peak_ts_ms": 1795117500000,
       "max_favorable_pct": 4.73,
-      "hold_minutes": 2358
+      "hold_minutes": 2364
     },
     "GRASSUSDT": {
       "created_at": 1795192565,
@@ -1225,7 +1227,7 @@
       "max_high_price": 0.1376,
       "peak_ts_ms": 1795215600000,
       "max_favorable_pct": 2.76,
-      "hold_minutes": 1608
+      "hold_minutes": 1614
     },
     "LITUSDT": {
       "created_at": 1795226403,
@@ -1265,7 +1267,7 @@
       "max_high_price": 2.359,
       "peak_ts_ms": 1795244340000,
       "max_favorable_pct": 2.34,
-      "hold_minutes": 373
+      "hold_minutes": 378
     },
     "SENTUSDT": {
       "created_at": 1795205287,
@@ -1306,7 +1308,7 @@
       "max_high_price": 0.02098,
       "peak_ts_ms": 1795246740000,
       "max_favorable_pct": 4.69,
-      "hold_minutes": 724
+      "hold_minutes": 730
     },
     "NIGHTUSDT": {
       "created_at": 1795191839,
@@ -1346,7 +1348,7 @@
       "max_high_price": 0.04318,
       "peak_ts_ms": 1795193100000,
       "max_favorable_pct": 3.9,
-      "hold_minutes": 949
+      "hold_minutes": 955
     },
     "ARIAUSDT": {
       "created_at": 1795222155,
@@ -1386,7 +1388,7 @@
       "max_high_price": 0.23483,
       "peak_ts_ms": 1795245120000,
       "max_favorable_pct": 4.95,
-      "hold_minutes": 443
+      "hold_minutes": 449
     },
     "PIPPINUSDT": {
       "created_at": 1795061024,
@@ -1425,7 +1427,7 @@
       "max_high_price": 0.02066,
       "peak_ts_ms": 1795156200000,
       "max_favorable_pct": 17.32,
-      "hold_minutes": 3129
+      "hold_minutes": 3135
     },
     "ZKCUSDT": {
       "created_at": 1795122403,
@@ -1463,7 +1465,7 @@
       "max_high_price": 0.02796,
       "peak_ts_ms": 1795140000000,
       "max_favorable_pct": 7.91,
-      "hold_minutes": 2106
+      "hold_minutes": 2112
     },
     "STABLEUSDT": {
       "created_at": 1794995418,
@@ -1505,7 +1507,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 4222
+      "hold_minutes": 4228
     },
     "MONUSDT": {
       "created_at": 1795131962,
@@ -1710,7 +1712,7 @@
       "max_high_price": 0.09698,
       "peak_ts_ms": 1795235400000,
       "max_favorable_pct": 2.92,
-      "hold_minutes": 352
+      "hold_minutes": 358
     },
     "TAIKOUSDT": {
       "created_at": 1795004016,
@@ -1867,7 +1869,7 @@
       "max_high_price": 0.01072,
       "peak_ts_ms": 1795186800000,
       "max_favorable_pct": 29.31,
-      "hold_minutes": 2592
+      "hold_minutes": 2598
     },
     "FFUSDT": {
       "created_at": 1795006367,
@@ -1904,7 +1906,7 @@
       "max_high_price": 0.1045,
       "peak_ts_ms": 1795201200000,
       "max_favorable_pct": 3.41,
-      "hold_minutes": 4040
+      "hold_minutes": 4046
     },
     "MOCAUSDT": {
       "created_at": 1795128327,
@@ -1942,7 +1944,7 @@
       "max_high_price": 0.00616,
       "peak_ts_ms": 1795128300000,
       "max_favorable_pct": 0.1,
-      "hold_minutes": 2007
+      "hold_minutes": 2013
     },
     "JCTUSDT": {
       "created_at": 1795221764,
@@ -2065,7 +2067,7 @@
       "max_high_price": 0.00343,
       "peak_ts_ms": 1795198500000,
       "max_favorable_pct": 4.07,
-      "hold_minutes": 937
+      "hold_minutes": 942
     },
     "RAREUSDT": {
       "created_at": 1795177327,
@@ -2103,7 +2105,7 @@
       "max_high_price": 0.01514,
       "peak_ts_ms": 1795203000000,
       "max_favorable_pct": 26.27,
-      "hold_minutes": 1190
+      "hold_minutes": 1196
     },
     "SYRUPUSDT": {
       "created_at": 1795021453,
@@ -2184,7 +2186,7 @@
       "max_high_price": 0.01595,
       "peak_ts_ms": 1795227300000,
       "max_favorable_pct": 3.44,
-      "hold_minutes": 687
+      "hold_minutes": 692
     },
     "AXISUSDT": {
       "created_at": 1795034658,
@@ -2424,7 +2426,7 @@
       "max_high_price": 0.13525,
       "peak_ts_ms": 1795128300000,
       "max_favorable_pct": 19.11,
-      "hold_minutes": 2414
+      "hold_minutes": 2420
     },
     "USUSDT": {
       "created_at": 1795105006,
@@ -2462,7 +2464,7 @@
       "max_high_price": 0.003733,
       "peak_ts_ms": 1795113000000,
       "max_favorable_pct": 1.44,
-      "hold_minutes": 2396
+      "hold_minutes": 2402
     },
     "YBUSDT": {
       "created_at": 1795197629,
@@ -2501,10 +2503,10 @@
         "조정 구간 거래량 70% 이상 건조(세력 이탈 없음)",
         "매집봉 지지선 & 4H 20MA 위 양봉 반등 턴"
       ],
-      "max_high_price": 0.05961,
-      "peak_ts_ms": 1795248660000,
-      "max_favorable_pct": 20.5,
-      "hold_minutes": 852
+      "max_high_price": 0.05974,
+      "peak_ts_ms": 1795248780000,
+      "max_favorable_pct": 20.76,
+      "hold_minutes": 858
     },
     "NAORISUSDT": {
       "created_at": 1795118707,
@@ -2542,7 +2544,7 @@
       "max_high_price": 0.03476,
       "peak_ts_ms": 1795173300000,
       "max_favorable_pct": 4.42,
-      "hold_minutes": 2167
+      "hold_minutes": 2173
     },
     "EVAAUSDT": {
       "created_at": 1795230952,
@@ -2661,7 +2663,7 @@
       "max_high_price": 3.13213,
       "peak_ts_ms": 1795149900000,
       "max_favorable_pct": 5.16,
-      "hold_minutes": 1686
+      "hold_minutes": 1692
     },
     "SKYUSDT": {
       "created_at": 1795154329,
@@ -2696,7 +2698,7 @@
       "max_high_price": 0.04561,
       "peak_ts_ms": 1795155300000,
       "max_favorable_pct": 1.69,
-      "hold_minutes": 1574
+      "hold_minutes": 1580
     },
     "EIGENUSDT": {
       "created_at": 1795156413,
@@ -2776,7 +2778,7 @@
       "max_high_price": 0.01657,
       "peak_ts_ms": 1795246800000,
       "max_favorable_pct": 3.5,
-      "hold_minutes": 955
+      "hold_minutes": 961
     },
     "GRAMUSDT": {
       "created_at": 1795179114,
@@ -2893,7 +2895,7 @@
       "max_high_price": 0.04555,
       "peak_ts_ms": 1795243500000,
       "max_favorable_pct": 12.08,
-      "hold_minutes": 1086,
+      "hold_minutes": 1091,
       "tp1_hit": true,
       "tp1_alerted": true
     },
@@ -2931,7 +2933,7 @@
       "max_high_price": 0.04646,
       "peak_ts_ms": 1795243500000,
       "max_favorable_pct": 3.18,
-      "hold_minutes": 1086
+      "hold_minutes": 1091
     },
     "HYPEUSDT": {
       "created_at": 1795190721,
@@ -3060,7 +3062,7 @@
       "max_high_price": 0.01347,
       "peak_ts_ms": 1795243500000,
       "max_favorable_pct": 3.54,
-      "hold_minutes": 235
+      "hold_minutes": 241
     },
     "SUSDT": {
       "created_at": 1795191103,
@@ -3143,7 +3145,7 @@
       "max_high_price": 0.06713,
       "peak_ts_ms": 1795224600000,
       "max_favorable_pct": 6.71,
-      "hold_minutes": 955
+      "hold_minutes": 961
     },
     "CTUSDT": {
       "created_at": 1795195515,
@@ -3228,7 +3230,7 @@
       "max_high_price": 0.5284,
       "peak_ts_ms": 1795228200000,
       "max_favorable_pct": 27.54,
-      "hold_minutes": 730
+      "hold_minutes": 736
     },
     "EULUSDT": {
       "created_at": 1795209009,
@@ -3267,7 +3269,7 @@
       "max_high_price": 0.805,
       "peak_ts_ms": 1795219200000,
       "max_favorable_pct": 5.23,
-      "hold_minutes": 662
+      "hold_minutes": 668
     },
     "CARVUSDT": {
       "created_at": 1795210079,
@@ -3308,7 +3310,7 @@
       "max_high_price": 0.02579,
       "peak_ts_ms": 1795219200000,
       "max_favorable_pct": 6.39,
-      "hold_minutes": 645
+      "hold_minutes": 651
     },
     "TRUMPUSDT": {
       "created_at": 1795222528,
@@ -3392,7 +3394,7 @@
       "max_high_price": 0.15403,
       "peak_ts_ms": 1795238100000,
       "max_favorable_pct": 2.42,
-      "hold_minutes": 223
+      "hold_minutes": 229
     },
     "0GUSDT": {
       "created_at": 1795242119,
@@ -3431,9 +3433,9 @@
         "⚠️ 1W·1D 상위 역배열 구간(단기 저항 주의)"
       ],
       "max_high_price": 0.1075,
-      "peak_ts_ms": 1795245240000,
+      "peak_ts_ms": 1795244400000,
       "max_favorable_pct": 3.27,
-      "hold_minutes": 111
+      "hold_minutes": 117
     },
     "IDOLUSDT": {
       "created_at": 1795248057,
@@ -3474,7 +3476,7 @@
       "max_high_price": 0.025446,
       "peak_ts_ms": 1795248180000,
       "max_favorable_pct": 2.03,
-      "hold_minutes": 12
+      "hold_minutes": 18
     },
     "MMTUSDT": {
       "created_at": 1795137319,
@@ -8954,7 +8956,7 @@
       "funding_pct": -0.0028,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 4429,
+      "hold_minutes": 4435,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9123,7 +9125,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 4397,
+      "hold_minutes": 4403,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -9612,7 +9614,7 @@
       "funding_pct": -0.025500000000000002,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 4357,
+      "hold_minutes": 4362,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -10218,7 +10220,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 4222,
+      "hold_minutes": 4228,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -10833,7 +10835,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 4040,
+      "hold_minutes": 4046,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -12019,7 +12021,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 3509,
+      "hold_minutes": 3515,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -12102,7 +12104,7 @@
       "funding_pct": -0.0274,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 3451,
+      "hold_minutes": 3457,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -12726,7 +12728,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 3129,
+      "hold_minutes": 3135,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -12932,7 +12934,7 @@
       "funding_pct": -0.060700000000000004,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2592,
+      "hold_minutes": 2598,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -12975,7 +12977,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2414,
+      "hold_minutes": 2420,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -13018,7 +13020,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2396,
+      "hold_minutes": 2402,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -13190,7 +13192,7 @@
       "funding_pct": -0.013200000000000002,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2358,
+      "hold_minutes": 2364,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -13266,8 +13268,8 @@
         19.6,
         30.1
       ],
-      "max_high_price": 0.74541,
-      "max_favorable_pct": 27.71,
+      "max_high_price": 0.74584,
+      "max_favorable_pct": 27.78,
       "realized_weighted_pct": 0.0,
       "vol_mult": 2.56,
       "rsi6_15m": 66.7,
@@ -13276,7 +13278,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2292,
+      "hold_minutes": 2298,
       "tp1_hit": true,
       "tp2_hit": true,
       "tp3_hit": false,
@@ -13405,7 +13407,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2167,
+      "hold_minutes": 2173,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -13448,7 +13450,7 @@
       "funding_pct": -0.002347,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2106,
+      "hold_minutes": 2112,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -13663,7 +13665,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2007,
+      "hold_minutes": 2013,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -13961,7 +13963,7 @@
       "funding_pct": 0.0106,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1686,
+      "hold_minutes": 1692,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -14087,7 +14089,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1608,
+      "hold_minutes": 1614,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -14130,7 +14132,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1574,
+      "hold_minutes": 1580,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -14206,8 +14208,8 @@
         95.0,
         250.0
       ],
-      "max_high_price": 0.017938,
-      "max_favorable_pct": 35.21,
+      "max_high_price": 0.01881,
+      "max_favorable_pct": 41.78,
       "realized_weighted_pct": 0.0,
       "vol_mult": 10.55,
       "rsi6_15m": 53.7,
@@ -14216,11 +14218,11 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1483,
-      "tp1_hit": false,
+      "hold_minutes": 1489,
+      "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
-      "tp1_alerted": false,
+      "tp1_alerted": true,
       "tp2_alerted": false,
       "tp3_alerted": false,
       "tp3_completed": false,
@@ -14560,7 +14562,7 @@
       "funding_pct": -0.002497,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1190,
+      "hold_minutes": 1196,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -14732,7 +14734,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1086,
+      "hold_minutes": 1091,
       "tp1_hit": true,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -14775,7 +14777,7 @@
       "funding_pct": 0.0028,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1086,
+      "hold_minutes": 1091,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -14990,7 +14992,7 @@
       "funding_pct": 0.005,
       "change_24h": -3.89,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 955,
+      "hold_minutes": 961,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15033,7 +15035,7 @@
       "funding_pct": 0.005,
       "change_24h": -21.31,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 955,
+      "hold_minutes": 961,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15076,7 +15078,7 @@
       "funding_pct": 0.0018,
       "change_24h": -4.83,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 949,
+      "hold_minutes": 955,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15162,7 +15164,7 @@
       "funding_pct": -0.0052,
       "change_24h": -6.14,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 937,
+      "hold_minutes": 942,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15367,8 +15369,8 @@
         95.0,
         188.4
       ],
-      "max_high_price": 0.05961,
-      "max_favorable_pct": 20.5,
+      "max_high_price": 0.05974,
+      "max_favorable_pct": 20.76,
       "realized_weighted_pct": 0.0,
       "vol_mult": 0.57,
       "rsi6_15m": 67.5,
@@ -15377,7 +15379,7 @@
       "funding_pct": -0.004866,
       "change_24h": -17.48,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 852,
+      "hold_minutes": 858,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15463,7 +15465,7 @@
       "funding_pct": -0.035500000000000004,
       "change_24h": -0.39,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 730,
+      "hold_minutes": 736,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15506,7 +15508,7 @@
       "funding_pct": -0.0059,
       "change_24h": -5.06,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 724,
+      "hold_minutes": 730,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15592,7 +15594,7 @@
       "funding_pct": 0.0019000000000000002,
       "change_24h": -8.97,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 687,
+      "hold_minutes": 692,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15635,7 +15637,7 @@
       "funding_pct": -0.01678,
       "change_24h": 8.74,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 680,
+      "hold_minutes": 686,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15678,7 +15680,7 @@
       "funding_pct": 0.005,
       "change_24h": -7.67,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 662,
+      "hold_minutes": 668,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15721,7 +15723,7 @@
       "funding_pct": 0.005,
       "change_24h": 4.84,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 645,
+      "hold_minutes": 651,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15764,7 +15766,7 @@
       "funding_pct": 0.005,
       "change_24h": -5.44,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 623,
+      "hold_minutes": 629,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15850,7 +15852,7 @@
       "funding_pct": 0.005,
       "change_24h": -18.64,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 450,
+      "hold_minutes": 456,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15893,7 +15895,7 @@
       "funding_pct": 0.005,
       "change_24h": -12.25,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 443,
+      "hold_minutes": 449,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -15979,7 +15981,7 @@
       "funding_pct": -0.0028,
       "change_24h": -13.91,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 373,
+      "hold_minutes": 378,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -16108,7 +16110,7 @@
       "funding_pct": 0.005,
       "change_24h": -3.48,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 352,
+      "hold_minutes": 358,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -16194,7 +16196,7 @@
       "funding_pct": 0.005,
       "change_24h": -9.9,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 235,
+      "hold_minutes": 241,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -16237,7 +16239,7 @@
       "funding_pct": 0.005,
       "change_24h": -11.51,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 235,
+      "hold_minutes": 241,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -16280,7 +16282,7 @@
       "funding_pct": 0.005,
       "change_24h": -20.17,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 223,
+      "hold_minutes": 229,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -16323,7 +16325,7 @@
       "funding_pct": 0.005,
       "change_24h": -3.83,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 206,
+      "hold_minutes": 212,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -16366,7 +16368,7 @@
       "funding_pct": 0.005,
       "change_24h": -10.32,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 194,
+      "hold_minutes": 200,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -16409,7 +16411,7 @@
       "funding_pct": 0.005,
       "change_24h": -12.62,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 111,
+      "hold_minutes": 117,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -16452,7 +16454,7 @@
       "funding_pct": 0.005,
       "change_24h": -12.36,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 104,
+      "hold_minutes": 110,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
@@ -16495,7 +16497,7 @@
       "funding_pct": 0.005,
       "change_24h": 13.26,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 12,
+      "hold_minutes": 18,
       "tp1_hit": false,
       "tp2_hit": false,
       "tp3_hit": false,
