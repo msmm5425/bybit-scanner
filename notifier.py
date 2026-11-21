@@ -98,6 +98,8 @@ def build_briefing_message(res, now_str):
     htf = res.get("htf_status", "1H 중심선지지")
     rsi15 = to_float(res.get("rsi6_15m"))
     kdj15 = to_float(res.get("kdj_j_15m"))
+    ppo15 = res.get("ppo_15m")
+    ppo_str = f" · PPO {to_float(ppo15):+.2f}%" if ppo15 is not None else ""
 
     e_low = to_float(res.get("entry_low"), price * 0.9970)
     e_high = to_float(res.get("entry_high"), price * 1.0015)
@@ -117,7 +119,7 @@ def build_briefing_message(res, now_str):
         f"🕒 포착 시각: {now_str}",
         f"• 현재가: {fmt_price(price)} USDT (24h {chg:+.2f}%)",
         f"• 수급: 거래대금 {turn_m:.1f}M | OI {oi_m:.1f}M (비중 {oi_ratio:.0f}%) | 펀딩 {fund:+.4f}%",
-        f"• 멀티프레임: {htf} | 15m RSI6 {rsi15:.1f} · J {kdj15:.1f}",
+        f"• 멀티프레임: {htf} | 15m RSI6 {rsi15:.1f} · J {kdj15:.1f}{ppo_str}",
         "",
         f"🎯 [{'장기 포지션 매매 전략 가이드' if is_long else '매매 전략 가이드'}]",
         f"• 진입 구간: {fmt_price(e_low)} ~ {fmt_price(e_high)} USDT",
