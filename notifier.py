@@ -74,12 +74,33 @@ def _ensure_playwright():
             return False
 
 
-def fetch_exact_bybit_klines(symbol, interval="15", limit=130):
+def fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=20):
     if api_mod is not None and hasattr(api_mod, "fetch_klines"):
         df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
-        if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= 30:
+        if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= min_rows:
             return df
     return pd.DataFrame()
+
+
+def _resample_4h_to_12h(df_4h):
+    """12H 직접 조회가 일시 실패할 경우 4H 캔들을 12H UTC 버킷(00:00/12:00)으로 자동 리샘플링"""
+    if df_4h is None or df_4h.empty or len(df_4h) < 30:
+        return pd.DataFrame()
+    try:
+        tmp = df_4h.copy()
+        bucket_ms = 12 * 3600 * 1000
+        tmp["bucket"] = (tmp["timestamp"].astype("int64") // bucket_ms) * bucket_ms
+        grouped = tmp.groupby("bucket", as_index=False).agg({
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+        })
+        grouped = grouped.rename(columns={"bucket": "timestamp"})
+        return grouped.sort_values("timestamp", ascending=True).reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
 
 
 def build_briefing_message(res, now_str):
@@ -224,7 +245,7 @@ def build_x_intent_reply_markup(x_post_text):
     return {"inline_keyboard": [[{"text": "🚀 X(트위터) 앱에 본문 자동 입력하기", "url": intent_url}]]}
 
 
-def _render_tradingview_lightweight_chart(df, res):
+def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     if not _ensure_playwright():
         return None
     symbol = res.get("symbol", "")
@@ -236,7 +257,11 @@ def _render_tradingview_lightweight_chart(df, res):
 
     latest_row = df.iloc[-1]
     price = to_float(latest_row["close"], to_float(res.get("price")))
-    open_last, high_last, low_last = to_float(latest_row["open"], price), to_float(latest_row["high"], price), to_float(latest_row["low"], price)
+    open_last, high_last, low_last = (
+        to_float(latest_row["open"], price),
+        to_float(latest_row["high"], price),
+        to_float(latest_row["low"], price),
+    )
 
     orig_entry = to_float(res.get("price"), price)
     ratio_adj = price / orig_entry if orig_entry > 0 else 1.0
@@ -276,10 +301,57 @@ def _render_tradingview_lightweight_chart(df, res):
         if pd.notna(row.get("ma20")):
             ma20_js.append({"time": ts_sec, "value": _fwd(row["ma20"])})
 
-    step_sec = 14400 if is_long else 900
+    tf_str = str(chart_tf).upper().strip()
+    step_sec = {"720": 43200, "240": 14400, "60": 3600, "15": 900}.get(tf_str, 43200 if is_long else 3600)
     whitespace_js = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 6)]
+
+    # -------------------------------------------------------------------------
+    # [자동 피보나치 되돌림 계산] 96캔들 구간 스윙 고점·저점 기준 (추세 방향 자동 판별)
+    # -------------------------------------------------------------------------
+    high_idx = int(df["high"].astype(float).idxmax())
+    low_idx = int(df["low"].astype(float).idxmin())
+    fib_high = to_float(df["high"].iloc[high_idx], candle_max_high)
+    fib_low = to_float(df["low"].iloc[low_idx], candle_min_low)
+    fib_span = fib_high - fib_low
+
+    fib_levels_js = []
+    fib_start_time = candles_js[0]["time"]
+    fib_end_time = whitespace_js[-1]["time"]
+    fib_dir_tag = "FIB"
+
+    if fib_span > price * 0.005 and len(candles_js) >= 10:
+        # 스윙 시작점부터 우측 끝까지 선 작도 (최소 좌측 절반 이상 폭 확보)
+        start_idx = min(min(high_idx, low_idx), max(0, len(candles_js) // 2))
+        fib_start_time = candles_js[start_idx]["time"]
+        is_up_impulse = low_idx <= high_idx
+        fib_dir_tag = "FIB (L→H)" if is_up_impulse else "FIB (H→L)"
+
+        # 핵심 피보나치 비율 및 트레이딩뷰 스타일 배색 (priority 높을수록 라벨 우선 표기)
+        fib_specs = [
+            (0.0,   "0",     "#787b86", 1, 1, 1),
+            (0.236, "0.236", "#9598a1", 1, 3, 2),
+            (0.382, "0.382", "#4dd0e1", 1, 3, 4),
+            (0.5,   "0.5",   "#ffd54f", 1.2, 3, 5),
+            (0.618, "0.618", "#ff9800", 1.3, 3, 6),
+            (0.786, "0.786", "#ce93d8", 1, 3, 3),
+            (1.0,   "1",     "#787b86", 1, 1, 1),
+        ]
+        for ratio, r_lbl, color, l_width, l_style, prio in fib_specs:
+            real_p = (fib_high - fib_span * ratio) if is_up_impulse else (fib_low + fib_span * ratio)
+            fib_levels_js.append({
+                "ratio": ratio,
+                "label": r_lbl,
+                "priceStr": fmt_price(real_p),
+                "yVal": _fwd(real_p),
+                "color": color,
+                "lineWidth": l_width,
+                "lineStyle": l_style,
+                "priority": prio,
+            })
+
     kst_str = datetime.fromtimestamp(to_float(latest_row["timestamp"]) / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST")
-    tf_label = "4H · LONG-TERM" if is_long else "15m · BYBIT"
+    tf_name = {"720": "12H", "240": "4H", "60": "1H", "15": "15m"}.get(tf_str, "12H" if is_long else "1H")
+    tf_label = f"{tf_name} · LONG-TERM" if is_long else f"{tf_name} · BYBIT"
     track_badge = {
         "TRACK_A": "TRACK A · TTM Squeeze",
         "TRACK_B": "TRACK B · 24H Breakout",
@@ -295,24 +367,166 @@ def _render_tradingview_lightweight_chart(df, res):
     lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
 
     html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><script src="{lw_script_url}"></script>
-<style>*{{box-sizing:border-box;margin:0;padding:0}}body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#d1d4dc;width:1160px;height:680px;overflow:hidden}}.tv-wrap{{width:1160px;height:680px;background:#131722;border:1px solid #2a2e39;display:flex;flex-direction:column}}.tv-topbar{{height:42px;background:#181c27;border-bottom:1px solid #2a2e39;display:flex;align-items:center;justify-content:space-between;padding:0 16px}}.tv-left,.tv-right{{display:flex;align-items:center;gap:10px}}.tv-symbol{{font-size:16px;font-weight:800;color:#fff}}.tv-tf-badge{{background:#2a2e39;color:#d1d4dc;font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:4px}}.tv-ohlc{{display:flex;gap:10px;font-size:12px;font-weight:600}}.tv-val-up{{color:#26a69a}}.tv-score-pill{{background:#2962ff;color:#fff;font-size:12px;font-weight:700;padding:4px 11px;border-radius:5px}}#chart-box{{position:relative;flex:1;width:100%;height:638px}}.tv-ma-legend{{position:absolute;top:10px;left:14px;z-index:15;display:flex;gap:14px;font-size:12px;font-weight:700;background:rgba(19,23,34,0.84);padding:5px 11px;border-radius:4px;border:1px solid #2a2e39}}</style></head>
-<body><div class="tv-wrap"><div class="tv-topbar"><div class="tv-left"><span class="tv-symbol">${base}USDT.P</span><span class="tv-tf-badge">{tf_label}</span><div class="tv-ohlc"><span>O <span class="tv-val-up">{fmt_price(open_last)}</span></span><span>H <span class="tv-val-up">{fmt_price(high_last)}</span></span><span>L <span class="tv-val-up">{fmt_price(low_last)}</span></span><span>C <span class="tv-val-up">{fmt_price(price)}</span></span></div></div><div class="tv-right"><span>{kst_str}</span><span class="tv-score-pill">{track_badge} · {score} pts</span></div></div><div id="chart-box"><div class="tv-ma-legend"><span style="color:#00e5ff">● MA(5) {fmt_price(df["ma5"].iloc[-1])}</span><span style="color:#ffd166">● MA(9) {fmt_price(df["ma9"].iloc[-1])}</span><span style="color:#2962ff">● MA(20) {fmt_price(df["ma20"].iloc[-1])}</span></div></div></div>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#d1d4dc;width:1160px;height:680px;overflow:hidden}}
+.tv-wrap{{width:1160px;height:680px;background:#131722;border:1px solid #2a2e39;display:flex;flex-direction:column}}
+.tv-topbar{{height:42px;background:#181c27;border-bottom:1px solid #2a2e39;display:flex;align-items:center;justify-content:space-between;padding:0 16px}}
+.tv-left,.tv-right{{display:flex;align-items:center;gap:10px}}
+.tv-symbol{{font-size:16px;font-weight:800;color:#fff}}
+.tv-tf-badge{{background:#2a2e39;color:#d1d4dc;font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:4px}}
+.tv-ohlc{{display:flex;gap:10px;font-size:12px;font-weight:600}}
+.tv-val-up{{color:#26a69a}}
+.tv-score-pill{{background:#2962ff;color:#fff;font-size:12px;font-weight:700;padding:4px 11px;border-radius:5px}}
+#chart-box{{position:relative;flex:1;width:100%;height:638px}}
+.tv-ma-legend{{position:absolute;top:10px;left:14px;z-index:20;display:flex;gap:14px;font-size:12px;font-weight:700;background:rgba(19,23,34,0.86);padding:5px 11px;border-radius:4px;border:1px solid #2a2e39}}
+#fib-overlay{{position:absolute;inset:0;pointer-events:none;z-index:12;overflow:hidden}}
+.fib-band{{position:absolute;pointer-events:none}}
+.fib-lbl{{position:absolute;font-size:10.5px;font-weight:700;line-height:1;padding:2px 6px;border-radius:3px;background:rgba(19,23,34,0.82);border:1px solid rgba(255,255,255,0.08);white-space:nowrap;letter-spacing:0.2px}}
+</style></head>
+<body>
+<div class="tv-wrap">
+  <div class="tv-topbar">
+    <div class="tv-left">
+      <span class="tv-symbol">${base}USDT.P</span>
+      <span class="tv-tf-badge">{tf_label}</span>
+      <div class="tv-ohlc">
+        <span>O <span class="tv-val-up">{fmt_price(open_last)}</span></span>
+        <span>H <span class="tv-val-up">{fmt_price(high_last)}</span></span>
+        <span>L <span class="tv-val-up">{fmt_price(low_last)}</span></span>
+        <span>C <span class="tv-val-up">{fmt_price(price)}</span></span>
+      </div>
+    </div>
+    <div class="tv-right">
+      <span>{kst_str}</span>
+      <span class="tv-score-pill">{track_badge} · {score} pts</span>
+    </div>
+  </div>
+  <div id="chart-box">
+    <div class="tv-ma-legend">
+      <span style="color:#00e5ff">● MA(5) {fmt_price(df["ma5"].iloc[-1])}</span>
+      <span style="color:#ffd166">● MA(9) {fmt_price(df["ma9"].iloc[-1])}</span>
+      <span style="color:#2962ff">● MA(20) {fmt_price(df["ma20"].iloc[-1])}</span>
+      <span style="color:#ff9800">▤ {fib_dir_tag}</span>
+    </div>
+    <div id="fib-overlay"></div>
+  </div>
+</div>
 <script>
 const lowPiv={low_piv},highPiv={high_piv},upComp={up_comp},downComp={down_comp},decimals={decimals};
 function invScale(y){{if(y>highPiv)return highPiv+(y-highPiv)/Math.max(upComp,1e-6);if(y<lowPiv)return lowPiv-(lowPiv-y)/Math.max(downComp,1e-6);return y;}}
 function fmtReal(val){{const p=invScale(val);if(p<=0)return '0.0000';if(p>=1000)return p.toLocaleString('en-US',{{minimumFractionDigits:2,maximumFractionDigits:2}});return p.toFixed(decimals);}}
-const chart=LightweightCharts.createChart(document.getElementById('chart-box'),{{width:1160,height:638,layout:{{background:{{type:'solid',color:'#131722'}},textColor:'#d1d4dc',fontSize:12}},grid:{{vertLines:{{color:'#1e222d'}},horzLines:{{color:'#1e222d'}}}},rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.05,bottom:0.12}},entireTextOnly:true}},timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:5,barSpacing:9.8}},localization:{{priceFormatter:fmtReal}}}});
-const candleSeries=chart.addCandlestickSeries({{upColor:'#26a69a',downColor:'#ef5350',borderUpColor:'#26a69a',borderDownColor:'#ef5350',wickUpColor:'#26a69a',wickDownColor:'#ef5350',priceLineVisible:false,lastValueVisible:false,priceFormat:{{type:'custom',minMove:{min_move},formatter:fmtReal}}}});
-const cData={json.dumps(candles_js)};candleSeries.setData([...cData,...{json.dumps(whitespace_js)}]);
+const chart=LightweightCharts.createChart(document.getElementById('chart-box'),{{
+  width:1160,height:638,
+  layout:{{background:{{type:'solid',color:'#131722'}},textColor:'#d1d4dc',fontSize:12}},
+  grid:{{vertLines:{{color:'#1e222d'}},horzLines:{{color:'#1e222d'}}}},
+  rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.05,bottom:0.12}},entireTextOnly:true}},
+  timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:5,barSpacing:9.8}},
+  localization:{{priceFormatter:fmtReal}}
+}});
+const candleSeries=chart.addCandlestickSeries({{
+  upColor:'#26a69a',downColor:'#ef5350',
+  borderUpColor:'#26a69a',borderDownColor:'#ef5350',
+  wickUpColor:'#26a69a',wickDownColor:'#ef5350',
+  priceLineVisible:false,lastValueVisible:false,
+  priceFormat:{{type:'custom',minMove:{min_move},formatter:fmtReal}}
+}});
+const cData={json.dumps(candles_js)};
+candleSeries.setData([...cData,...{json.dumps(whitespace_js)}]);
 candleSeries.setMarkers([{{time:cData[cData.length-1].time,position:'belowBar',color:'#00e676',shape:'arrowUp',text:'ENTRY',size:2}}]);
+
+// 피보나치 수평선 작도 (스윙 기점 → 우측 끝)
+const fibLevels={json.dumps(fib_levels_js)};
+const fibStartTime={fib_start_time}, fibEndTime={fib_end_time};
+fibLevels.forEach(fl=>{{
+  const fs=chart.addLineSeries({{
+    color:fl.color,
+    lineWidth:fl.lineWidth,
+    lineStyle:fl.lineStyle,
+    priceLineVisible:false,
+    lastValueVisible:false,
+    crosshairMarkerVisible:false
+  }});
+  fs.setData([{{time:fibStartTime,value:fl.yVal}},{{time:fibEndTime,value:fl.yVal}}]);
+}});
+
 chart.addLineSeries({{color:'#00e5ff',lineWidth:1.6,priceLineVisible:false,lastValueVisible:false}}).setData({json.dumps(ma5_js)});
 chart.addLineSeries({{color:'#ffd166',lineWidth:1.6,priceLineVisible:false,lastValueVisible:false}}).setData({json.dumps(ma9_js)});
 chart.addLineSeries({{color:'#2962ff',lineWidth:2.0,priceLineVisible:false,lastValueVisible:false}}).setData({json.dumps(ma20_js)});
+
 const volSeries=chart.addHistogramSeries({{priceFormat:{{type:'volume'}},priceScaleId:'vol_scale',priceLineVisible:false,lastValueVisible:false}});
-chart.priceScale('vol_scale').applyOptions({{scaleMargins:{{top:0.90,bottom:0.0}}}});volSeries.setData({json.dumps(vol_js)});
-[{{price:{_fwd(tp3_p)},color:'#ffd166',title:'TP3 (+{p3:g}%)',style:2,width:2}},{{price:{_fwd(tp2_p)},color:'#06d6a0',title:'TP2 (+{p2:g}%)',style:2,width:2}},{{price:{_fwd(tp1_p)},color:'#4cc9f0',title:'TP1 (+{p1:g}%)',style:2,width:2}},{{price:{_fwd(price)},color:'#ffffff',title:'ENTRY',style:0,width:2}},{{price:{_fwd(sl_p)},color:'#ef476f',title:'SL (-{sl_pct}%)',style:2,width:2}}].forEach(t=>candleSeries.createPriceLine({{price:t.price,color:t.color,lineWidth:t.width,lineStyle:t.style,axisLabelVisible:true,title:t.title}}));
-chart.addLineSeries({{color:'rgba(0,0,0,0)',lineWidth:1,priceLineVisible:false,lastValueVisible:false}}).setData([{{time:cData[0].time,value:{_fwd(sl_p) - core_span * 0.03}}},{{time:cData[cData.length-1].time,value:{_fwd(tp3_p) + core_span * 0.04}}}]);
-chart.timeScale().fitContent();window.__CHART_DONE=true;
+chart.priceScale('vol_scale').applyOptions({{scaleMargins:{{top:0.90,bottom:0.0}}}});
+volSeries.setData({json.dumps(vol_js)});
+
+// TP1·TP2·TP3·SL 가격선만 표시 (엔트리 흰색선 제거)
+[
+  {{price:{_fwd(tp3_p)},color:'#ffd166',title:'TP3 (+{p3:g}%)',style:2,width:2}},
+  {{price:{_fwd(tp2_p)},color:'#06d6a0',title:'TP2 (+{p2:g}%)',style:2,width:2}},
+  {{price:{_fwd(tp1_p)},color:'#4cc9f0',title:'TP1 (+{p1:g}%)',style:2,width:2}},
+  {{price:{_fwd(sl_p)},color:'#ef476f',title:'SL (-{sl_pct}%)',style:2,width:2}}
+].forEach(t=>candleSeries.createPriceLine({{price:t.price,color:t.color,lineWidth:t.width,lineStyle:t.style,axisLabelVisible:true,title:t.title}}));
+
+chart.addLineSeries({{color:'rgba(0,0,0,0)',lineWidth:1,priceLineVisible:false,lastValueVisible:false}}).setData([
+  {{time:cData[0].time,value:{_fwd(sl_p) - core_span * 0.03}}},
+  {{time:cData[cData.length-1].time,value:{_fwd(tp3_p) + core_span * 0.04}}}
+]);
+chart.timeScale().fitContent();
+
+// 피보나치 골든포켓 음영 & 좌측 라벨 오버레이 렌더링
+requestAnimationFrame(()=>requestAnimationFrame(()=>{{
+  try{{
+    const ov=document.getElementById('fib-overlay');
+    if(ov && fibLevels.length>0){{
+      const psWidth=(chart.priceScale('right') && chart.priceScale('right').width) ? chart.priceScale('right').width() : 88;
+      const plotRight=Math.max(200, 1160 - (psWidth || 88));
+      const rawX=chart.timeScale().timeToCoordinate(fibStartTime);
+      const xStart=(rawX!==null && isFinite(rawX)) ? Math.max(8, Math.min(plotRight - 180, rawX)) : 12;
+
+      const byRatio={{}};
+      fibLevels.forEach(fl=>{{
+        const y=candleSeries.priceToCoordinate(fl.yVal);
+        if(y!==null && isFinite(y)) byRatio[fl.label]=y;
+      }});
+
+      const drawBand=(r1,r2,bg)=>{{
+        if(byRatio[r1]!==undefined && byRatio[r2]!==undefined){{
+          const topY=Math.min(byRatio[r1],byRatio[r2]);
+          const hY=Math.abs(byRatio[r2]-byRatio[r1]);
+          if(hY>=2){{
+            const b=document.createElement('div');
+            b.className='fib-band';
+            b.style.left=xStart+'px';
+            b.style.width=Math.max(20, plotRight - xStart)+'px';
+            b.style.top=topY+'px';
+            b.style.height=hY+'px';
+            b.style.background=bg;
+            ov.appendChild(b);
+          }}
+        }}
+      }};
+      drawBand('0.5','0.618','rgba(255, 152, 0, 0.09)');
+      drawBand('0.382','0.5','rgba(77, 208, 225, 0.045)');
+
+      // 우선순위 순으로 라벨 배치 (상단 MA 범례 및 인접 라벨 겹침 자동 회피)
+      const placedY=[];
+      const sortedFibs=[...fibLevels].sort((a,b)=>b.priority-a.priority);
+      sortedFibs.forEach(fl=>{{
+        const y=byRatio[fl.label];
+        if(y===undefined || y<44 || y>585) return;
+        if(placedY.some(py=>Math.abs(py-y)<16)) return;
+        placedY.push(y);
+        const tag=document.createElement('div');
+        tag.className='fib-lbl';
+        tag.style.left=(xStart+6)+'px';
+        tag.style.top=(y-8)+'px';
+        tag.style.color=fl.color;
+        tag.textContent=fl.label+' ('+fl.priceStr+')';
+        ov.appendChild(tag);
+      }});
+    }}
+  }}catch(e){{}}
+  window.__CHART_DONE=true;
+}}));
 </script></body></html>"""
 
     try:
@@ -342,17 +556,41 @@ def generate_signal_chart_bytes(res):
     if not symbol or price <= 0:
         return None
     is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
-    tf = "240" if is_long else "15"
-    df = fetch_exact_bybit_klines(symbol, interval=tf, limit=130)
-    if df is None or df.empty or len(df) < 30:
-        df = fetch_exact_bybit_klines(symbol, interval="15", limit=130)
-    if df is None or df.empty or len(df) < 30:
+
+    actual_tf = "720" if is_long else "60"
+    df = pd.DataFrame()
+
+    if is_long:
+        # 장기 포지션: 12H(720) 최우선 조회 → 실패 시 4H(300봉)→12H 리샘플링 → 신규상장 예외 시 4H/1H 폴백
+        df = fetch_exact_bybit_klines(symbol, interval="720", limit=130, min_rows=20)
+        if df.empty:
+            df_4h_raw = fetch_exact_bybit_klines(symbol, interval="240", limit=300, min_rows=30)
+            if not df_4h_raw.empty:
+                df_resamp = _resample_4h_to_12h(df_4h_raw)
+                if not df_resamp.empty and len(df_resamp) >= 20:
+                    df = df_resamp
+                    actual_tf = "720"
+                else:
+                    df = df_4h_raw
+                    actual_tf = "240"
+        if df.empty:
+            df = fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=20)
+            actual_tf = "60"
+    else:
+        # 단기·스윙 포지션: 1H(60) 최우선 조회 → 신규상장 예외 시 15m 폴백
+        df = fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=20)
+        if df.empty:
+            df = fetch_exact_bybit_klines(symbol, interval="15", limit=130, min_rows=20)
+            actual_tf = "15"
+
+    if df is None or df.empty or len(df) < 20:
         return None
+
     df = df.copy()
     df["ma5"] = df["close"].rolling(5, min_periods=2).mean()
     df["ma9"] = df["close"].rolling(9, min_periods=3).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=5).mean()
-    return _render_tradingview_lightweight_chart(df.iloc[-96:].reset_index(drop=True), res)
+    return _render_tradingview_lightweight_chart(df.iloc[-96:].reset_index(drop=True), res, chart_tf=actual_tf)
 
 
 def send_telegram_single(text, reply_markup=None):
