@@ -727,7 +727,7 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                 ],
             )
 
-    # [Track A·B·C·G + 신규 Track H] — BTC 정상 구간(OPEN)에서만 탐색
+    # [Track A·B·C·G + Track H] — BTC 정상 구간(OPEN)에서만 탐색
     if not counter_trend_only:
         # [Track G] 💥 숏스퀴즈 강제청산 초입
         if funding_pct <= -0.020 and oi_ratio >= 18.0:
@@ -851,9 +851,18 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                 )
 
         # =====================================================================
-        # [신규 Track H] 🧬 Top 5 급등 DNA 자동 적응 트랙 (기존 A~G 사각지대 보완)
+        # [보강 Track H] 🧬 Top 5 급등 DNA 자동 적응 트랙
+        # - 급락주(-5% 이하) 차단 + 1H/15m 20MA 위 추세 안착 필수 + KDJ J 과열 차단
         # =====================================================================
-        if not short_candidates and rsi6_15m < 76.0 and ma20_disp_pct < 5.5 and change_24h < 18.0:
+        if (
+            not short_candidates
+            and htf_bull
+            and curr_c >= ma20_15m_val
+            and (-5.0 <= change_24h < 18.0)
+            and rsi6_15m < 76.0
+            and kdj_j_15m < 85.0
+            and ma20_disp_pct < 5.5
+        ):
             dna_f = _load_active_top5_dna_formula()
             if dna_f:
                 min_bw_h = to_float(bb_width_pct.iloc[-10:-1].min(), 8.0)
@@ -876,13 +885,12 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                     matched_names = [nm for nm, ok in checks if ok]
                     match_cnt = len(matched_names)
 
-                    # 6대 DNA 항목 중 5개 이상(유사도 83%+) 일치 시 자동 적응 포착
                     if match_cnt >= 5:
                         sc_h = (
                             (38 if match_cnt == 6 else 33)
                             + (18 if vol_mult >= req_lvol * 1.25 else 13)
                             + (14 if obv_strong else 8)
-                            + (13 if htf_bull else 8)
+                            + (13 if htf_aligned else 10)
                             + (10 if (kdj_j_15m > kdj_j_prev and rsi6_15m > rsi6_prev) else 5)
                         )
                         dom_tag = str(dna_f.get("dominant_tag") or "Top 5 급등 DNA")
@@ -892,7 +900,7 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                             sc_h,
                             [
                                 f"최근 14일 Top 5 발사직전 DNA {match_cnt}/6 일치 ({', '.join(matched_names[:4])})",
-                                f"학습 기준 발사 거래량({req_lvol:.1f}x↑) 충족({vol_mult:.1f}배) + 매수 델타 유입",
+                                f"1H·15m 20MA 위 추세 안착 + 발사 거래량({req_lvol:.1f}x↑) 충족({vol_mult:.1f}배)",
                             ],
                         )
 
