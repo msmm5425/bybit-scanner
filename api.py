@@ -260,7 +260,7 @@ def _normalize_kline_df(rows, expected_interval_min=None):
             if not (target_sec * 0.5 <= median_diff_sec <= target_sec * 1.5):
                 return pd.DataFrame()
 
-        # [버그 수정] 타임프레임에 비례한 만료 허용치 적용 (일봉 D=60h, 주봉 W=17.5d, 분봉=6h)
+        # 타임프레임에 비례한 만료 허용치 적용 (12H=30h, 일봉 D=60h, 주봉 W=17.5d, 분봉=6h)
         max_stale_sec = max(6 * 3600.0, float(expected_interval_min or 5) * 60.0 * 2.5)
         latest_ts_ms = to_float(df["timestamp"].iloc[-1], 0.0)
         if latest_ts_ms > 0 and (time.time() * 1000.0 - latest_ts_ms) > (max_stale_sec * 1000.0):
@@ -493,10 +493,10 @@ def fetch_klines(symbol, interval="5", limit=150):
     iv_str = str(interval).upper().strip()
     iv_min = {
         "1": 1, "3": 3, "5": 5, "15": 15, "30": 30,
-        "60": 60, "120": 120, "240": 240, "D": 1440, "W": 10080,
+        "60": 60, "120": 120, "240": 240, "360": 360, "720": 720, "D": 1440, "W": 10080,
     }.get(iv_str, 5)
     lim = int(min(limit, 300))
-    min_bars = 4 if iv_str == "W" else (10 if iv_str == "D" else 15)
+    min_bars = 4 if iv_str == "W" else (10 if iv_str in ("D", "720") else 15)
 
     if not _BYBIT_DIRECT_BLOCKED:
         params = {"category": "linear", "symbol": sym, "interval": iv_str, "limit": lim}
@@ -513,7 +513,7 @@ def fetch_klines(symbol, interval="5", limit=150):
 
     bg_gran = {
         "1": "1m", "3": "3m", "5": "5m", "15": "15m", "30": "30m",
-        "60": "1H", "120": "2H", "240": "4H", "D": "1D", "W": "1W",
+        "60": "1H", "120": "2H", "240": "4H", "360": "6H", "720": "12H", "D": "1D", "W": "1W",
     }.get(iv_str, "5m")
     try:
         bg_url = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/candles")
