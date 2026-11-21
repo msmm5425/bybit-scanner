@@ -39,7 +39,7 @@
       "max_high_price": 0.04855,
       "peak_ts_ms": 1795270500000,
       "max_favorable_pct": 6.54,
-      "hold_minutes": 824,
+      "hold_minutes": 829,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -82,7 +82,7 @@
       "max_high_price": 24.31,
       "peak_ts_ms": 1795286280000,
       "max_favorable_pct": 7.37,
-      "hold_minutes": 350,
+      "hold_minutes": 356,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -125,7 +125,7 @@
       "max_high_price": 0.04889,
       "peak_ts_ms": 1795285140000,
       "max_favorable_pct": 8.84,
-      "hold_minutes": 734,
+      "hold_minutes": 740,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -217,51 +217,7 @@
       "max_high_price": 0.00441,
       "peak_ts_ms": 1795273200000,
       "max_favorable_pct": 1.92,
-      "hold_minutes": 1253,
-      "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
-    },
-    "HUSDT": {
-      "created_at": 1795192927,
-      "track_type": "TRACK_E",
-      "is_long_term": false,
-      "score": 99,
-      "entry_price": 0.01175,
-      "swing_high_line": 0.01493,
-      "entry_low": 0.011715,
-      "entry_high": 0.011768,
-      "initial_stop_price": 0.011045,
-      "stop_price": 0.011045,
-      "sl_pct": 6,
-      "tps": [
-        0.01309,
-        0.014194,
-        0.015581
-      ],
-      "tp_pcts": [
-        11.4,
-        20.8,
-        32.6
-      ],
-      "vol_mult": 4.26,
-      "rsi6_15m": 41.1,
-      "oi_m": 1.3,
-      "oi_ratio": 12.5,
-      "turnover_m": 10.2,
-      "change_24h": -31.09,
-      "funding_pct": 0.005,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 58%)",
-        "바닥 반전 거래량 4.3배 폭발 + KDJ 바닥 급반전"
-      ],
-      "max_high_price": 0.01197,
-      "peak_ts_ms": 1795193100000,
-      "max_favorable_pct": 1.87,
-      "hold_minutes": 125,
-      "sl_alerted": true,
-      "closed_alerted": true,
-      "sl_at": 1795200452,
+      "hold_minutes": 1259,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -303,7 +259,7 @@
       "max_high_price": 0.255,
       "peak_ts_ms": 1795276800000,
       "max_favorable_pct": 5.02,
-      "hold_minutes": 836,
+      "hold_minutes": 842,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -341,7 +297,7 @@
       "max_high_price": 0.01198,
       "peak_ts_ms": 1795273200000,
       "max_favorable_pct": 14.64,
-      "hold_minutes": 4139,
+      "hold_minutes": 4145,
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_armed_ts_ms": 0,
@@ -521,7 +477,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 5059,
+      "hold_minutes": 5065,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -609,7 +565,7 @@
       "max_high_price": 1.662,
       "peak_ts_ms": 1795267800000,
       "max_favorable_pct": 5.93,
-      "hold_minutes": 865,
+      "hold_minutes": 871,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -652,7 +608,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 5027,
+      "hold_minutes": 5033,
       "be_armed": true,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
@@ -696,7 +652,7 @@
       "max_high_price": 0.000999,
       "peak_ts_ms": 1795278600000,
       "max_favorable_pct": 7.88,
-      "hold_minutes": 565,
+      "hold_minutes": 571,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -735,7 +691,7 @@
       "max_high_price": 0.0787,
       "peak_ts_ms": 1795171500000,
       "max_favorable_pct": 13.79,
-      "hold_minutes": 4081,
+      "hold_minutes": 4087,
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_armed_ts_ms": 0,
@@ -781,7 +737,7 @@
       "max_high_price": 0.0976,
       "peak_ts_ms": 1795283820000,
       "max_favorable_pct": 9.91,
-      "hold_minutes": 1310,
+      "hold_minutes": 1316,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -822,7 +778,7 @@
       "max_high_price": 0.021775,
       "peak_ts_ms": 1795251600000,
       "max_favorable_pct": 64.13,
-      "hold_minutes": 2113,
+      "hold_minutes": 2119,
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_armed_ts_ms": 0,
@@ -867,7 +823,7 @@
       "max_high_price": 0.00735,
       "peak_ts_ms": 1795282200000,
       "max_favorable_pct": 6.21,
-      "hold_minutes": 379,
+      "hold_minutes": 385,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -910,7 +866,7 @@
       "max_high_price": 0.000823,
       "peak_ts_ms": 1795243500000,
       "max_favorable_pct": 1.35,
-      "hold_minutes": 1080,
+      "hold_minutes": 1086,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -954,7 +910,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 4986,
+      "hold_minutes": 4992,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -994,7 +950,7 @@
       "max_high_price": 0.03365,
       "peak_ts_ms": 1795117500000,
       "max_favorable_pct": 4.73,
-      "hold_minutes": 2988,
+      "hold_minutes": 2994,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1077,7 +1033,7 @@
       "max_high_price": 0.1376,
       "peak_ts_ms": 1795215600000,
       "max_favorable_pct": 2.76,
-      "hold_minutes": 2238,
+      "hold_minutes": 2244,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1119,7 +1075,7 @@
       "max_high_price": 2.442,
       "peak_ts_ms": 1795281300000,
       "max_favorable_pct": 5.94,
-      "hold_minutes": 1002,
+      "hold_minutes": 1008,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1162,7 +1118,7 @@
       "max_high_price": 0.02146,
       "peak_ts_ms": 1795266000000,
       "max_favorable_pct": 7.09,
-      "hold_minutes": 1354,
+      "hold_minutes": 1360,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1204,7 +1160,7 @@
       "max_high_price": 0.04606,
       "peak_ts_ms": 1795284300000,
       "max_favorable_pct": 10.83,
-      "hold_minutes": 1578,
+      "hold_minutes": 1584,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -1292,7 +1248,7 @@
       "max_high_price": 0.02066,
       "peak_ts_ms": 1795156200000,
       "max_favorable_pct": 17.32,
-      "hold_minutes": 3759,
+      "hold_minutes": 3765,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1332,7 +1288,7 @@
       "max_high_price": 0.02796,
       "peak_ts_ms": 1795140000000,
       "max_favorable_pct": 7.91,
-      "hold_minutes": 2736,
+      "hold_minutes": 2742,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1376,7 +1332,7 @@
       "tp2_hit": false,
       "tp2_alerted": false,
       "tp3_alerted": false,
-      "hold_minutes": 4852,
+      "hold_minutes": 4858,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1508,7 +1464,7 @@
       "max_favorable_pct": 0.78,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 230
+      "hold_minutes": 236
     },
     "CAPUSDT": {
       "created_at": 1795227623,
@@ -1549,7 +1505,7 @@
       "max_high_price": 0.09698,
       "peak_ts_ms": 1795235400000,
       "max_favorable_pct": 2.92,
-      "hold_minutes": 982,
+      "hold_minutes": 988,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1629,7 +1585,7 @@
       "max_high_price": 0.01072,
       "peak_ts_ms": 1795186800000,
       "max_favorable_pct": 29.31,
-      "hold_minutes": 3222,
+      "hold_minutes": 3228,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1668,7 +1624,7 @@
       "max_high_price": 0.1045,
       "peak_ts_ms": 1795201200000,
       "max_favorable_pct": 3.41,
-      "hold_minutes": 4670,
+      "hold_minutes": 4676,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1708,7 +1664,7 @@
       "max_high_price": 0.00616,
       "peak_ts_ms": 1795128300000,
       "max_favorable_pct": 0.1,
-      "hold_minutes": 2637,
+      "hold_minutes": 2643,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1796,7 +1752,7 @@
       "max_high_price": 0.003657,
       "peak_ts_ms": 1795279500000,
       "max_favorable_pct": 10.95,
-      "hold_minutes": 1566,
+      "hold_minutes": 1572,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -1838,7 +1794,7 @@
       "max_high_price": 0.01606,
       "peak_ts_ms": 1795269600000,
       "max_favorable_pct": 33.94,
-      "hold_minutes": 1820,
+      "hold_minutes": 1826,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -1879,7 +1835,7 @@
       "max_high_price": 0.01618,
       "peak_ts_ms": 1795270500000,
       "max_favorable_pct": 4.93,
-      "hold_minutes": 1316,
+      "hold_minutes": 1322,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2005,7 +1961,7 @@
       "max_high_price": 0.13525,
       "peak_ts_ms": 1795128300000,
       "max_favorable_pct": 19.11,
-      "hold_minutes": 3043,
+      "hold_minutes": 3049,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2045,7 +2001,7 @@
       "max_high_price": 0.003733,
       "peak_ts_ms": 1795113000000,
       "max_favorable_pct": 1.44,
-      "hold_minutes": 3026,
+      "hold_minutes": 3032,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2089,7 +2045,7 @@
       "max_high_price": 0.05974,
       "peak_ts_ms": 1795248000000,
       "max_favorable_pct": 20.76,
-      "hold_minutes": 1482,
+      "hold_minutes": 1488,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2129,7 +2085,7 @@
       "max_high_price": 0.03593,
       "peak_ts_ms": 1795281300000,
       "max_favorable_pct": 7.93,
-      "hold_minutes": 2797,
+      "hold_minutes": 2803,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2213,7 +2169,7 @@
       "max_high_price": 3.50108,
       "peak_ts_ms": 1795283460000,
       "max_favorable_pct": 17.54,
-      "hold_minutes": 2316,
+      "hold_minutes": 2322,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2250,7 +2206,7 @@
       "max_high_price": 0.04561,
       "peak_ts_ms": 1795155300000,
       "max_favorable_pct": 1.69,
-      "hold_minutes": 2204,
+      "hold_minutes": 2210,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2295,7 +2251,7 @@
       "max_favorable_pct": 1.52,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 242
+      "hold_minutes": 248
     },
     "CYBERUSDT": {
       "created_at": 1795281045,
@@ -2339,7 +2295,7 @@
       "max_favorable_pct": 5.03,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 92
+      "hold_minutes": 98
     },
     "SAPIENUSDT": {
       "created_at": 1795183625,
@@ -2374,7 +2330,7 @@
       "max_high_price": 0.04678,
       "peak_ts_ms": 1795260600000,
       "max_favorable_pct": 15.11,
-      "hold_minutes": 1715,
+      "hold_minutes": 1721,
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_armed_ts_ms": 0,
@@ -2414,7 +2370,7 @@
       "max_high_price": 0.04646,
       "peak_ts_ms": 1795243500000,
       "max_favorable_pct": 3.18,
-      "hold_minutes": 1715,
+      "hold_minutes": 1721,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2549,7 +2505,7 @@
       "max_high_price": 0.01406,
       "peak_ts_ms": 1795267800000,
       "max_favorable_pct": 8.07,
-      "hold_minutes": 865,
+      "hold_minutes": 871,
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_armed_ts_ms": 0,
@@ -2730,7 +2686,7 @@
       "max_high_price": 0.5284,
       "peak_ts_ms": 1795228200000,
       "max_favorable_pct": 27.54,
-      "hold_minutes": 1360,
+      "hold_minutes": 1366,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2771,7 +2727,7 @@
       "max_high_price": 0.805,
       "peak_ts_ms": 1795219200000,
       "max_favorable_pct": 5.23,
-      "hold_minutes": 1292,
+      "hold_minutes": 1298,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2814,7 +2770,7 @@
       "max_high_price": 0.02579,
       "peak_ts_ms": 1795219200000,
       "max_favorable_pct": 6.39,
-      "hold_minutes": 1274,
+      "hold_minutes": 1280,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2902,7 +2858,7 @@
       "max_high_price": 0.15403,
       "peak_ts_ms": 1795238100000,
       "max_favorable_pct": 2.42,
-      "hold_minutes": 853,
+      "hold_minutes": 859,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -2945,7 +2901,7 @@
       "max_high_price": 0.1114,
       "peak_ts_ms": 1795267800000,
       "max_favorable_pct": 7.01,
-      "hold_minutes": 740,
+      "hold_minutes": 746,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -3092,7 +3048,7 @@
       "max_high_price": 1.484,
       "peak_ts_ms": 1795279500000,
       "max_favorable_pct": 2.58,
-      "hold_minutes": 429,
+      "hold_minutes": 435,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -3135,7 +3091,7 @@
       "max_high_price": 0.04514,
       "peak_ts_ms": 1795270500000,
       "max_favorable_pct": 5.94,
-      "hold_minutes": 403,
+      "hold_minutes": 409,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -3178,7 +3134,7 @@
       "max_high_price": 0.01088,
       "peak_ts_ms": 1795269600000,
       "max_favorable_pct": 2.35,
-      "hold_minutes": 363,
+      "hold_minutes": 369,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0
     },
@@ -3223,7 +3179,7 @@
       "max_favorable_pct": 0.0,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 188
+      "hold_minutes": 194
     },
     "AEROUSDT": {
       "created_at": 1795280672,
@@ -3265,7 +3221,7 @@
       "max_favorable_pct": 0.83,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 98
+      "hold_minutes": 104
     },
     "MORPHOUSDT": {
       "created_at": 1795286212,
@@ -3308,7 +3264,51 @@
       "max_favorable_pct": 0.06,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 6
+      "hold_minutes": 12
+    },
+    "HUSDT": {
+      "created_at": 1795192927,
+      "track_type": "TRACK_E",
+      "is_long_term": false,
+      "score": 99,
+      "entry_price": 0.01175,
+      "swing_high_line": 0.01493,
+      "entry_low": 0.011715,
+      "entry_high": 0.011768,
+      "initial_stop_price": 0.011045,
+      "stop_price": 0.011045,
+      "sl_pct": 6,
+      "tps": [
+        0.01309,
+        0.014194,
+        0.015581
+      ],
+      "tp_pcts": [
+        11.4,
+        20.8,
+        32.6
+      ],
+      "vol_mult": 4.26,
+      "rsi6_15m": 41.1,
+      "oi_m": 1.3,
+      "oi_ratio": 12.5,
+      "turnover_m": 10.2,
+      "change_24h": -31.09,
+      "funding_pct": 0.005,
+      "btc_1h_pct": 0.0,
+      "reasons": [
+        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 58%)",
+        "바닥 반전 거래량 4.3배 폭발 + KDJ 바닥 급반전"
+      ],
+      "max_high_price": 0.01197,
+      "peak_ts_ms": 1795193100000,
+      "max_favorable_pct": 1.87,
+      "hold_minutes": 125,
+      "sl_alerted": true,
+      "closed_alerted": true,
+      "sl_at": 1795200452,
+      "tp2_armed_ts_ms": 0,
+      "tp3_armed_ts_ms": 0
     },
     "MAGMAUSDT": {
       "created_at": 1795028677,
@@ -9593,7 +9593,7 @@
       "funding_pct": -0.0028,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 5059,
+      "hold_minutes": 5065,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -9770,7 +9770,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 5027,
+      "hold_minutes": 5033,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -10283,7 +10283,7 @@
       "funding_pct": -0.025500000000000002,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 4986,
+      "hold_minutes": 4992,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -10919,7 +10919,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 4852,
+      "hold_minutes": 4858,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -11564,7 +11564,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 4670,
+      "hold_minutes": 4676,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -12808,7 +12808,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 4139,
+      "hold_minutes": 4145,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -12895,7 +12895,7 @@
       "funding_pct": -0.0274,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 4081,
+      "hold_minutes": 4087,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -13549,7 +13549,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 3759,
+      "hold_minutes": 3765,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -13765,7 +13765,7 @@
       "funding_pct": -0.060700000000000004,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 3222,
+      "hold_minutes": 3228,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -13810,7 +13810,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 3043,
+      "hold_minutes": 3049,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -13855,7 +13855,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 3026,
+      "hold_minutes": 3032,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -14035,7 +14035,7 @@
       "funding_pct": -0.013200000000000002,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2988,
+      "hold_minutes": 2994,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -14260,7 +14260,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2797,
+      "hold_minutes": 2803,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -14305,7 +14305,7 @@
       "funding_pct": -0.002347,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2736,
+      "hold_minutes": 2742,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -14530,7 +14530,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2637,
+      "hold_minutes": 2643,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -14842,7 +14842,7 @@
       "funding_pct": 0.0106,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2316,
+      "hold_minutes": 2322,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -14974,7 +14974,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2238,
+      "hold_minutes": 2244,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -15019,7 +15019,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2204,
+      "hold_minutes": 2210,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -15109,7 +15109,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 2113,
+      "hold_minutes": 2119,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -15469,7 +15469,7 @@
       "funding_pct": -0.002497,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1820,
+      "hold_minutes": 1826,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -15649,7 +15649,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1715,
+      "hold_minutes": 1721,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -15694,7 +15694,7 @@
       "funding_pct": 0.0028,
       "change_24h": 0.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1715,
+      "hold_minutes": 1721,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -16009,7 +16009,7 @@
       "funding_pct": 0.0018,
       "change_24h": -4.83,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1578,
+      "hold_minutes": 1584,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -16099,7 +16099,7 @@
       "funding_pct": -0.0052,
       "change_24h": -6.14,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1566,
+      "hold_minutes": 1572,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -16324,7 +16324,7 @@
       "funding_pct": -0.004866,
       "change_24h": -17.48,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1482,
+      "hold_minutes": 1488,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -16414,7 +16414,7 @@
       "funding_pct": -0.035500000000000004,
       "change_24h": -0.39,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1360,
+      "hold_minutes": 1366,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -16459,7 +16459,7 @@
       "funding_pct": -0.0059,
       "change_24h": -5.06,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1354,
+      "hold_minutes": 1360,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -16549,7 +16549,7 @@
       "funding_pct": 0.0019000000000000002,
       "change_24h": -8.97,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1316,
+      "hold_minutes": 1322,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -16594,7 +16594,7 @@
       "funding_pct": -0.01678,
       "change_24h": 8.74,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1310,
+      "hold_minutes": 1316,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -16639,7 +16639,7 @@
       "funding_pct": 0.005,
       "change_24h": -7.67,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1292,
+      "hold_minutes": 1298,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -16684,7 +16684,7 @@
       "funding_pct": 0.005,
       "change_24h": 4.84,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1274,
+      "hold_minutes": 1280,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -16729,7 +16729,7 @@
       "funding_pct": 0.005,
       "change_24h": -5.44,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1253,
+      "hold_minutes": 1259,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -16819,7 +16819,7 @@
       "funding_pct": 0.005,
       "change_24h": -18.64,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1080,
+      "hold_minutes": 1086,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -16954,7 +16954,7 @@
       "funding_pct": -0.0028,
       "change_24h": -13.91,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 1002,
+      "hold_minutes": 1008,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17089,7 +17089,7 @@
       "funding_pct": 0.005,
       "change_24h": -3.48,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 982,
+      "hold_minutes": 988,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17179,7 +17179,7 @@
       "funding_pct": 0.005,
       "change_24h": -9.9,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 865,
+      "hold_minutes": 871,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17224,7 +17224,7 @@
       "funding_pct": 0.005,
       "change_24h": -11.51,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 865,
+      "hold_minutes": 871,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -17269,7 +17269,7 @@
       "funding_pct": 0.005,
       "change_24h": -20.17,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 853,
+      "hold_minutes": 859,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17314,7 +17314,7 @@
       "funding_pct": 0.005,
       "change_24h": -3.83,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 836,
+      "hold_minutes": 842,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17359,7 +17359,7 @@
       "funding_pct": 0.005,
       "change_24h": -10.32,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 824,
+      "hold_minutes": 829,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17404,7 +17404,7 @@
       "funding_pct": 0.005,
       "change_24h": -12.62,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 740,
+      "hold_minutes": 746,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17449,7 +17449,7 @@
       "funding_pct": 0.005,
       "change_24h": -12.36,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 734,
+      "hold_minutes": 740,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
@@ -17539,7 +17539,7 @@
       "funding_pct": 0.005,
       "change_24h": -7.31,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 565,
+      "hold_minutes": 571,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17629,7 +17629,7 @@
       "funding_pct": -0.0145,
       "change_24h": -8.9,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 429,
+      "hold_minutes": 435,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17674,7 +17674,7 @@
       "funding_pct": -0.1439,
       "change_24h": -14.01,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 403,
+      "hold_minutes": 409,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17719,7 +17719,7 @@
       "funding_pct": 0.005,
       "change_24h": -0.91,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 379,
+      "hold_minutes": 385,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17764,7 +17764,7 @@
       "funding_pct": -0.0022,
       "change_24h": -2.94,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 363,
+      "hold_minutes": 369,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17809,7 +17809,7 @@
       "funding_pct": 0.005,
       "change_24h": 11.66,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 350,
+      "hold_minutes": 356,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17854,7 +17854,7 @@
       "funding_pct": -0.0073999999999999995,
       "change_24h": -6.0,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 242,
+      "hold_minutes": 248,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17899,7 +17899,7 @@
       "funding_pct": 0.005,
       "change_24h": -2.67,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 230,
+      "hold_minutes": 236,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17944,7 +17944,7 @@
       "funding_pct": 0.005,
       "change_24h": 0.17,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 188,
+      "hold_minutes": 194,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -17989,7 +17989,7 @@
       "funding_pct": 0.005,
       "change_24h": 1.12,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 98,
+      "hold_minutes": 104,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -18034,7 +18034,7 @@
       "funding_pct": -0.002872,
       "change_24h": -13.32,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 92,
+      "hold_minutes": 98,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -18079,7 +18079,7 @@
       "funding_pct": -0.0089,
       "change_24h": 4.12,
       "btc_1h_pct": 0.0,
-      "hold_minutes": 6,
+      "hold_minutes": 12,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": false,
@@ -18098,11 +18098,6 @@
   "oi_snapshot": {
     "KERNELUSDT": [
       [
-        1795285210,
-        0.043,
-        1.481
-      ],
-      [
         1795285856,
         0.042,
         1.465
@@ -18116,14 +18111,14 @@
         1795286578,
         0.043,
         1.444
+      ],
+      [
+        1795286937,
+        0.043,
+        1.447
       ]
     ],
     "EVAAUSDT": [
-      [
-        1795285210,
-        6.221,
-        7.257
-      ],
       [
         1795285856,
         6.212,
@@ -18138,14 +18133,14 @@
         1795286578,
         6.234,
         7.255
+      ],
+      [
+        1795286937,
+        6.267,
+        7.293
       ]
     ],
     "CYBERUSDT": [
-      [
-        1795285210,
-        0.208,
-        1.286
-      ],
       [
         1795285856,
         0.208,
@@ -18160,14 +18155,14 @@
         1795286578,
         0.208,
         1.297
+      ],
+      [
+        1795286937,
+        0.207,
+        1.293
       ]
     ],
     "BLESSUSDT": [
-      [
-        1795285210,
-        0.012,
-        2.199
-      ],
       [
         1795285856,
         0.012,
@@ -18182,14 +18177,14 @@
         1795286578,
         0.012,
         2.219
+      ],
+      [
+        1795286937,
+        0.012,
+        2.243
       ]
     ],
     "ICNTUSDT": [
-      [
-        1795285210,
-        0.365,
-        2.66
-      ],
       [
         1795285856,
         0.364,
@@ -18204,14 +18199,14 @@
         1795286578,
         0.363,
         2.632
+      ],
+      [
+        1795286937,
+        0.36,
+        2.621
       ]
     ],
     "DOSUSDT": [
-      [
-        1795285210,
-        0.148,
-        0.53
-      ],
       [
         1795285856,
         0.148,
@@ -18226,14 +18221,14 @@
         1795286578,
         0.148,
         0.55
+      ],
+      [
+        1795286937,
+        0.148,
+        0.545
       ]
     ],
     "HUMAUSDT": [
-      [
-        1795285210,
-        0.009,
-        1.296
-      ],
       [
         1795285856,
         0.009,
@@ -18248,14 +18243,14 @@
         1795286578,
         0.009,
         1.313
+      ],
+      [
+        1795286937,
+        0.009,
+        1.313
       ]
     ],
     "ENSOUSDT": [
-      [
-        1795285210,
-        0.481,
-        1.297
-      ],
       [
         1795285856,
         0.475,
@@ -18270,14 +18265,14 @@
         1795286578,
         0.483,
         1.292
+      ],
+      [
+        1795286937,
+        0.479,
+        1.304
       ]
     ],
     "RAREUSDT": [
-      [
-        1795285210,
-        0.015,
-        1.907
-      ],
       [
         1795285856,
         0.015,
@@ -18292,14 +18287,14 @@
         1795286578,
         0.015,
         1.894
+      ],
+      [
+        1795286937,
+        0.015,
+        1.982
       ]
     ],
     "BARDUSDT": [
-      [
-        1795285210,
-        0.097,
-        2.342
-      ],
       [
         1795285856,
         0.096,
@@ -18314,14 +18309,14 @@
         1795286578,
         0.096,
         2.313
+      ],
+      [
+        1795286937,
+        0.095,
+        2.286
       ]
     ],
     "BTWUSDT": [
-      [
-        1795285210,
-        0.681,
-        2.015
-      ],
       [
         1795285856,
         0.677,
@@ -18336,14 +18331,14 @@
         1795286578,
         0.669,
         2.013
+      ],
+      [
+        1795286937,
+        0.673,
+        2.011
       ]
     ],
     "BLURUSDT": [
-      [
-        1795285210,
-        0.007,
-        1.118
-      ],
       [
         1795285856,
         0.007,
@@ -18358,14 +18353,14 @@
         1795286578,
         0.007,
         1.113
+      ],
+      [
+        1795286937,
+        0.007,
+        1.1
       ]
     ],
     "ELSAUSDT": [
-      [
-        1795285210,
-        0.067,
-        1.266
-      ],
       [
         1795285856,
         0.068,
@@ -18380,14 +18375,14 @@
         1795286578,
         0.068,
         1.272
+      ],
+      [
+        1795286937,
+        0.067,
+        1.249
       ]
     ],
     "PIPPINUSDT": [
-      [
-        1795285210,
-        0.017,
-        1.666
-      ],
       [
         1795285856,
         0.017,
@@ -18402,14 +18397,14 @@
         1795286578,
         0.017,
         1.658
+      ],
+      [
+        1795286937,
+        0.017,
+        1.655
       ]
     ],
     "CTUSDT": [
-      [
-        1795285210,
-        0.13,
-        0.975
-      ],
       [
         1795285856,
         0.13,
@@ -18424,14 +18419,14 @@
         1795286578,
         0.131,
         0.973
+      ],
+      [
+        1795286937,
+        0.131,
+        0.977
       ]
     ],
     "MMTUSDT": [
-      [
-        1795285210,
-        0.215,
-        2.471
-      ],
       [
         1795285856,
         0.214,
@@ -18446,6 +18441,11 @@
         1795286578,
         0.214,
         2.516
+      ],
+      [
+        1795286937,
+        0.212,
+        2.49
       ]
     ],
     "OPGUSDT": [
@@ -18472,11 +18472,6 @@
     ],
     "BMTUSDT": [
       [
-        1795285210,
-        0.02,
-        1.137
-      ],
-      [
         1795285856,
         0.02,
         1.13
@@ -18490,14 +18485,14 @@
         1795286578,
         0.02,
         1.128
+      ],
+      [
+        1795286937,
+        0.02,
+        1.13
       ]
     ],
     "ERAUSDT": [
-      [
-        1795285210,
-        0.073,
-        1.176
-      ],
       [
         1795285856,
         0.073,
@@ -18512,14 +18507,14 @@
         1795286578,
         0.073,
         1.175
+      ],
+      [
+        1795286937,
+        0.073,
+        1.177
       ]
     ],
     "USUALUSDT": [
-      [
-        1795285210,
-        0.011,
-        0.359
-      ],
       [
         1795285856,
         0.012,
@@ -18534,14 +18529,14 @@
         1795286578,
         0.012,
         0.356
+      ],
+      [
+        1795286937,
+        0.011,
+        0.371
       ]
     ],
     "SENTUSDT": [
-      [
-        1795285210,
-        0.021,
-        1.46
-      ],
       [
         1795285856,
         0.021,
@@ -18556,14 +18551,14 @@
         1795286578,
         0.021,
         1.449
+      ],
+      [
+        1795286937,
+        0.021,
+        1.441
       ]
     ],
     "NAORISUSDT": [
-      [
-        1795285210,
-        0.035,
-        0.662
-      ],
       [
         1795285856,
         0.035,
@@ -18578,14 +18573,14 @@
         1795286578,
         0.035,
         0.664
+      ],
+      [
+        1795286937,
+        0.035,
+        0.659
       ]
     ],
     "SKYUSDT": [
-      [
-        1795285210,
-        0.044,
-        1.855
-      ],
       [
         1795285856,
         0.044,
@@ -18600,14 +18595,14 @@
         1795286578,
         0.044,
         1.851
+      ],
+      [
+        1795286937,
+        0.044,
+        1.855
       ]
     ],
     "DGAIUSDT": [
-      [
-        1795285210,
-        0.755,
-        0.509
-      ],
       [
         1795285856,
         0.754,
@@ -18622,14 +18617,14 @@
         1795286578,
         0.753,
         0.513
+      ],
+      [
+        1795286937,
+        0.756,
+        0.513
       ]
     ],
     "MNTUSDT": [
-      [
-        1795285210,
-        0.371,
-        12.595
-      ],
       [
         1795285856,
         0.371,
@@ -18644,14 +18639,14 @@
         1795286578,
         0.371,
         12.581
+      ],
+      [
+        1795286937,
+        0.37,
+        12.576
       ]
     ],
     "RAVEUSDT": [
-      [
-        1795285210,
-        0.116,
-        0.777
-      ],
       [
         1795285856,
         0.115,
@@ -18666,14 +18661,14 @@
         1795286578,
         0.115,
         0.777
+      ],
+      [
+        1795286937,
+        0.115,
+        0.773
       ]
     ],
     "SOPHUSDT": [
-      [
-        1795285210,
-        0.001,
-        0.687
-      ],
       [
         1795285856,
         0.001,
@@ -18688,14 +18683,14 @@
         1795286578,
         0.001,
         0.675
+      ],
+      [
+        1795286937,
+        0.001,
+        0.68
       ]
     ],
     "CASHCATUSDT": [
-      [
-        1795285210,
-        0.038,
-        1.563
-      ],
       [
         1795285856,
         0.038,
@@ -18710,14 +18705,14 @@
         1795286578,
         0.039,
         1.567
+      ],
+      [
+        1795286937,
+        0.039,
+        1.566
       ]
     ],
     "GRAMUSDT": [
-      [
-        1795285210,
-        0.961,
-        9.172
-      ],
       [
         1795285856,
         0.961,
@@ -18732,14 +18727,14 @@
         1795286578,
         0.961,
         9.15
+      ],
+      [
+        1795286937,
+        0.962,
+        9.156
       ]
     ],
     "SKRUSDT": [
-      [
-        1795285210,
-        0.01,
-        1.022
-      ],
       [
         1795285856,
         0.01,
@@ -18754,14 +18749,14 @@
         1795286578,
         0.01,
         1.02
+      ],
+      [
+        1795286937,
+        0.01,
+        1.02
       ]
     ],
     "FFUSDT": [
-      [
-        1795285210,
-        0.1,
-        4.889
-      ],
       [
         1795285856,
         0.1,
@@ -18776,14 +18771,14 @@
         1795286578,
         0.1,
         4.891
+      ],
+      [
+        1795286937,
+        0.1,
+        4.894
       ]
     ],
     "MONUSDT": [
-      [
-        1795285210,
-        0.014,
-        3.699
-      ],
       [
         1795285856,
         0.014,
@@ -18798,14 +18793,14 @@
         1795286578,
         0.014,
         3.707
+      ],
+      [
+        1795286937,
+        0.014,
+        3.668
       ]
     ],
     "YBUSDT": [
-      [
-        1795285210,
-        0.055,
-        0.866
-      ],
       [
         1795285856,
         0.054,
@@ -18820,14 +18815,14 @@
         1795286578,
         0.055,
         0.868
+      ],
+      [
+        1795286937,
+        0.054,
+        0.869
       ]
     ],
     "WLFIUSDT": [
-      [
-        1795285210,
-        0.044,
-        9.36
-      ],
       [
         1795285856,
         0.044,
@@ -18842,14 +18837,14 @@
         1795286578,
         0.044,
         9.343
+      ],
+      [
+        1795286937,
+        0.044,
+        9.346
       ]
     ],
     "CAPUSDT": [
-      [
-        1795285210,
-        0.083,
-        3.615
-      ],
       [
         1795285856,
         0.084,
@@ -18864,14 +18859,14 @@
         1795286578,
         0.084,
         3.646
+      ],
+      [
+        1795286937,
+        0.086,
+        3.717
       ]
     ],
     "ASTERUSDT": [
-      [
-        1795285210,
-        0.489,
-        14.108
-      ],
       [
         1795285856,
         0.489,
@@ -18886,14 +18881,14 @@
         1795286578,
         0.488,
         14.107
+      ],
+      [
+        1795286937,
+        0.491,
+        14.097
       ]
     ],
     "IRYSUSDT": [
-      [
-        1795285210,
-        0.02,
-        1.906
-      ],
       [
         1795285856,
         0.02,
@@ -18908,14 +18903,14 @@
         1795286578,
         0.02,
         1.905
+      ],
+      [
+        1795286937,
+        0.019,
+        1.887
       ]
     ],
     "INITUSDT": [
-      [
-        1795285210,
-        0.09,
-        1.857
-      ],
       [
         1795285856,
         0.09,
@@ -18930,14 +18925,14 @@
         1795286578,
         0.09,
         1.856
+      ],
+      [
+        1795286937,
+        0.089,
+        1.828
       ]
     ],
     "2ZUSDT": [
-      [
-        1795285210,
-        0.016,
-        0.46
-      ],
       [
         1795285856,
         0.016,
@@ -18952,14 +18947,14 @@
         1795286578,
         0.016,
         0.459
+      ],
+      [
+        1795286937,
+        0.016,
+        0.46
       ]
     ],
     "NIGHTUSDT": [
-      [
-        1795285210,
-        0.046,
-        1.542
-      ],
       [
         1795285856,
         0.046,
@@ -18974,14 +18969,14 @@
         1795286578,
         0.045,
         1.535
+      ],
+      [
+        1795286937,
+        0.045,
+        1.498
       ]
     ],
     "BEAMUSDT": [
-      [
-        1795285210,
-        0.004,
-        2.014
-      ],
       [
         1795285856,
         0.004,
@@ -18996,14 +18991,14 @@
         1795286578,
         0.004,
         2.034
+      ],
+      [
+        1795286937,
+        0.004,
+        2.029
       ]
     ],
     "AEROUSDT": [
-      [
-        1795285210,
-        0.396,
-        4.989
-      ],
       [
         1795285856,
         0.397,
@@ -19018,14 +19013,14 @@
         1795286578,
         0.399,
         4.996
+      ],
+      [
+        1795286937,
+        0.401,
+        5.055
       ]
     ],
     "XPLUSDT": [
-      [
-        1795285210,
-        0.046,
-        8.196
-      ],
       [
         1795285856,
         0.045,
@@ -19040,14 +19035,14 @@
         1795286578,
         0.045,
         8.156
+      ],
+      [
+        1795286937,
+        0.045,
+        8.16
       ]
     ],
     "BROCCOLIUSDT": [
-      [
-        1795285210,
-        0.014,
-        0.317
-      ],
       [
         1795285856,
         0.014,
@@ -19062,14 +19057,14 @@
         1795286578,
         0.014,
         0.319
+      ],
+      [
+        1795286937,
+        0.014,
+        0.319
       ]
     ],
     "FLUIDUSDT": [
-      [
-        1795285210,
-        1.63,
-        0.704
-      ],
       [
         1795285856,
         1.626,
@@ -19084,14 +19079,14 @@
         1795286578,
         1.626,
         0.703
+      ],
+      [
+        1795286937,
+        1.624,
+        0.703
       ]
     ],
     "ARIAUSDT": [
-      [
-        1795285210,
-        0.229,
-        3.86
-      ],
       [
         1795285856,
         0.226,
@@ -19106,6 +19101,11 @@
         1795286578,
         0.227,
         3.82
+      ],
+      [
+        1795286937,
+        0.227,
+        3.83
       ]
     ],
     "0GUSDT": [
@@ -19132,11 +19132,6 @@
     ],
     "SYRUPUSDT": [
       [
-        1795285210,
-        0.088,
-        0.615
-      ],
-      [
         1795285856,
         0.088,
         0.616
@@ -19150,14 +19145,14 @@
         1795286578,
         0.088,
         0.617
+      ],
+      [
+        1795286937,
+        0.088,
+        0.62
       ]
     ],
     "HYPEUSDT": [
-      [
-        1795285210,
-        60.959,
-        100.172
-      ],
       [
         1795285856,
         60.834,
@@ -19172,14 +19167,14 @@
         1795286578,
         60.985,
         100.241
+      ],
+      [
+        1795286937,
+        60.975,
+        100.541
       ]
     ],
     "VIRTUALUSDT": [
-      [
-        1795285210,
-        0.376,
-        2.227
-      ],
       [
         1795285856,
         0.376,
@@ -19194,14 +19189,14 @@
         1795286578,
         0.377,
         2.222
+      ],
+      [
+        1795286937,
+        0.378,
+        2.228
       ]
     ],
     "SUSDT": [
-      [
-        1795285210,
-        0.027,
-        1.587
-      ],
       [
         1795285856,
         0.027,
@@ -19216,14 +19211,14 @@
         1795286578,
         0.027,
         1.581
+      ],
+      [
+        1795286937,
+        0.027,
+        1.585
       ]
     ],
     "PENGUUSDT": [
-      [
-        1795285210,
-        0.004,
-        4.344
-      ],
       [
         1795285856,
         0.004,
@@ -19238,6 +19233,11 @@
         1795286578,
         0.004,
         4.326
+      ],
+      [
+        1795286937,
+        0.004,
+        4.347
       ]
     ],
     "ZKCUSDT": [
@@ -19264,11 +19264,6 @@
     ],
     "VVVUSDT": [
       [
-        1795285210,
-        23.646,
-        15.614
-      ],
-      [
         1795285856,
         23.72,
         15.681
@@ -19282,14 +19277,14 @@
         1795286578,
         23.892,
         15.704
+      ],
+      [
+        1795286937,
+        24.169,
+        15.953
       ]
     ],
     "TRUMPUSDT": [
-      [
-        1795285210,
-        0.874,
-        8.393
-      ],
       [
         1795285856,
         0.873,
@@ -19304,14 +19299,14 @@
         1795286578,
         0.887,
         8.359
+      ],
+      [
+        1795286937,
+        0.883,
+        8.508
       ]
     ],
     "ETHFIUSDT": [
-      [
-        1795285210,
-        0.471,
-        5.092
-      ],
       [
         1795285856,
         0.47,
@@ -19326,14 +19321,14 @@
         1795286578,
         0.47,
         5.081
+      ],
+      [
+        1795286937,
+        0.471,
+        5.082
       ]
     ],
     "PYTHUSDT": [
-      [
-        1795285210,
-        0.048,
-        2.209
-      ],
       [
         1795285856,
         0.049,
@@ -19348,14 +19343,14 @@
         1795286578,
         0.049,
         2.217
+      ],
+      [
+        1795286937,
+        0.048,
+        2.204
       ]
     ],
     "GRASSUSDT": [
-      [
-        1795285210,
-        0.377,
-        8.543
-      ],
       [
         1795285856,
         0.378,
@@ -19370,14 +19365,14 @@
         1795286578,
         0.377,
         8.518
+      ],
+      [
+        1795286937,
+        0.377,
+        8.502
       ]
     ],
     "MUBARAKUSDT": [
-      [
-        1795285210,
-        0.021,
-        0.632
-      ],
       [
         1795285856,
         0.021,
@@ -19392,14 +19387,14 @@
         1795286578,
         0.021,
         0.633
+      ],
+      [
+        1795286937,
+        0.021,
+        0.636
       ]
     ],
     "BREVUSDT": [
-      [
-        1795285210,
-        0.066,
-        1.317
-      ],
       [
         1795285856,
         0.066,
@@ -19414,14 +19409,14 @@
         1795286578,
         0.066,
         1.316
+      ],
+      [
+        1795286937,
+        0.066,
+        1.316
       ]
     ],
     "MEGAUSDT": [
-      [
-        1795285210,
-        0.047,
-        1.741
-      ],
       [
         1795285856,
         0.047,
@@ -19436,14 +19431,14 @@
         1795286578,
         0.047,
         1.738
+      ],
+      [
+        1795286937,
+        0.047,
+        1.733
       ]
     ],
     "PONSUSDT": [
-      [
-        1795285210,
-        0.09,
-        2.922
-      ],
       [
         1795285856,
         0.089,
@@ -19458,14 +19453,14 @@
         1795286578,
         0.089,
         2.913
+      ],
+      [
+        1795286937,
+        0.089,
+        2.923
       ]
     ],
     "LITUSDT": [
-      [
-        1795285210,
-        2.39,
-        15.795
-      ],
       [
         1795285856,
         2.388,
@@ -19480,14 +19475,14 @@
         1795286578,
         2.39,
         15.761
+      ],
+      [
+        1795286937,
+        2.389,
+        15.777
       ]
     ],
     "USELESSUSDT": [
-      [
-        1795285210,
-        0.082,
-        3.026
-      ],
       [
         1795285856,
         0.082,
@@ -19502,14 +19497,14 @@
         1795286578,
         0.082,
         3.018
+      ],
+      [
+        1795286937,
+        0.082,
+        3.028
       ]
     ],
     "JCTUSDT": [
-      [
-        1795285210,
-        0.002,
-        2.426
-      ],
       [
         1795285856,
         0.002,
@@ -19524,14 +19519,14 @@
         1795286578,
         0.002,
         2.401
+      ],
+      [
+        1795286937,
+        0.002,
+        2.364
       ]
     ],
     "PIEVERSEUSDT": [
-      [
-        1795285210,
-        3.317,
-        9.881
-      ],
       [
         1795285856,
         3.307,
@@ -19546,14 +19541,14 @@
         1795286578,
         3.324,
         9.845
+      ],
+      [
+        1795286937,
+        3.449,
+        9.995
       ]
     ],
     "HUSDT": [
-      [
-        1795285210,
-        0.011,
-        1.285
-      ],
       [
         1795285856,
         0.011,
@@ -19568,14 +19563,14 @@
         1795286578,
         0.011,
         1.295
+      ],
+      [
+        1795286937,
+        0.011,
+        1.29
       ]
     ],
     "AKEUSDT": [
-      [
-        1795285210,
-        0.005,
-        2.95
-      ],
       [
         1795285856,
         0.005,
@@ -19590,14 +19585,14 @@
         1795286578,
         0.005,
         2.93
+      ],
+      [
+        1795286937,
+        0.005,
+        2.914
       ]
     ],
     "WUSDT": [
-      [
-        1795285210,
-        0.008,
-        1.301
-      ],
       [
         1795285856,
         0.008,
@@ -19612,14 +19607,14 @@
         1795286578,
         0.008,
         1.294
+      ],
+      [
+        1795286937,
+        0.008,
+        1.298
       ]
     ],
     "EULUSDT": [
-      [
-        1795285210,
-        0.783,
-        0.285
-      ],
       [
         1795285856,
         0.782,
@@ -19634,14 +19629,14 @@
         1795286578,
         0.782,
         0.282
+      ],
+      [
+        1795286937,
+        0.783,
+        0.281
       ]
     ],
     "ZKUSDT": [
-      [
-        1795285210,
-        0.007,
-        1.387
-      ],
       [
         1795285856,
         0.007,
@@ -19656,6 +19651,11 @@
         1795286578,
         0.007,
         1.389
+      ],
+      [
+        1795286937,
+        0.007,
+        1.39
       ]
     ],
     "COTIUSDT": [
@@ -19682,11 +19682,6 @@
     ],
     "PLUMEUSDT": [
       [
-        1795285210,
-        0.011,
-        1.634
-      ],
-      [
         1795285856,
         0.011,
         1.629
@@ -19700,14 +19695,14 @@
         1795286578,
         0.011,
         1.627
+      ],
+      [
+        1795286937,
+        0.011,
+        1.627
       ]
     ],
     "AVNTUSDT": [
-      [
-        1795285210,
-        0.062,
-        0.668
-      ],
       [
         1795285856,
         0.062,
@@ -19722,14 +19717,14 @@
         1795286578,
         0.062,
         0.667
+      ],
+      [
+        1795286937,
+        0.062,
+        0.667
       ]
     ],
     "MORPHOUSDT": [
-      [
-        1795285210,
-        1.56,
-        2.282
-      ],
       [
         1795285856,
         1.562,
@@ -19744,14 +19739,14 @@
         1795286578,
         1.566,
         2.279
+      ],
+      [
+        1795286937,
+        1.569,
+        2.289
       ]
     ],
     "IDOLUSDT": [
-      [
-        1795285210,
-        0.031,
-        1.002
-      ],
       [
         1795285856,
         0.033,
@@ -19766,14 +19761,14 @@
         1795286578,
         0.032,
         1.106
+      ],
+      [
+        1795286937,
+        0.033,
+        1.121
       ]
     ],
     "ORCAUSDT": [
-      [
-        1795285210,
-        1.179,
-        1.079
-      ],
       [
         1795285856,
         1.178,
@@ -19788,14 +19783,14 @@
         1795286578,
         1.177,
         1.071
+      ],
+      [
+        1795286937,
+        1.166,
+        1.074
       ]
     ],
     "BERAUSDT": [
-      [
-        1795285210,
-        0.077,
-        0.636
-      ],
       [
         1795285856,
         0.077,
@@ -19810,6 +19805,11 @@
         1795286578,
         0.077,
         0.634
+      ],
+      [
+        1795286937,
+        0.077,
+        0.635
       ]
     ],
     "ORDERUSDT": [
@@ -19836,11 +19836,6 @@
     ],
     "ALTUSDT": [
       [
-        1795285210,
-        0.004,
-        0.642
-      ],
-      [
         1795285856,
         0.004,
         0.643
@@ -19854,6 +19849,11 @@
         1795286578,
         0.004,
         0.642
+      ],
+      [
+        1795286937,
+        0.004,
+        0.643
       ]
     ],
     "CAKEUSDT": [
@@ -19880,11 +19880,6 @@
     ],
     "BRUSDT": [
       [
-        1795285210,
-        0.396,
-        0.833
-      ],
-      [
         1795285856,
         0.394,
         0.831
@@ -19898,6 +19893,11 @@
         1795286578,
         0.396,
         0.828
+      ],
+      [
+        1795286937,
+        0.397,
+        0.832
       ]
     ],
     "SIRENUSDT": [
@@ -19924,11 +19924,6 @@
     ],
     "TWTUSDT": [
       [
-        1795285210,
-        0.319,
-        1.202
-      ],
-      [
         1795285856,
         0.319,
         1.201
@@ -19942,14 +19937,14 @@
         1795286578,
         0.319,
         1.199
+      ],
+      [
+        1795286937,
+        0.319,
+        1.199
       ]
     ],
     "PARTIUSDT": [
-      [
-        1795285210,
-        0.036,
-        0.528
-      ],
       [
         1795285856,
         0.036,
@@ -19964,14 +19959,14 @@
         1795286578,
         0.036,
         0.521
+      ],
+      [
+        1795286937,
+        0.036,
+        0.519
       ]
     ],
     "SAPIENUSDT": [
-      [
-        1795285210,
-        0.042,
-        0.223
-      ],
       [
         1795285856,
         0.042,
@@ -19986,14 +19981,14 @@
         1795286578,
         0.042,
         0.224
+      ],
+      [
+        1795286937,
+        0.042,
+        0.224
       ]
     ],
     "MAGMAUSDT": [
-      [
-        1795285210,
-        0.264,
-        0.758
-      ],
       [
         1795285856,
         0.261,
@@ -20008,6 +20003,33 @@
         1795286578,
         0.261,
         0.761
+      ],
+      [
+        1795286937,
+        0.258,
+        0.749
+      ]
+    ],
+    "ARUSDT": [
+      [
+        1795277148,
+        2.232,
+        0.796
+      ],
+      [
+        1795277513,
+        2.232,
+        0.794
+      ],
+      [
+        1795277885,
+        2.228,
+        0.794
+      ],
+      [
+        1795286937,
+        2.265,
+        0.827
       ]
     ],
     "AXISUSDT": [
@@ -20052,28 +20074,6 @@
         1795277885,
         0.224,
         1.261
-      ]
-    ],
-    "ARUSDT": [
-      [
-        1795276772,
-        2.238,
-        0.8
-      ],
-      [
-        1795277148,
-        2.232,
-        0.796
-      ],
-      [
-        1795277513,
-        2.232,
-        0.794
-      ],
-      [
-        1795277885,
-        2.228,
-        0.794
       ]
     ],
     "XVGUSDT": [
