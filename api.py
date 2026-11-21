@@ -254,14 +254,16 @@ def _normalize_kline_df(rows, expected_interval_min=None):
             .reset_index(drop=True)
         )
 
-        if expected_interval_min is not None and len(df) >= 5:
+        if expected_interval_min is not None and len(df) >= 4:
             median_diff_sec = df["timestamp"].diff().median() / 1000.0
             target_sec = expected_interval_min * 60.0
             if not (target_sec * 0.5 <= median_diff_sec <= target_sec * 1.5):
                 return pd.DataFrame()
 
+        # [버그 수정] 타임프레임에 비례한 만료 허용치 적용 (일봉 D=60h, 주봉 W=17.5d, 분봉=6h)
+        max_stale_sec = max(6 * 3600.0, float(expected_interval_min or 5) * 60.0 * 2.5)
         latest_ts_ms = to_float(df["timestamp"].iloc[-1], 0.0)
-        if latest_ts_ms > 0 and (time.time() * 1000.0 - latest_ts_ms) > (6 * 3600 * 1000.0):
+        if latest_ts_ms > 0 and (time.time() * 1000.0 - latest_ts_ms) > (max_stale_sec * 1000.0):
             return pd.DataFrame()
 
         return df
@@ -488,9 +490,13 @@ def fetch_klines(symbol, interval="5", limit=150):
     if valid_syms and sym not in valid_syms:
         return pd.DataFrame()
 
-    iv_str = str(interval)
-    iv_min = {"1": 1, "3": 3, "5": 5, "15": 15, "30": 30, "60": 60, "120": 120, "240": 240, "D": 1440}.get(iv_str, 5)
+    iv_str = str(interval).upper().strip()
+    iv_min = {
+        "1": 1, "3": 3, "5": 5, "15": 15, "30": 30,
+        "60": 60, "120": 120, "240": 240, "D": 1440, "W": 10080,
+    }.get(iv_str, 5)
     lim = int(min(limit, 300))
+    min_bars = 4 if iv_str == "W" else (10 if iv_str == "D" else 15)
 
     if not _BYBIT_DIRECT_BLOCKED:
         params = {"category": "linear", "symbol": sym, "interval": iv_str, "limit": lim}
@@ -500,12 +506,15 @@ def fetch_klines(symbol, interval="5", limit=150):
                 resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=2.5)
                 if resp.status_code == 200:
                     df = _normalize_kline_df(resp.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
-                    if not df.empty and len(df) >= 15:
+                    if not df.empty and len(df) >= min_bars:
                         return df
             except Exception:
                 continue
 
-    bg_gran = {"1": "1m", "3": "3m", "5": "5m", "15": "15m", "30": "30m", "60": "1H", "120": "2H", "240": "4H", "D": "1D"}.get(iv_str, "5m")
+    bg_gran = {
+        "1": "1m", "3": "3m", "5": "5m", "15": "15m", "30": "30m",
+        "60": "1H", "120": "2H", "240": "4H", "D": "1D", "W": "1W",
+    }.get(iv_str, "5m")
     try:
         bg_url = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/candles")
         bg_resp = requests.get(
@@ -515,7 +524,7 @@ def fetch_klines(symbol, interval="5", limit=150):
         )
         if bg_resp.status_code == 200:
             df = _normalize_kline_df(bg_resp.json().get("data", []), expected_interval_min=iv_min)
-            if not df.empty and len(df) >= 15:
+            if not df.empty and len(df) >= min_bars:
                 return df
     except Exception:
         pass
@@ -523,7 +532,7 @@ def fetch_klines(symbol, interval="5", limit=150):
     proxy_data = _fetch_bybit_json_via_proxy(f"/v5/market/kline?category=linear&symbol={sym}&interval={iv_str}&limit={lim}", timeout=4.5)
     if proxy_data:
         df = _normalize_kline_df(proxy_data.get("result", {}).get("list", []), expected_interval_min=iv_min)
-        if not df.empty and len(df) >= 15:
+        if not df.empty and len(df) >= min_bars:
             return df
 
     return pd.DataFrame()
