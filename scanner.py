@@ -113,7 +113,7 @@ def _read_json(path):
 def check_btc_market_regime():
     """
     [BTC 3단계 마켓 레짐 게이트 · A안 반영]
-    - OPEN: 정상 구간 → 전체 트랙(A~G, D1~D5) 탐색
+    - OPEN: 정상 구간 → 전체 트랙(A~H, D1~D6) 탐색
     - COUNTER_TREND_ONLY: 완만 조정(15m <= -0.7% 또는 1H <= -1.5%, 단 1H > -2.5%) → Track E(SFP)·Track F(RS)만 예외 허용
     - FULL_LOCK: 폭락 구간(1H <= -2.5% 또는 15m <= -1.5%) → 모든 신규 진입 100% 전면 차단
     """
@@ -201,6 +201,10 @@ def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
 
 
 def sanitize_flags_by_mfe(item):
+    """
+    [버그 수정] 단순 윗꼬리 MFE(fav)만으로 tp2_hit을 강제 승격하지 않도록 수정!
+    - tp2_hit은 오직 15분봉(장기 1H) 확정 종가 돌파(tp2_alerted / tp2_hit) 또는 TP3 돌파 시에만 유지
+    """
     if not isinstance(item, dict):
         return item
     entry_p = to_float(item.get("entry_price"))
@@ -212,15 +216,16 @@ def sanitize_flags_by_mfe(item):
 
     tps = item.get("tps") or []
     tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.2) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 6.8
-    tp2_req = ((to_float(tps[1]) - entry_p) / entry_p * 100.0 - 0.2) if (len(tps) > 1 and entry_p > 0 and to_float(tps[1]) > entry_p) else 13.0
     tp3_req = ((to_float(tps[2]) - entry_p) / entry_p * 100.0 - 0.2) if (len(tps) > 2 and entry_p > 0 and to_float(tps[2]) > entry_p) else 19.5
 
     if fav >= max(6.5, tp1_req) or item.get("tp1_alerted"):
         item["tp1_hit"] = True
-    if fav >= max(12.5, tp2_req) or item.get("tp2_alerted"):
+    if item.get("tp2_alerted") or item.get("tp3_alerted") or item.get("tp3_hit"):
         item["tp2_hit"] = True
     if fav >= max(19.0, tp3_req) or item.get("tp3_alerted"):
         item["tp3_hit"] = True
+        item["tp2_hit"] = True
+        item["tp1_hit"] = True
     return item
 
 
@@ -253,6 +258,8 @@ def _merge_state_dicts(base_state, incoming_state):
             p["max_high_price"] = max(to_float(p.get("max_high_price")), to_float(ev.get("max_high_price")))
             p["max_favorable_pct"] = max(to_float(p.get("max_favorable_pct")), to_float(ev.get("max_favorable_pct")))
             p["stop_price"] = max(to_float(p.get("stop_price")), to_float(ev.get("stop_price")))
+            p["tp2_armed_ts_ms"] = max(int(to_float(p.get("tp2_armed_ts_ms"), 0)), int(to_float(ev.get("tp2_armed_ts_ms"), 0)))
+            p["tp3_armed_ts_ms"] = max(int(to_float(p.get("tp3_armed_ts_ms"), 0)), int(to_float(ev.get("tp3_armed_ts_ms"), 0)))
             for fg in ALL_LOCK_FLAGS:
                 if ev.get(fg) or p.get(fg):
                     p[fg] = True
@@ -271,6 +278,8 @@ def _merge_state_dicts(base_state, incoming_state):
             pt["max_high_price"] = max(to_float(pt.get("max_high_price")), to_float(tv.get("max_high_price")))
             pt["max_favorable_pct"] = max(to_float(pt.get("max_favorable_pct")), to_float(tv.get("max_favorable_pct")))
             pt["stop_price"] = max(to_float(pt.get("stop_price")), to_float(tv.get("stop_price")))
+            pt["tp2_armed_ts_ms"] = max(int(to_float(pt.get("tp2_armed_ts_ms"), 0)), int(to_float(tv.get("tp2_armed_ts_ms"), 0)))
+            pt["tp3_armed_ts_ms"] = max(int(to_float(pt.get("tp3_armed_ts_ms"), 0)), int(to_float(tv.get("tp3_armed_ts_ms"), 0)))
             for fg in ALL_LOCK_FLAGS:
                 if tv.get(fg) or pt.get(fg):
                     pt[fg] = True
@@ -284,6 +293,11 @@ def _merge_state_dicts(base_state, incoming_state):
                     if ep_ref.get(fg) or cur_t.get(fg):
                         cur_t[fg] = True
                         ep_ref[fg] = True
+                for tk_ms in ("tp2_armed_ts_ms", "tp3_armed_ts_ms"):
+                    m_ts = max(int(to_float(cur_t.get(tk_ms), 0)), int(to_float(ep_ref.get(tk_ms), 0)))
+                    if m_ts > 0:
+                        cur_t[tk_ms] = m_ts
+                        ep_ref[tk_ms] = m_ts
     return base_state
 
 
@@ -317,6 +331,10 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
     max_fav = max(to_float(prev.get("max_favorable_pct")), to_float(t_item.get("max_favorable_pct")))
     t_item["max_high_price"] = max_h
     t_item["max_favorable_pct"] = max_fav
+    for tk_ms in ("tp2_armed_ts_ms", "tp3_armed_ts_ms"):
+        m_ts = max(int(to_float(prev.get(tk_ms), 0)), int(to_float(t_item.get(tk_ms), 0)))
+        if m_ts > 0:
+            t_item[tk_ms] = m_ts
     for fg in ALL_LOCK_FLAGS:
         if prev.get(fg) or t_item.get(fg):
             t_item[fg] = True
@@ -337,6 +355,8 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
         "change_24h": to_float(t_item.get("change_24h", 0.0)),
         "btc_1h_pct": to_float(t_item.get("btc_1h_pct", 0.0)),
         "hold_minutes": int(t_item.get("hold_minutes", 0)),
+        "tp2_armed_ts_ms": int(to_float(t_item.get("tp2_armed_ts_ms"), 0)),
+        "tp3_armed_ts_ms": int(to_float(t_item.get("tp3_armed_ts_ms"), 0)),
         **{fg: bool(t_item.get(fg, False)) for fg in ALL_LOCK_FLAGS},
         "sl_at": int(t_item.get("sl_at", 0)),
     }
@@ -364,6 +384,13 @@ def _record_pm_win(symbol, t_item, now_ts, max_fav):
 
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
+    """
+    [방어선 캔들 마감 확정 엔진]
+    1) 진입 시각(created_ms) 이후 캔들만 엄격 집계 (진입 전 15분봉 고점·저점 오염 원천 차단)
+    2) TP2 방어선 상향: 단기 '15분봉' / 장기 '1시간봉' 마감 종가(close >= TP2) 확정 시에만 상향
+    3) 동시 마감 원천 차단: 방어선을 상향한 회차에서는 절대 즉시 마감하지 않음
+    4) 방어선 이탈 마감(TP1 방어선 & TP3 트레일링): 상향 이후 마감된 '15분봉'(장기 '1시간봉') 종가 이탈 시 마감
+    """
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("closed_alerted"):
         return None
     entry_ref = to_float(t_item.get("entry_price"))
@@ -376,30 +403,49 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     trail_mult = 1.0 - (trail_drop_pct / 100.0)
     horizon_tag = "[장기 포지션] " if is_long else ""
 
+    # 단기·스윙 = 15분봉 종가 확정 / 장기(Track D) = 1시간봉 종가 확정
+    confirm_tf = "60" if is_long else "15"
+    confirm_tf_ms = 3600000 if is_long else 900000
+    confirm_tf_lbl = "1H" if is_long else "15m"
+
     stop_p = to_float(t_item.get("stop_price"))
     init_stop_p = to_float(t_item.get("initial_stop_price"), default=entry_ref * (1.0 - sl_pct_use / 100.0))
     created_at = int(t_item.get("created_at", now_ts))
     created_ms = created_at * 1000
+    now_ms = now_ts * 1000
     prev_max_h = to_float(t_item.get("max_high_price"), default=entry_ref)
     prev_peak_ms = int(to_float(t_item.get("peak_ts_ms"), default=created_ms))
 
     hist_min_low, hist_min_close = None, None
     hist_last_close, hist_last_ts_ms = 0.0, 0
-    if (now_ts - created_at) >= 300:
-        df_15m = fetch_klines(symbol, "15", limit=150)
-        if not df_15m.empty and "timestamp" in df_15m.columns:
-            post_15m = df_15m[df_15m["timestamp"] >= (created_ms - 900000)]
-            if not post_15m.empty:
-                p_idx = post_15m["high"].idxmax()
-                h_15m = to_float(post_15m.loc[p_idx, "high"], default=entry_ref)
-                if 0.40 <= (h_15m / entry_ref) <= 15.0 and h_15m >= prev_max_h:
-                    prev_max_h = h_15m
-                    prev_peak_ms = int(to_float(post_15m.loc[p_idx, "timestamp"], default=created_ms))
-                hist_min_low = to_float(post_15m["low"].min(), default=0.0)
-                hist_min_close = to_float(post_15m["close"].min(), default=0.0)
-                hist_last_close = to_float(post_15m["close"].iloc[-1], default=0.0)
-                hist_last_ts_ms = int(to_float(post_15m["timestamp"].iloc[-1], default=0))
 
+    # 15분봉 조회 (고점·저점은 반드시 진입 이후 개시된 캔들 timestamp >= created_ms 만 사용!)
+    df_15m = fetch_klines(symbol, "15", limit=150) if (now_ts - created_at) >= 180 else None
+    if df_15m is not None and not df_15m.empty and "timestamp" in df_15m.columns:
+        post_15m = df_15m[df_15m["timestamp"] >= created_ms]
+        if not post_15m.empty:
+            p_idx = post_15m["high"].idxmax()
+            h_15m = to_float(post_15m.loc[p_idx, "high"], default=entry_ref)
+            if 0.40 <= (h_15m / entry_ref) <= 15.0 and h_15m >= prev_max_h:
+                prev_max_h = h_15m
+                prev_peak_ms = int(to_float(post_15m.loc[p_idx, "timestamp"], default=created_ms))
+            hist_min_low = to_float(post_15m["low"].min(), default=0.0)
+            hist_min_close = to_float(post_15m["close"].min(), default=0.0)
+            hist_last_close = to_float(post_15m["close"].iloc[-1], default=0.0)
+            hist_last_ts_ms = int(to_float(post_15m["timestamp"].iloc[-1], default=0))
+
+    # 확정 마감 캔들 데이터프레임 준비 (단기=15m 재사용 / 장기=1H 조회)
+    df_confirm = fetch_klines(symbol, "60", limit=150) if is_long else df_15m
+    closed_post_tf = None
+    if df_confirm is not None and not df_confirm.empty and "timestamp" in df_confirm.columns:
+        close_ts_series = df_confirm["timestamp"].astype("int64") + confirm_tf_ms
+        # 진입 후 최소 60초 이상 경과 시점에 마감 완료된 캔들만 추출 (미마감 현재 캔들 제외)
+        mask_closed = (close_ts_series >= (created_ms + 60000)) & (close_ts_series <= now_ms)
+        closed_post_tf = df_confirm[mask_closed].copy()
+        if not closed_post_tf.empty:
+            closed_post_tf["close_ts_ms"] = close_ts_series[mask_closed].values
+
+    # 실시간 1분봉 조회 (TP1/TP3 터치 및 손절 SL 실시간 감시용)
     df_1m = fetch_verified_1m_klines(symbol, entry_ref=entry_ref, limit=60)
     if df_1m.empty:
         time.sleep(0.4)
@@ -407,7 +453,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     post_1m = df_1m[df_1m["timestamp"] >= created_ms].copy() if not df_1m.empty else df_1m
 
     base = symbol.replace("USDT", "")
-    has_live_1m, has_live_price = False, False
+    has_live_price = False
     last_close, last_ts_ms = 0.0, 0
     min_1m_low, min_1m_close = None, None
 
@@ -422,7 +468,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
         min_1m_low = to_float(post_1m["low"].min(), default=0.0)
         min_1m_close = to_float(post_1m["close"].min(), default=0.0)
         if last_close > 0 and last_ts_ms > 0:
-            has_live_1m, has_live_price = True, True
+            has_live_price = True
     else:
         max_high, peak_ts_ms = max(prev_max_h, entry_ref), prev_peak_ms
         if hist_last_close > 0 and hist_last_ts_ms > 0:
@@ -446,7 +492,14 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     g3 = round(max(19.5, (tp3_p - entry_ref) / entry_ref * 100.0), 1)
     msgs = []
 
-    # [3차 돌파]: 50% 익절 확정 + 방어선 TP2 상향 + 잔여 50% 고점 대비 자동 트레일링(단기 -4% / 장기 -10%)
+    # 최신 마감 완료 캔들(15m / 장기 1H) 정보 추출
+    has_closed_bar = closed_post_tf is not None and not closed_post_tf.empty
+    last_closed_c = to_float(closed_post_tf["close"].iloc[-1], 0.0) if has_closed_bar else 0.0
+    last_closed_ts_ms = int(to_float(closed_post_tf["close_ts_ms"].iloc[-1], 0)) if has_closed_bar else 0
+
+    # =========================================================================
+    # [3차 돌파]: 50% 익절 확정 + 방어선 TP2 상향 + 잔여 50% 트레일링(이후 15m/1H 종가 이탈 시 마감)
+    # =========================================================================
     if max_high >= tp3_p or t_item.get("tp3_hit"):
         for fg in ("tp1_hit", "tp2_hit", "tp3_hit", "tp1_alerted", "tp2_alerted"):
             t_item[fg] = True
@@ -454,8 +507,11 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
         stop_p = max(stop_p, trail3_p)
         t_item["stop_price"] = stop_p
 
+        just_armed_tp3 = False
         if not t_item.get("tp3_alerted"):
             t_item["tp3_alerted"] = True
+            t_item["tp3_armed_ts_ms"] = max(peak_ts_ms, now_ms)
+            just_armed_tp3 = True
             _record_pm_win(symbol, t_item, now_ts, max_fav)
             w3 = round(g3 * 0.50, 2)
             tr_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
@@ -463,10 +519,18 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"🚀 {horizon_tag}[3차 목표가(TP3) 돌파! 50% 익절 & 방어선 TP2 상향 + 고점 -{trail_drop_pct}% 트레일링 가동] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
                 f"• 📊 [3차 분할 익절(비중 50%)]: +{g3:.1f}% 확정 (기여 +{w3:.2f}%)\n"
-                f"• 🎯 남은 50% 물량은 바닥 방어선 TP2({fmt_price(tp2_p)}, +{g2:.1f}%) + 고점 대비 -{trail_drop_pct}% 자동 트레일링({fmt_price(stop_p)}, +{tr_pct:.1f}%)으로 끝까지 수익을 추적합니다!"
+                f"• 🎯 남은 50% 물량은 바닥 방어선 TP2({fmt_price(tp2_p)}, +{g2:.1f}%) + 고점 대비 -{trail_drop_pct}% 자동 트레일링({fmt_price(stop_p)}, +{tr_pct:.1f}% · {confirm_tf_lbl} 종가 이탈 시 마감)으로 추적합니다!"
             )
 
-        if has_live_1m and last_close > 0 and last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
+        tp3_armed_ms = int(to_float(t_item.get("tp3_armed_ts_ms"), default=peak_ts_ms))
+        if (
+            (not just_armed_tp3)
+            and has_closed_bar
+            and last_closed_c > 0
+            and last_closed_ts_ms > max(peak_ts_ms, tp3_armed_ms)
+            and last_closed_c <= stop_p
+            and not t_item.get("closed_alerted")
+        ):
             t_item["tp3_completed"] = True
             t_item["trailing_closed"] = True
             t_item["closed_alerted"] = True
@@ -476,30 +540,53 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             total_cum = round(w3 + w_rem, 2)
             t_item["realized_weighted_pct"] = total_cum
             msgs.append(
-                f"🎯 {horizon_tag}[3차 돌파 후 잔여 50% 트레일링 스탑 최종 익절 완료] ${base} ({symbol})\n"
-                f"• 진입가 {fmt_price(entry_ref)} → 최고가 {fmt_price(max_high)} (+{max_fav:.1f}%) → 마감가 {fmt_price(stop_p)} (+{exit_g:.1f}%)\n"
+                f"🎯 {horizon_tag}[3차 돌파 후 잔여 50% 트레일링 스탑({confirm_tf_lbl} 종가) 최종 익절 완료] ${base} ({symbol})\n"
+                f"• 진입가 {fmt_price(entry_ref)} → 최고가 {fmt_price(max_high)} (+{max_fav:.1f}%) → {confirm_tf_lbl} 종가 마감 {fmt_price(last_closed_c)} (트레일링선 {fmt_price(stop_p)})\n"
                 f"• 📊 [최종 익절 내역]: 3차(50%) +{g3:.1f}%(+{w3:.2f}%) + 잔여(50%) +{exit_g:.1f}%(+{w_rem:.2f}%)\n"
                 f"• 💰 [최종 합산 확정 수익률]: +{total_cum:.2f}% 달성 (비중 100% 합산)"
             )
         return {"messages": msgs, "sl_record": None}
 
-    # [2차 돌파]: 추가 익절 없이 100% 홀딩 + 방어선 TP1로 상향 고정 (트레일링 스탑 없음)
-    if max_high >= tp2_p or t_item.get("tp2_hit"):
+    # =========================================================================
+    # [2차 돌파]: 단기 15m / 장기 1H 마감 종가가 TP2 위 안착 시에만 방어선 TP1 상향 고정!
+    # =========================================================================
+    tp2_confirmed = bool(t_item.get("tp2_hit") or t_item.get("tp2_alerted"))
+    tp2_confirm_close_ts = int(to_float(t_item.get("tp2_armed_ts_ms"), 0))
+
+    if (not tp2_confirmed) and has_closed_bar:
+        tp2_bars = closed_post_tf[closed_post_tf["close"].astype(float) >= tp2_p]
+        if not tp2_bars.empty:
+            tp2_confirmed = True
+            tp2_confirm_close_ts = int(to_float(tp2_bars["close_ts_ms"].iloc[0], now_ms))
+
+    if tp2_confirmed:
         for fg in ("tp1_hit", "tp2_hit", "tp1_alerted"):
             t_item[fg] = True
         stop_p = max(stop_p, tp1_p)
         t_item["stop_price"] = stop_p
 
+        just_armed_tp2 = False
         if not t_item.get("tp2_alerted"):
             t_item["tp2_alerted"] = True
+            t_item["tp2_armed_ts_ms"] = tp2_confirm_close_ts if tp2_confirm_close_ts > 0 else now_ms
+            just_armed_tp2 = True
             _record_pm_win(symbol, t_item, now_ts, max_fav)
             msgs.append(
-                f"✅ {horizon_tag}[2차 구간(TP2) 돌파! 100% 홀딩 & 방어선 TP1 상향 고정] ${base} ({symbol})\n"
+                f"✅ {horizon_tag}[2차 구간(TP2) {confirm_tf_lbl} 종가 안착 돌파! 100% 홀딩 & 방어선 TP1 상향 고정] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
-                f"• 🛡️ [방어선 상향 고정]: 추가 익절 없이 100% 전량 홀딩하며 방어선을 TP1({fmt_price(tp1_p)}, +{g1:.1f}%)로 상향 고정합니다."
+                f"• 🛡️ [방어선 상향 고정]: {confirm_tf_lbl} 종가 돌파 확인 완료! 추가 익절 없이 100% 전량 홀딩하며 방어선을 TP1({fmt_price(tp1_p)}, +{g1:.1f}%)로 상향 고정합니다. (이탈 판정: 이후 {confirm_tf_lbl} 종가 기준)"
             )
 
-        if has_live_1m and last_close > 0 and last_ts_ms > peak_ts_ms and last_close <= stop_p and not t_item.get("closed_alerted"):
+        # 방어선 상향 당회차 즉시 마감 원천 차단 + 상향 이후 마감된 15m(장기 1H) 종가가 TP1 이하일 때만 익절 마감
+        tp2_armed_ms = int(to_float(t_item.get("tp2_armed_ts_ms"), default=peak_ts_ms))
+        if (
+            (not just_armed_tp2)
+            and has_closed_bar
+            and last_closed_c > 0
+            and last_closed_ts_ms > tp2_armed_ms
+            and last_closed_c <= stop_p
+            and not t_item.get("closed_alerted")
+        ):
             t_item["tp3_completed"] = True
             t_item["trailing_closed"] = True
             t_item["closed_alerted"] = True
@@ -507,8 +594,8 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             exit_g = round(max(g1, (stop_p - entry_ref) / entry_ref * 100.0), 1)
             t_item["realized_weighted_pct"] = exit_g
             msgs.append(
-                f"🔒 {horizon_tag}[TP1 방어선 100% 전량 수익 마감 완료] ${base} ({symbol})\n"
-                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 TP1({fmt_price(stop_p)}) 이탈(확인가 {fmt_price(last_close)})로 전량(100%) 익절 마감합니다.\n"
+                f"🔒 {horizon_tag}[TP1 방어선 {confirm_tf_lbl} 종가 이탈 · 100% 전량 수익 마감 완료] ${base} ({symbol})\n"
+                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 TP1({fmt_price(stop_p)})을 {confirm_tf_lbl} 종가({fmt_price(last_closed_c)})로 이탈하여 전량(100%) 익절 마감합니다.\n"
                 f"• 💰 [최종 합산 확정 수익률]: +{exit_g:.2f}% 달성 (100% 전량 익절)"
             )
         return {"messages": msgs, "sl_record": None}
@@ -521,10 +608,10 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             msgs.append(
                 f"✅ {horizon_tag}[1차 목표가(TP1) 돌파! 익절 없이 100% 홀딩 유지] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
-                f"• 📈 분할 익절 없이 100% 전량 홀딩하며 2차 목표가({fmt_price(tp2_p)}, +{g2:.1f}%) 돌파를 추적합니다."
+                f"• 📈 분할 익절 없이 100% 전량 홀딩하며 2차 목표가({fmt_price(tp2_p)}, +{g2:.1f}% · {confirm_tf_lbl} 종가 안착 시 방어선 상향) 돌파를 추적합니다."
             )
 
-    # [2차 도달 전]: 고정 손절선 이탈 감시 (단기 -6% / 장기 -20%)
+    # [2차 확정 전]: 고정 손절선 이탈 감시 (단기 -6% / 장기 -20%)
     valid_lows = [v for v in (hist_min_low, min_1m_low) if v is not None and v > 0]
     valid_closes = [v for v in (hist_min_close, min_1m_close) if v is not None and v > 0]
     if has_live_price and valid_lows and valid_closes:
