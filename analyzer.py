@@ -181,14 +181,22 @@ def _fetch_1d_and_1w(symbol, limit_1d=180, limit_1w=60):
     return df_1d, df_1w
 
 
-def _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="LONG", track_type="TRACK_D"):
+def _evaluate_weekly_daily_pro_filter(
+    price,
+    df_1d,
+    df_1w,
+    mode="LONG",
+    track_type="TRACK_D",
+    sub_strategy="",
+    funding_pct=0.0,
+):
     """
     [전문 트레이더 기준 주봉(1W) · 일봉(1D) 탑다운 상위 프레임 검증 엔진]
-    - 50배 대시세의 저시총 바닥 매집봉 흔들기(거래대금 $2.5M+, ATH 낙폭 무제한)는 완벽 보호
-    - 일봉/주봉 진행형 신저가 붕괴, OBV 물량 떠넘기기, 주봉 고점 피뢰침 설거지만 핀셋 차단
-    - 단기·스윙(Track A~H)에서도 주봉·일봉 추세 정렬에 따른 가감점 및 브리핑 태그 자동 산출
+    - 50배 대시세의 '좋은 하자'(심층 낙폭, 저시총 바닥 매집봉, D6 와이코프 스프링 재탈환, 숏 함정) 적극 보호·가산
+    - '치명적 하자'(진행형 떨어지는 칼날, OBV 물량 떠넘기기, 주봉 고점 피뢰침 설거지)만 핀셋 차단
     """
     out = {"allow": True, "score_adj": 0, "htf_tag": "", "reasons": [], "block_reason": ""}
+    is_spring_d6 = "D6" in str(sub_strategy or "").upper()
 
     # -------------------------------------------------------------------------
     # 1) 일봉(1D) 구조 진단
@@ -196,6 +204,7 @@ def _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="LONG", track_ty
     has_1d = df_1d is not None and not df_1d.empty and len(df_1d) >= 14
     dist_1d_ma20 = 0.0
     dd_30d_pct = 0.0
+    dd_macro_pct = 0.0
     made_new_30d_low_recently = False
     has_floor_base = False
     obv1d_alive = True
@@ -218,6 +227,9 @@ def _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="LONG", track_ty
         dd_30d_pct = ((hi_30d - price) / max(hi_30d, 1e-8)) * 100.0
         lo_recent_4d = to_float(l1d.iloc[-4:].min(), price)
         made_new_30d_low_recently = lo_recent_4d <= lo_30d * 1.005
+
+        macro_hi_1d = to_float(h1d.max(), price)
+        dd_macro_pct = ((macro_hi_1d - price) / max(macro_hi_1d, 1e-8)) * 100.0
 
         if len(df_1d) >= 14:
             base_hi = to_float(h1d.iloc[-14:-2].max(), price)
@@ -244,6 +256,7 @@ def _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="LONG", track_ty
     consec_red_3w = False
     weekly_blowoff_top = False
     weekly_floor_hold = False
+    weekly_spring_hammer = False
     weekly_ma10_reclaim = False
     weekly_bull_trend = False
     obv1w_rising = True
@@ -273,7 +286,9 @@ def _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="LONG", track_ty
         weekly_red_body = (w_close < w_open) and (w_lwick < 0.35)
         consec_red_3w = len(df_1w) >= 4 and all(to_float(c1w.iloc[-i]) < to_float(o1w.iloc[-i]) for i in (2, 3, 4))
 
-        # 주봉 고점 피뢰침 설거지 판별 (바닥 매집봉과 구분: 1W 10MA 위 +15% 고점에서 대량 거래량 + 62%↑ 윗꼬리 음봉)
+        # 주봉 와이코프 스프링 망치형(긴 아래꼬리로 직전 저점 스윕 후 양봉/고점권 복귀)
+        weekly_spring_hammer = making_weekly_ll and (w_lwick >= 0.42) and (w_close >= prev_w_low * 1.002) and (w_close >= w_open * 0.995)
+
         v1w_ma = to_float(v1w.iloc[-min(len(v1w), 12):-1].mean(), 1.0)
         for idx in (-1, -2):
             if abs(idx) <= len(df_1w):
@@ -295,32 +310,44 @@ def _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="LONG", track_ty
         weekly_bull_trend = (price >= ma10_1w * 0.99) and (w_close >= w_open or w_lwick >= 0.40)
 
     # -------------------------------------------------------------------------
-    # 3) 장기 포지션 (Track D) 전용 판정
+    # 3) 장기 포지션 (Track D1~D6) 전용 판정
     # -------------------------------------------------------------------------
     if mode == "LONG":
         if has_1d:
-            if made_new_30d_low_recently and dd_30d_pct >= 45.0:
+            # D6(와이코프 스프링 재탈환 완료)는 이미 바닥선 위로 복귀했으므로 신저가 터치 이력에 스마트 예외 적용
+            if (not is_spring_d6) and made_new_30d_low_recently and dd_30d_pct >= 45.0:
                 out.update({"allow": False, "block_reason": f"1D 신저가 폭락 진행형(-{dd_30d_pct:.0f}%)"})
                 return out
             if obv1d_dead:
                 out.update({"allow": False, "block_reason": "1D OBV 하락 이탈(물량 떠넘기기 의심)"})
                 return out
-            if dist_1d_ma20 <= -12.0:
+            ma20_cut = -15.0 if is_spring_d6 else -12.0
+            if dist_1d_ma20 <= ma20_cut:
                 out.update({"allow": False, "block_reason": f"1D 20MA 극단 역배열({dist_1d_ma20:+.1f}%)"})
                 return out
 
         if has_1w:
-            if (dd_3w_pct >= 45.0 and making_weekly_ll) or (consec_red_3w and weekly_red_body and making_weekly_ll):
-                out.update({"allow": False, "block_reason": f"1W 주봉 수직 붕괴 진행형(-{dd_3w_pct:.0f}%)"})
-                return out
+            if is_spring_d6:
+                # D6 스프링은 '아직 음봉 칼날 진행 중'일 때만 차단하고, 아래꼬리 복귀/양봉 반전은 적극 통과
+                if weekly_red_body and (dd_3w_pct >= 45.0 or consec_red_3w):
+                    out.update({"allow": False, "block_reason": f"1W 주봉 음봉 붕괴 미해소(-{dd_3w_pct:.0f}%)"})
+                    return out
+            else:
+                if (dd_3w_pct >= 45.0 and making_weekly_ll) or (consec_red_3w and weekly_red_body and making_weekly_ll):
+                    out.update({"allow": False, "block_reason": f"1W 주봉 수직 붕괴 진행형(-{dd_3w_pct:.0f}%)"})
+                    return out
             if weekly_blowoff_top:
                 out.update({"allow": False, "block_reason": "1W 주봉 고점 피뢰침 설거지 직후"})
                 return out
-            if dist_1w_ma10 <= -35.0 and not has_floor_base:
+            if (not is_spring_d6) and dist_1w_ma10 <= -35.0 and not has_floor_base:
                 out.update({"allow": False, "block_reason": f"1W 10MA 극단 괴리({dist_1w_ma10:+.1f}%)"})
                 return out
 
-            if weekly_ma10_reclaim:
+            # 주봉 역발상 스프링 망치형 또는 추세 전환 가산점
+            if weekly_spring_hammer:
+                out["score_adj"] += 5
+                out["reasons"].append("1W 주봉 신저가 스윕 후 긴 아래꼬리 스프링 복귀")
+            elif weekly_ma10_reclaim:
                 out["score_adj"] += 4
                 out["reasons"].append("1W 주봉 10MA 추세 전환 초입 확인")
             elif weekly_floor_hold and obv1w_rising:
@@ -330,17 +357,24 @@ def _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="LONG", track_ty
                 out["score_adj"] += 2
                 out["reasons"].append("1W 주봉 상승 추세 안착")
 
-            if weekly_bull_trend and daily_bull:
+            if is_spring_d6 or weekly_spring_hammer:
+                out["htf_tag"] = "1W스프링반전·1D바닥탈환"
+            elif weekly_bull_trend and daily_bull:
                 out["htf_tag"] = "1W상승·1D정배열"
             elif weekly_floor_hold or obv1w_rising:
                 out["htf_tag"] = "1W바닥숙성·1D매집"
             else:
                 out["htf_tag"] = "1W·1D바닥전환"
         else:
-            out["htf_tag"] = "1D매집확인" if obv1d_alive else "4H·1D매집"
+            out["htf_tag"] = "1D스프링탈환" if is_spring_d6 else ("1D매집확인" if obv1d_alive else "4H·1D매집")
 
-        if has_1d and obv1d_alive and not out["reasons"]:
+        # 50배 역발상 '좋은 하자' 연료 가산 (180일 고점 대비 -60% 이상 심층 낙폭 + 음수 펀딩 숏 함정)
+        if has_1d and dd_macro_pct >= 60.0 and funding_pct <= -0.005:
+            out["score_adj"] += 2
+            out["reasons"].append(f"심층 낙폭(-{dd_macro_pct:.0f}%) + 음수펀딩 숏함정 역발상 연료")
+        elif has_1d and obv1d_alive and not out["reasons"]:
             out["reasons"].append("1D 일봉 OBV 매집 생존 확인")
+
         return out
 
     # -------------------------------------------------------------------------
@@ -348,7 +382,6 @@ def _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="LONG", track_ty
     # -------------------------------------------------------------------------
     tk = str(track_type or "TRACK_A").upper()
     if has_1w:
-        # 주봉 수직 붕괴 설거지 원천 차단 ($JCT -91.5% 등)
         crash_cut = 65.0 if tk == "TRACK_E" else 50.0
         if dd_3w_pct >= crash_cut and making_weekly_ll and weekly_red_body:
             out.update({"allow": False, "block_reason": f"1W 주봉 수직 폭락 차단(-{dd_3w_pct:.0f}%)"})
@@ -362,13 +395,12 @@ def _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="LONG", track_ty
             out.update({"allow": False, "block_reason": f"1D 신저가 폭락 역배열 차단(-{dd_30d_pct:.0f}%)"})
             return out
 
-    # 주봉·일봉 추세 정렬 가감점 & 브리핑 태그
     if has_1w and has_1d:
         if weekly_bull_trend and daily_bull:
             out["score_adj"] = 3
             out["htf_tag"] = "1W상승·1D강세"
             out["reasons"].append("1W 주봉·1D 일봉 상위 프레임 정배열 우위")
-        elif (weekly_ma10_reclaim or weekly_floor_hold) and dist_1d_ma20 >= -3.0:
+        elif (weekly_ma10_reclaim or weekly_floor_hold or weekly_spring_hammer) and dist_1d_ma20 >= -3.0:
             out["score_adj"] = 2
             out["htf_tag"] = "1W바닥지지·1D회복"
         elif dist_1w_ma10 <= -8.0 and dist_1d_ma20 <= -4.0:
@@ -567,7 +599,10 @@ def _calculate_macro_longterm_tps(price, turnover_m, df_4h, df_1d, df_1w=None):
     return tps, [p1_pct, p2_pct, p3_pct], ["4H/1D 1차 저항대", "1D·1W 주요 전고점 저항", f"1W·1D 대시세목표({tier_lbl})"]
 
 
-def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
+def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, funding_pct, df_4h):
+    """
+    [장기 포지션 Track D 6대 전략 판별 (D1~D5 유지 + 신규 D6 와이코프 스프링 추가)]
+    """
     if df_4h is None or df_4h.empty or len(df_4h) < 55:
         return None
 
@@ -589,6 +624,7 @@ def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
 
     candidates_d = []
 
+    # D1: 스텔스 OI · OBV 선행 매집
     hi_10d = to_float(h4.iloc[-60:-1].max(), price * 1.05)
     obv_hi_10d = to_float(obv4.iloc[-60:-1].max(), 0.0)
     if -3.0 <= change_24h <= 11.0 and oi_ratio >= 28.0 and funding_pct <= 0.008:
@@ -604,6 +640,7 @@ def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
                 ],
             })
 
+    # D2: 매집봉 출현 후 거래량 건조 눌림
     recent_30 = df_4h.iloc[-30:-2]
     vr_30 = v4_ratio.iloc[-30:-2]
     if not vr_30.empty and float(vr_30.max()) >= 3.8:
@@ -628,6 +665,7 @@ def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
                 ],
             })
 
+    # D3: 4H 30일 장기 박스권 첫 돌파
     if len(df_4h) >= 120:
         hi_30d = to_float(h4.iloc[:-1].max(), price)
         lo_30d = to_float(l4.iloc[:-1].min(), price * 0.8)
@@ -645,6 +683,7 @@ def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
                 ],
             })
 
+    # D4: 4H 장기 하락추세 탈출 & 50MA 돌파
     if len(df_4h) >= 85:
         hi_30d_d4 = to_float(h4.iloc[:-1].max(), price)
         lo_recent_30 = to_float(l4.iloc[-30:].min(), price)
@@ -674,6 +713,7 @@ def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
                 ],
             })
 
+    # D5: 4H 매크로 강세 다이버전스 바닥 매집
     if len(df_4h) >= 65:
         lo_14d = to_float(l4.iloc[-min(len(l4), 84):].min(), price)
         in_bottom_zone = price <= lo_14d * 1.12
@@ -704,6 +744,44 @@ def _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h):
                     f"14일 바닥권에서 4H RSI14({rsi_prev_v:.0f}→{rsi_rec_v:.0f})·OBV 동시 강세 다이버전스",
                     f"고OI 집중도({oi_ratio:.0f}%) + 저과열 펀딩({funding_pct:+.4f}%) 세력 바닥 흡수",
                     f"4H 장대양봉(+{body_4h_pct:.1f}%) 출현으로 장기 턴어라운드 개시",
+                ],
+            })
+
+    # =========================================================================
+    # [신규 D6] 🌀 와이코프 스프링 (신저가 개미털기 후 다개월 바닥선 거래량 동반 재탈환)
+    # - 0G / BIO / C98 / COAI / MYX형 50배 역발상 초입 전용 (떨어지는 칼날은 원천 차단)
+    # =========================================================================
+    if len(df_4h) >= 100 and turnover_m >= 3.0 and oi_m >= 0.8 and oi_ratio >= 15.0 and funding_pct <= 0.006:
+        prior_floor = to_float(l4.iloc[:-48].min(), price)
+        prior_high_30 = to_float(h4.iloc[:-12].max(), price)
+        spring_low = to_float(l4.iloc[-48:].min(), price)
+        sweep_depth_pct = ((prior_floor - spring_low) / max(prior_floor, 1e-8)) * 100.0
+
+        # 1) 직전 다개월/30일 바닥선을 -2.5% ~ -35% 하향 이탈(개미 손절 & 추격 숏 유발)
+        had_spring_sweep = (2.5 <= sweep_depth_pct <= 35.0) and (prior_high_30 >= prior_floor * 1.15)
+        # 2) 깨졌던 직전 바닥선 위로 완전 복귀 안착(칼날 차단) + 과추격 방지(+18% 이내)
+        reclaimed_floor = (prior_floor * 1.003 <= price <= prior_floor * 1.18) and (price >= ma20_4h * 0.98)
+        # 3) 양봉 반등 모멘텀 + 재탈환 구간 4H 거래량 2.2배 이상 폭발 + OBV 상방 턴
+        bull_reclaim_4h = (c4.iloc[-1] > o4.iloc[-1]) or (to_float(c4.iloc[-1]) >= to_float(c4.iloc[-3]) * 1.02)
+        reclaim_vol_4h = float(v4_ratio.iloc[-4:].max())
+        obv4_reclaim = to_float(obv4.iloc[-1]) > to_float(obv4.iloc[-12:-2].mean())
+
+        if had_spring_sweep and reclaimed_floor and bull_reclaim_4h and reclaim_vol_4h >= 2.2 and obv4_reclaim:
+            score_d6 = int(np.clip(
+                88
+                + (4 if funding_pct <= -0.002 else 1)
+                + (4 if reclaim_vol_4h >= 3.0 else 2)
+                + (3 if oi_ratio >= 25.0 else (1 if oi_ratio >= 18.0 else 0))
+                + (2 if sweep_depth_pct >= 8.0 else 0),
+                88, 99,
+            ))
+            candidates_d.append({
+                "sub_strategy": "D6 · 와이코프 스프링(신저가 개미털기 후 바닥 재탈환)",
+                "score": score_d6,
+                "reasons": [
+                    f"직전 바닥({prior_floor:.5g}) -{sweep_depth_pct:.1f}% 이탈 개미털기 후 거래량 {reclaim_vol_4h:.1f}배 재탈환",
+                    f"OI 집중도 {oi_ratio:.0f}% + 펀딩 {funding_pct:+.4f}% 숏함정 역발상 대시세 초입",
+                    "4H 20MA 회복 & OBV 반전으로 떨어지는 칼날 종료 확인",
                 ],
             })
 
@@ -815,7 +893,6 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                 return 0
         return 0
 
-    # 종목당 1D/1W 조회 중복 방지를 위한 로컬 캐시
     cached_1d_1w = {"fetched": False, "df_1d": None, "df_1w": None}
 
     def _get_1d_1w():
@@ -824,13 +901,21 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
             cached_1d_1w.update({"fetched": True, "df_1d": d1, "df_1w": w1})
         return cached_1d_1w["df_1d"], cached_1d_1w["df_1w"]
 
-    # [1순위] 장기 포지션 (Track D1~D5) — 4H 매집 + 1D·1W 주봉 탑다운 검증 + 고정손절 -20%
-    if (not counter_trend_only) and oi_m >= 0.4 and turnover_m >= 2.5 and rsi6_15m < 80.0 and ma20_disp_pct < 8.0:
+    # [1순위] 장기 포지션 (Track D1~D6) — 4H 매집·스프링 + 1D·1W 주봉 탑다운 검증 + 고정손절 -20%
+    if (not counter_trend_only) and oi_m >= 0.4 and turnover_m >= 2.5 and rsi6_15m < 82.0 and ma20_disp_pct < 8.5:
         df_4h = fetch_klines(symbol, interval="240", limit=180)
-        macro_d = _evaluate_macro_track_d(price, change_24h, oi_ratio, funding_pct, df_4h)
+        macro_d = _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, funding_pct, df_4h)
         if macro_d is not None:
             df_1d, df_1w = _get_1d_1w()
-            mtf_long = _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="LONG", track_type="TRACK_D")
+            mtf_long = _evaluate_weekly_daily_pro_filter(
+                price,
+                df_1d,
+                df_1w,
+                mode="LONG",
+                track_type="TRACK_D",
+                sub_strategy=macro_d.get("sub_strategy", ""),
+                funding_pct=funding_pct,
+            )
             if mtf_long["allow"]:
                 d_score = int(np.clip(
                     macro_d["score"] + mtf_long["score_adj"] + (5 if oi_q["quadrant"] == "Q1" else 0) + max(0, sess_adj // 2),
@@ -844,6 +929,12 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                     if oi_q["note"]:
                         reasons.append(oi_q["note"])
                     htf_long_str = f"{mtf_long['htf_tag']} ({htf_status})" if mtf_long["htf_tag"] else f"4H·1D 매집구조 ({htf_status})"
+                    is_d6 = "D6" in str(macro_d.get("sub_strategy", "")).upper()
+                    d_title = (
+                        "🌀 [장기 포지션 · 와이코프 스프링 50배 역발상 초입]"
+                        if is_d6
+                        else "🐋 [장기 포지션 · 세력 대시세 매집 초입]"
+                    )
                     return {
                         "symbol": symbol,
                         "base_coin": base_coin,
@@ -851,7 +942,7 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                         "is_long_term": True,
                         "position_horizon": "장기 포지션 (1개월 이상 홀딩 예상)",
                         "sub_strategy": macro_d["sub_strategy"],
-                        "track_title": "🐋 [장기 포지션 · 세력 대시세 매집 초입]",
+                        "track_title": d_title,
                         "score": d_score,
                         "price": price,
                         "change_24h": round(change_24h, 2),
@@ -913,7 +1004,6 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
     short_candidates = []
 
     def _register_candidate(tk, title, tech_sc, tk_reasons):
-        # 1W·1D 가산(+3) 여지를 고려해 1차 커트라인을 (ELITE_SCORE_THRESHOLD - 3)으로 선별 후 최종 1W·1D 검증
         tot_sc = int(np.clip(tech_sc + supply_score + oi_q["bonus"] + sess_adj + wave_bonus, 0, 99))
         tot_sc = max(0, tot_sc - _get_pm_penalty(tk))
         if tot_sc >= (ELITE_SCORE_THRESHOLD - 3):
@@ -1170,11 +1260,18 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
     if not short_candidates:
         return None
 
-    # [전문 트레이더 1W(주봉) · 1D(일봉) 최종 관문 검증] — 통과 후보에만 1회 조회
+    # [전문 트레이더 1W(주봉) · 1D(일봉) 최종 관문 검증]
     df_1d, df_1w = _get_1d_1w()
     verified_candidates = []
     for cand in short_candidates:
-        mtf_s = _evaluate_weekly_daily_pro_filter(price, df_1d, df_1w, mode="SHORT", track_type=cand["track_type"])
+        mtf_s = _evaluate_weekly_daily_pro_filter(
+            price,
+            df_1d,
+            df_1w,
+            mode="SHORT",
+            track_type=cand["track_type"],
+            funding_pct=funding_pct,
+        )
         if not mtf_s["allow"]:
             continue
         final_sc = int(np.clip(cand["score"] + mtf_s["score_adj"], 0, 99))
