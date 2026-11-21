@@ -3396,6 +3396,46 @@
       "peak_ts_ms": 1795260794000,
       "max_favorable_pct": 0.0
     },
+    "CAKEUSDT": {
+      "created_at": 1795260794,
+      "track_type": "TRACK_A",
+      "is_long_term": false,
+      "score": 93,
+      "entry_price": 1.4467,
+      "swing_high_line": 1.4883,
+      "entry_low": 1.44236,
+      "entry_high": 1.44887,
+      "initial_stop_price": 1.359898,
+      "stop_price": 1.359898,
+      "sl_pct": 6,
+      "tps": [
+        1.58269,
+        1.699873,
+        1.883603
+      ],
+      "tp_pcts": [
+        9.4,
+        17.5,
+        30.2
+      ],
+      "vol_mult": 5.28,
+      "rsi6_15m": 70.6,
+      "oi_m": 1.1,
+      "oi_ratio": 42.0,
+      "turnover_m": 2.5,
+      "change_24h": -8.9,
+      "funding_pct": -0.0145,
+      "btc_1h_pct": 0.0,
+      "reasons": [
+        "TTM Squeeze(BB<KC) 발사(응축폭 2.0%) + 15m PPO(+0.01%) 상방",
+        "15m 매수 델타(CVD)·OBV 바닥 흡수 확인",
+        "OI 집중도 최상(42%)",
+        "음수 펀딩 숏스퀴즈(-0.0145%)"
+      ],
+      "max_high_price": 1.4467,
+      "peak_ts_ms": 1795260794000,
+      "max_favorable_pct": 0.0
+    },
     "CTRUSDT": {
       "created_at": 1795191476,
       "track_type": "TRACK_E",
@@ -4196,7 +4236,8 @@
     "SYRUPUSDT": 1795021453,
     "AXISUSDT": 1795034658,
     "BIRBUSDT": 1795052425,
-    "ORCAUSDT": 1795260794
+    "ORCAUSDT": 1795260794,
+    "CAKEUSDT": 1795260794
   },
   "sl_history": {
     "ZKCUSDT_1794995418": {
@@ -16629,6 +16670,49 @@
       "oi_ratio": 17.2,
       "funding_pct": -0.024399999999999998,
       "change_24h": -0.81,
+      "btc_1h_pct": 0.0,
+      "hold_minutes": 0,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp3_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "trailing_closed": false,
+      "sl_alerted": false,
+      "closed_alerted": false,
+      "sl_at": 0
+    },
+    "CAKEUSDT_1795260794": {
+      "symbol": "CAKEUSDT",
+      "created_at": 1795260794,
+      "track_type": "TRACK_A",
+      "is_long_term": false,
+      "score": 93,
+      "entry_price": 1.4467,
+      "initial_stop_price": 1.359898,
+      "stop_price": 1.359898,
+      "sl_pct": 6.0,
+      "tps": [
+        1.58269,
+        1.699873,
+        1.883603
+      ],
+      "tp_pcts": [
+        9.4,
+        17.5,
+        30.2
+      ],
+      "max_high_price": 1.4467,
+      "max_favorable_pct": 0.0,
+      "realized_weighted_pct": 0.0,
+      "vol_mult": 5.28,
+      "rsi6_15m": 70.6,
+      "oi_m": 1.1,
+      "oi_ratio": 42.0,
+      "funding_pct": -0.0145,
+      "change_24h": -8.9,
       "btc_1h_pct": 0.0,
       "hold_minutes": 0,
       "tp1_hit": false,
