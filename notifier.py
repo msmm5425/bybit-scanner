@@ -132,12 +132,20 @@ def build_briefing_message(res, now_str):
         for r in reasons:
             lines.append(f"• {r}")
 
+    if is_long:
+        lines.append(
+            "\n⚠️ [장기 진입 전 10초 체크]: 30일 내 대형 클리프 언락(Tokenomist) · 바이낸스 유의종목(Monitoring Tag) 여부 확인 권장"
+        )
+
     return "\n".join(lines)
 
 
 def build_x_hook_line(res):
     track_type = str(res.get("track_type", "TRACK_A"))
     if track_type == "TRACK_D" or res.get("is_long_term"):
+        sub_s = str(res.get("sub_strategy", "")).upper()
+        if "D6" in sub_s or "스프링" in sub_s:
+            return " 신저가 개미털기(스프링) 후 다개월 바닥선 거래량 동반 재탈환 포착"
         return " 세력 4H·1D 매집 후 대시세 1파동 초입 포착"
     r_text = " ".join(str(x) for x in (res.get("reasons") or []))
     if "재진입" in str(res.get("track_title", "")) or "재탈환" in r_text:
@@ -222,6 +230,7 @@ def _render_tradingview_lightweight_chart(df, res):
     score = res.get("score", 90)
     track_type = res.get("track_type", "TRACK_A")
     is_long = bool(res.get("is_long_term") or track_type == "TRACK_D")
+    sub_s = str(res.get("sub_strategy", "")).upper()
 
     latest_row = df.iloc[-1]
     price = to_float(latest_row["close"], to_float(res.get("price")))
@@ -273,7 +282,7 @@ def _render_tradingview_lightweight_chart(df, res):
         "TRACK_A": "TRACK A · TTM Squeeze",
         "TRACK_B": "TRACK B · 24H Breakout",
         "TRACK_C": "TRACK C · Deep Pullback",
-        "TRACK_D": "LONG-TERM · Track D Macro",
+        "TRACK_D": "LONG-TERM · Track D6 Spring" if ("D6" in sub_s or "스프링" in sub_s) else "LONG-TERM · Track D Macro",
         "TRACK_E": "TRACK E · SFP Reversal",
         "TRACK_F": "TRACK F · BTC RS Leader",
         "TRACK_G": "TRACK G · Short Squeeze",
