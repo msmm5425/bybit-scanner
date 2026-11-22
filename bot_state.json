@@ -41,7 +41,9 @@
       "max_favorable_pct": 7.13,
       "hold_minutes": 1918,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "VVVUSDT": {
       "created_at": 1795265541,
@@ -86,7 +88,9 @@
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
-      "tp1_alerted": true
+      "tp1_alerted": true,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "PYTHUSDT": {
       "created_at": 1795242497,
@@ -131,7 +135,9 @@
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
-      "tp1_alerted": true
+      "tp1_alerted": true,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "PENGUUSDT": {
       "created_at": 1795211377,
@@ -174,7 +180,9 @@
       "max_favorable_pct": 1.92,
       "hold_minutes": 2347,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "SOONUSDT": {
       "created_at": 1795236410,
@@ -218,7 +226,9 @@
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
-      "tp1_alerted": true
+      "tp1_alerted": true,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "USUALUSDT": {
       "created_at": 1795038187,
@@ -258,7 +268,9 @@
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "BTWUSDT": {
       "created_at": 1795304027,
@@ -304,7 +316,8 @@
       "hold_minutes": 296,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795321801
+      "sl_at": 1795321801,
+      "tp3_at": 0
     },
     "WLFIUSDT": {
       "created_at": 1794983030,
@@ -348,7 +361,9 @@
       "tp3_alerted": false,
       "hold_minutes": 6153,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "FLUIDUSDT": {
       "created_at": 1795234632,
@@ -391,7 +406,9 @@
       "max_favorable_pct": 5.93,
       "hold_minutes": 1960,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "DGAIUSDT": {
       "created_at": 1795351517,
@@ -434,7 +451,9 @@
       "max_favorable_pct": 1.48,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 12
+      "hold_minutes": 12,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "SOPHUSDT": {
       "created_at": 1795252660,
@@ -477,7 +496,9 @@
       "max_favorable_pct": 7.88,
       "hold_minutes": 1659,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "ERAUSDT": {
       "created_at": 1795041691,
@@ -518,7 +539,9 @@
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "BARDUSDT": {
       "created_at": 1795207933,
@@ -562,7 +585,9 @@
       "max_favorable_pct": 9.91,
       "hold_minutes": 2405,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "BLESSUSDT": {
       "created_at": 1795159785,
@@ -605,7 +630,9 @@
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "BLURUSDT": {
       "created_at": 1795263829,
@@ -648,7 +675,9 @@
       "max_favorable_pct": 6.21,
       "hold_minutes": 1473,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "ZILUSDT": {
       "created_at": 1795221764,
@@ -694,7 +723,8 @@
       "tp3_armed_ts_ms": 0,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795307669
+      "sl_at": 1795307669,
+      "tp3_at": 0
     },
     "SKRUSDT": {
       "created_at": 1794987363,
@@ -738,7 +768,9 @@
       "tp3_alerted": false,
       "hold_minutes": 6081,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "OPGUSDT": {
       "created_at": 1795152267,
@@ -776,7 +808,9 @@
       "max_favorable_pct": 2.76,
       "hold_minutes": 3333,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "LITUSDT": {
       "created_at": 1795226403,
@@ -818,7 +852,9 @@
       "max_favorable_pct": 5.94,
       "hold_minutes": 2097,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "SENTUSDT": {
       "created_at": 1795205287,
@@ -861,7 +897,9 @@
       "max_favorable_pct": 7.09,
       "hold_minutes": 2449,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "NIGHTUSDT": {
       "created_at": 1795191839,
@@ -905,7 +943,9 @@
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
-      "tp1_alerted": true
+      "tp1_alerted": true,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "ARIAUSDT": {
       "created_at": 1795320711,
@@ -948,7 +988,9 @@
       "max_favorable_pct": 4.89,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 525
+      "hold_minutes": 525,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "PIPPINUSDT": {
       "created_at": 1795061024,
@@ -989,7 +1031,9 @@
       "max_favorable_pct": 17.32,
       "hold_minutes": 4853,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "ZKCUSDT": {
       "created_at": 1795122403,
@@ -1029,7 +1073,9 @@
       "max_favorable_pct": 7.91,
       "hold_minutes": 3830,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "MONUSDT": {
       "created_at": 1795305110,
@@ -1072,7 +1118,9 @@
       "max_favorable_pct": 0.45,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 785
+      "hold_minutes": 785,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "IRYSUSDT": {
       "created_at": 1795351517,
@@ -1116,7 +1164,9 @@
       "max_favorable_pct": 0.0,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 12
+      "hold_minutes": 12,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "ASTERUSDT": {
       "created_at": 1795272750,
@@ -1159,7 +1209,9 @@
       "max_favorable_pct": 4.41,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 1324
+      "hold_minutes": 1324,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "CAPUSDT": {
       "created_at": 1795227623,
@@ -1202,7 +1254,9 @@
       "max_favorable_pct": 2.92,
       "hold_minutes": 2077,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "HUMAUSDT": {
       "created_at": 1795093253,
@@ -1242,7 +1296,9 @@
       "max_favorable_pct": 29.31,
       "hold_minutes": 4316,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "FFUSDT": {
       "created_at": 1795006367,
@@ -1281,7 +1337,9 @@
       "max_favorable_pct": 3.41,
       "hold_minutes": 5764,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "BEAMUSDT": {
       "created_at": 1795192565,
@@ -1326,7 +1384,9 @@
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
-      "tp1_alerted": true
+      "tp1_alerted": true,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "RAREUSDT": {
       "created_at": 1795177327,
@@ -1366,7 +1426,9 @@
       "max_favorable_pct": 33.94,
       "hold_minutes": 2915,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "2ZUSDT": {
       "created_at": 1795207563,
@@ -1407,7 +1469,9 @@
       "max_favorable_pct": 4.93,
       "hold_minutes": 2411,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "RAVEUSDT": {
       "created_at": 1795103940,
@@ -1447,7 +1511,9 @@
       "max_favorable_pct": 19.11,
       "hold_minutes": 4138,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "YBUSDT": {
       "created_at": 1795197629,
@@ -1491,7 +1557,9 @@
       "max_favorable_pct": 20.76,
       "hold_minutes": 2577,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "NAORISUSDT": {
       "created_at": 1795118707,
@@ -1531,7 +1599,9 @@
       "max_favorable_pct": 13.82,
       "hold_minutes": 3892,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "EVAAUSDT": {
       "created_at": 1795324670,
@@ -1578,7 +1648,8 @@
       "hold_minutes": 5,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795325024
+      "sl_at": 1795325024,
+      "tp3_at": 0
     },
     "PIEVERSEUSDT": {
       "created_at": 1795147591,
@@ -1620,7 +1691,9 @@
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
       "tp1_hit": true,
-      "tp1_alerted": true
+      "tp1_alerted": true,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "SKYUSDT": {
       "created_at": 1795154329,
@@ -1657,7 +1730,9 @@
       "max_favorable_pct": 1.69,
       "hold_minutes": 3298,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "GRAMUSDT": {
       "created_at": 1795272026,
@@ -1700,7 +1775,9 @@
       "max_favorable_pct": 2.76,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 1337
+      "hold_minutes": 1337,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "CYBERUSDT": {
       "created_at": 1795281045,
@@ -1744,7 +1821,9 @@
       "max_favorable_pct": 5.03,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 1186
+      "hold_minutes": 1186,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "SAPIENUSDT": {
       "created_at": 1795183625,
@@ -1783,7 +1862,9 @@
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "XPLUSDT": {
       "created_at": 1795183625,
@@ -1821,7 +1902,9 @@
       "max_favorable_pct": 3.18,
       "hold_minutes": 2810,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "HYPEUSDT": {
       "created_at": 1795292781,
@@ -1864,7 +1947,9 @@
       "max_favorable_pct": 3.0,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 991
+      "hold_minutes": 991,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "BROCCOLIUSDT": {
       "created_at": 1795234632,
@@ -1909,7 +1994,9 @@
       "tp1_hit": true,
       "tp1_alerted": true,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "VELVETUSDT": {
       "created_at": 1795191476,
@@ -1954,7 +2041,8 @@
       "tp3_armed_ts_ms": 0,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795277148
+      "sl_at": 1795277148,
+      "tp3_at": 0
     },
     "CTUSDT": {
       "created_at": 1795304391,
@@ -1997,7 +2085,9 @@
       "max_favorable_pct": 4.91,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 797
+      "hold_minutes": 797,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "ENSOUSDT": {
       "created_at": 1795204931,
@@ -2040,7 +2130,9 @@
       "max_favorable_pct": 27.54,
       "hold_minutes": 2455,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "EULUSDT": {
       "created_at": 1795209009,
@@ -2081,7 +2173,9 @@
       "max_favorable_pct": 5.23,
       "hold_minutes": 2387,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "DOSUSDT": {
       "created_at": 1795235358,
@@ -2126,7 +2220,8 @@
       "tp3_armed_ts_ms": 0,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795316704
+      "sl_at": 1795316704,
+      "tp3_at": 0
     },
     "0GUSDT": {
       "created_at": 1795242119,
@@ -2169,7 +2264,9 @@
       "max_favorable_pct": 7.01,
       "hold_minutes": 1835,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "IDOLUSDT": {
       "created_at": 1795248057,
@@ -2221,7 +2318,8 @@
       "tp3_at": 1795268931,
       "realized_weighted_pct": 11.4,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "sl_at": 0
     },
     "ORCAUSDT": {
       "created_at": 1795348792,
@@ -2264,7 +2362,9 @@
       "max_favorable_pct": 1.54,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 57
+      "hold_minutes": 57,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "CAKEUSDT": {
       "created_at": 1795260794,
@@ -2307,7 +2407,9 @@
       "max_favorable_pct": 4.91,
       "hold_minutes": 1524,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "KERNELUSDT": {
       "created_at": 1795262395,
@@ -2350,7 +2452,9 @@
       "max_favorable_pct": 5.94,
       "hold_minutes": 1497,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "PLUMEUSDT": {
       "created_at": 1795264778,
@@ -2393,7 +2497,9 @@
       "max_favorable_pct": 2.73,
       "hold_minutes": 1457,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "BRUSDT": {
       "created_at": 1795275269,
@@ -2439,7 +2545,8 @@
       "hold_minutes": 739,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795319654
+      "sl_at": 1795319654,
+      "tp3_at": 0
     },
     "AEROUSDT": {
       "created_at": 1795280672,
@@ -2481,7 +2588,9 @@
       "max_favorable_pct": 4.52,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 1192
+      "hold_minutes": 1192,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "MORPHOUSDT": {
       "created_at": 1795286212,
@@ -2524,7 +2633,9 @@
       "max_favorable_pct": 1.42,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 1100
+      "hold_minutes": 1100,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "PARTIUSDT": {
       "created_at": 1795288002,
@@ -2566,7 +2677,9 @@
       "max_favorable_pct": 4.73,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 1070
+      "hold_minutes": 1070,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "ELSAUSDT": {
       "created_at": 1795291344,
@@ -2609,7 +2722,9 @@
       "max_favorable_pct": 29.91,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 1015
+      "hold_minutes": 1015,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "VIRTUALUSDT": {
       "created_at": 1795291344,
@@ -2651,7 +2766,9 @@
       "max_favorable_pct": 1.77,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 1015
+      "hold_minutes": 1015,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "MAGMAUSDT": {
       "created_at": 1795293727,
@@ -2693,7 +2810,9 @@
       "max_favorable_pct": 7.4,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 975
+      "hold_minutes": 975,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "AKEUSDT": {
       "created_at": 1795321452,
@@ -2740,7 +2859,8 @@
       "hold_minutes": 41,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795323933
+      "sl_at": 1795323933,
+      "tp3_at": 0
     },
     "ETHFIUSDT": {
       "created_at": 1795302309,
@@ -2783,7 +2903,9 @@
       "max_favorable_pct": 5.55,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 832
+      "hold_minutes": 832,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "BREVUSDT": {
       "created_at": 1795304748,
@@ -2826,7 +2948,9 @@
       "max_favorable_pct": 0.24,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 791
+      "hold_minutes": 791,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "MMTUSDT": {
       "created_at": 1795306170,
@@ -2878,7 +3002,8 @@
       "trailing_closed": true,
       "closed_alerted": true,
       "tp3_at": 1795346281,
-      "realized_weighted_pct": 7.6
+      "realized_weighted_pct": 7.6,
+      "sl_at": 0
     },
     "ICNTUSDT": {
       "created_at": 1795308759,
@@ -2921,7 +3046,9 @@
       "max_favorable_pct": 2.59,
       "tp2_armed_ts_ms": 0,
       "tp3_armed_ts_ms": 0,
-      "hold_minutes": 724
+      "hold_minutes": 724,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "ZKPUSDT": {
       "created_at": 1795107290,
@@ -2961,7 +3088,9 @@
       "max_favorable_pct": 4.73,
       "hold_minutes": 4031,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "USUSDT": {
       "created_at": 1795105006,
@@ -3001,7 +3130,9 @@
       "max_favorable_pct": 1.44,
       "hold_minutes": 3952,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "MOCAUSDT": {
       "created_at": 1795128327,
@@ -3041,7 +3172,9 @@
       "max_favorable_pct": 0.1,
       "hold_minutes": 3206,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "CARVUSDT": {
       "created_at": 1795210079,
@@ -3084,7 +3217,9 @@
       "max_favorable_pct": 6.39,
       "hold_minutes": 1843,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "PONSUSDT": {
       "created_at": 1795226403,
@@ -3131,7 +3266,8 @@
       "closed_alerted": true,
       "sl_at": 1795234273,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "USELESSUSDT": {
       "created_at": 1795207563,
@@ -3176,7 +3312,8 @@
       "closed_alerted": true,
       "sl_at": 1795234273,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "WUSDT": {
       "created_at": 1795192199,
@@ -3221,7 +3358,8 @@
       "closed_alerted": true,
       "sl_at": 1795234273,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "JCTUSDT": {
       "created_at": 1795221764,
@@ -3266,7 +3404,8 @@
       "closed_alerted": true,
       "sl_at": 1795234273,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ARUSDT": {
       "created_at": 1795190721,
@@ -3312,7 +3451,8 @@
       "closed_alerted": true,
       "sl_at": 1795234273,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "TRUMPUSDT": {
       "created_at": 1795222528,
@@ -3358,7 +3498,8 @@
       "closed_alerted": true,
       "sl_at": 1795234273,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "TAIKOUSDT": {
       "created_at": 1795004016,
@@ -3398,7 +3539,8 @@
       "closed_alerted": true,
       "sl_at": 1795232838,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "GRASSUSDT": {
       "created_at": 1795192565,
@@ -3443,7 +3585,8 @@
       "closed_alerted": true,
       "sl_at": 1795231986,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SUSDT": {
       "created_at": 1795191103,
@@ -3488,7 +3631,8 @@
       "closed_alerted": true,
       "sl_at": 1795231986,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "STABLEUSDT": {
       "created_at": 1794995418,
@@ -3532,7 +3676,9 @@
       "tp3_alerted": false,
       "hold_minutes": 5216,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "KAVAUSDT": {
       "created_at": 1795026830,
@@ -3573,7 +3719,8 @@
       "closed_alerted": true,
       "sl_at": 1795208653,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "AXISUSDT": {
       "created_at": 1795034658,
@@ -3616,7 +3763,8 @@
       "closed_alerted": true,
       "sl_at": 1795205708,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CFGUSDT": {
       "created_at": 1795143505,
@@ -3659,7 +3807,8 @@
       "closed_alerted": true,
       "sl_at": 1795202578,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "HUSDT": {
       "created_at": 1795192927,
@@ -3703,7 +3852,8 @@
       "closed_alerted": true,
       "sl_at": 1795200452,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SYRUPUSDT": {
       "created_at": 1795021453,
@@ -3747,7 +3897,8 @@
       "closed_alerted": true,
       "sl_at": 1795190721,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CHIPUSDT": {
       "created_at": 1795143505,
@@ -3788,7 +3939,8 @@
       "closed_alerted": true,
       "sl_at": 1795189554,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "LAUSDT": {
       "created_at": 1795004377,
@@ -3830,7 +3982,8 @@
       "closed_alerted": true,
       "sl_at": 1795188156,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "RUNEUSDT": {
       "created_at": 1795022486,
@@ -3873,7 +4026,8 @@
       "closed_alerted": true,
       "sl_at": 1795188156,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MUBARAKUSDT": {
       "created_at": 1795162637,
@@ -3914,7 +4068,8 @@
       "closed_alerted": true,
       "sl_at": 1795187821,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "EIGENUSDT": {
       "created_at": 1795156413,
@@ -3955,7 +4110,8 @@
       "closed_alerted": true,
       "sl_at": 1795187821,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "GRVTUSDT": {
       "created_at": 1795127211,
@@ -3996,7 +4152,8 @@
       "closed_alerted": true,
       "sl_at": 1795231986,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CTRUSDT": {
       "created_at": 1795191476,
@@ -4039,7 +4196,9 @@
       "max_favorable_pct": 4.43,
       "hold_minutes": 1149,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "BIRBUSDT": {
       "created_at": 1795052425,
@@ -4083,7 +4242,8 @@
       "closed_alerted": true,
       "sl_at": 1795170266,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ALLOUSDT": {
       "created_at": 1794980736,
@@ -4130,7 +4290,8 @@
       "closed_alerted": true,
       "sl_at": 1795168865,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "INITUSDT": {
       "created_at": 1794976466,
@@ -4180,7 +4341,8 @@
       "closed_alerted": true,
       "sl_at": 1795154672,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CROSSUSDT": {
       "created_at": 1795116493,
@@ -4220,7 +4382,8 @@
       "closed_alerted": true,
       "sl_at": 1795153971,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZAMAUSDT": {
       "created_at": 1794980736,
@@ -4267,7 +4430,8 @@
       "closed_alerted": true,
       "sl_at": 1795139895,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "TRUSTUSDT": {
       "created_at": 1794987363,
@@ -4315,7 +4479,8 @@
       "tp3_at": 1795139895,
       "realized_weighted_pct": 10.0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "sl_at": 0
     },
     "ZKUSDT": {
       "created_at": 1795060675,
@@ -4357,7 +4522,8 @@
       "closed_alerted": true,
       "sl_at": 1795139895,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MELANIAUSDT": {
       "created_at": 1795002600,
@@ -4398,7 +4564,8 @@
       "closed_alerted": true,
       "sl_at": 1795139895,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CCUSDT": {
       "created_at": 1794989338,
@@ -4445,7 +4612,8 @@
       "closed_alerted": true,
       "sl_at": 1795123813,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "JTOUSDT": {
       "created_at": 1794979334,
@@ -4496,7 +4664,8 @@
       "closed_alerted": true,
       "sl_at": 1795108009,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZORAUSDT": {
       "created_at": 1794996051,
@@ -4543,7 +4712,8 @@
       "closed_alerted": true,
       "sl_at": 1795022486,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SPACEUSDT": {
       "created_at": 1794990586,
@@ -4587,7 +4757,9 @@
       "tp3_alerted": false,
       "hold_minutes": 1924,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0
     },
     "PHAUSDT": {
       "created_at": 1794986780,
@@ -4634,7 +4806,8 @@
       "closed_alerted": true,
       "sl_at": 1795042375,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     }
   },
   "alert_history": {
@@ -8424,7 +8597,8 @@
       "closed_alerted": true,
       "sl_at": 1794767706,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ASTERUSDT_1794763018": {
       "symbol": "ASTERUSDT",
@@ -8454,7 +8628,8 @@
       "sl_at": 0,
       "tp3_hit": true,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PUMPUSDT_1794778487": {
       "symbol": "PUMPUSDT",
@@ -8483,7 +8658,8 @@
       "closed_alerted": false,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "VIRTUALUSDT_1794783022": {
       "symbol": "VIRTUALUSDT",
@@ -8518,7 +8694,8 @@
       "closed_alerted": true,
       "sl_at": 1794976466,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "EVAAUSDT_1794796786": {
       "symbol": "EVAAUSDT",
@@ -8554,7 +8731,8 @@
       "sl_at": 1794800742,
       "tp3_hit": true,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "UNITASUSDT_1794821652": {
       "symbol": "UNITASUSDT",
@@ -8583,7 +8761,8 @@
       "closed_alerted": false,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "HUSDT_1794976466": {
       "symbol": "HUSDT",
@@ -8624,7 +8803,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "INITUSDT_1794976466": {
       "symbol": "INITUSDT",
@@ -8669,7 +8849,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795154672
+      "sl_at": 1795154672,
+      "tp3_at": 0
     },
     "SOONUSDT_1794978060": {
       "symbol": "SOONUSDT",
@@ -8710,7 +8891,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "JTOUSDT_1794979334": {
       "symbol": "JTOUSDT",
@@ -8755,7 +8937,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795108009
+      "sl_at": 1795108009,
+      "tp3_at": 0
     },
     "USUALUSDT_1794980736": {
       "symbol": "USUALUSDT",
@@ -8796,7 +8979,8 @@
       "closed_alerted": true,
       "sl_at": 1795016852,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ALLOUSDT_1794980736": {
       "symbol": "ALLOUSDT",
@@ -8841,7 +9025,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795168865
+      "sl_at": 1795168865,
+      "tp3_at": 0
     },
     "ZAMAUSDT_1794980736": {
       "symbol": "ZAMAUSDT",
@@ -8886,7 +9071,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795139895
+      "sl_at": 1795139895,
+      "tp3_at": 0
     },
     "BTWUSDT_1794981155": {
       "symbol": "BTWUSDT",
@@ -8927,7 +9113,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "GRVTUSDT_1794981155": {
       "symbol": "GRVTUSDT",
@@ -8969,7 +9156,8 @@
       "closed_alerted": true,
       "sl_at": 1795038187,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ICNTUSDT_1794925800": {
       "symbol": "ICNTUSDT",
@@ -9005,7 +9193,8 @@
       "sl_at": 0,
       "tp3_hit": true,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ICNTUSDT_1794982396": {
       "symbol": "ICNTUSDT",
@@ -9047,7 +9236,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "KAVAUSDT_1794982396": {
       "symbol": "KAVAUSDT",
@@ -9088,7 +9278,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MUBARAKUSDT_1794982396": {
       "symbol": "MUBARAKUSDT",
@@ -9130,7 +9321,8 @@
       "closed_alerted": true,
       "sl_at": 1795016852,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "USELESSUSDT_1794983030": {
       "symbol": "USELESSUSDT",
@@ -9175,7 +9367,8 @@
       "closed_alerted": true,
       "sl_at": 1795168159,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "WLFIUSDT_1794983030": {
       "symbol": "WLFIUSDT",
@@ -9220,7 +9413,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "WUSDT_1794983642": {
       "symbol": "WUSDT",
@@ -9265,7 +9459,8 @@
       "closed_alerted": true,
       "sl_at": 1795187478,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "FLUIDUSDT_1794984239": {
       "symbol": "FLUIDUSDT",
@@ -9310,7 +9505,8 @@
       "closed_alerted": true,
       "sl_at": 1795187821,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PONSUSDT_1794984239": {
       "symbol": "PONSUSDT",
@@ -9352,7 +9548,8 @@
       "closed_alerted": true,
       "sl_at": 1795139895,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "DGAIUSDT_1794984957": {
       "symbol": "DGAIUSDT",
@@ -9397,7 +9594,8 @@
       "trailing_closed": true,
       "sl_alerted": false,
       "closed_alerted": true,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "MAGMAUSDT_1794984957": {
       "symbol": "MAGMAUSDT",
@@ -9438,7 +9636,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SOPHUSDT_1794984957": {
       "symbol": "SOPHUSDT",
@@ -9479,7 +9678,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PENGUUSDT_1794985550": {
       "symbol": "PENGUUSDT",
@@ -9524,7 +9724,8 @@
       "closed_alerted": true,
       "sl_at": 1795140609,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ERAUSDT_1794985550": {
       "symbol": "ERAUSDT",
@@ -9565,7 +9766,8 @@
       "closed_alerted": true,
       "sl_at": 1795021112,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "BARDUSDT_1794986163": {
       "symbol": "BARDUSDT",
@@ -9606,7 +9808,8 @@
       "closed_alerted": true,
       "sl_at": 1795016852,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "BLESSUSDT_1794986163": {
       "symbol": "BLESSUSDT",
@@ -9647,7 +9850,8 @@
       "closed_alerted": true,
       "sl_at": 1794989338,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PHAUSDT_1794986780": {
       "symbol": "PHAUSDT",
@@ -9689,7 +9893,8 @@
       "closed_alerted": true,
       "sl_at": 1795042375,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "BLURUSDT_1794986780": {
       "symbol": "BLURUSDT",
@@ -9734,7 +9939,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZILUSDT_1794986780": {
       "symbol": "ZILUSDT",
@@ -9775,7 +9981,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PYTHUSDT_1794987363": {
       "symbol": "PYTHUSDT",
@@ -9820,7 +10027,8 @@
       "closed_alerted": true,
       "sl_at": 1795181254,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "TRUSTUSDT_1794987363": {
       "symbol": "TRUSTUSDT",
@@ -9865,7 +10073,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 1795139895
     },
     "SKRUSDT_1794987363": {
       "symbol": "SKRUSDT",
@@ -9910,7 +10119,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "ZKPUSDT_1794989338": {
       "symbol": "ZKPUSDT",
@@ -9951,7 +10161,8 @@
       "closed_alerted": true,
       "sl_at": 1794996051,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CCUSDT_1794989338": {
       "symbol": "CCUSDT",
@@ -9996,7 +10207,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795123813
+      "sl_at": 1795123813,
+      "tp3_at": 0
     },
     "GRASSUSDT_1794989338": {
       "symbol": "GRASSUSDT",
@@ -10041,7 +10253,8 @@
       "closed_alerted": true,
       "sl_at": 1795189554,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "VIRTUALUSDT_1794989979": {
       "symbol": "VIRTUALUSDT",
@@ -10083,7 +10296,8 @@
       "closed_alerted": true,
       "sl_at": 1795108704,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PIEVERSEUSDT_1794989979": {
       "symbol": "PIEVERSEUSDT",
@@ -10124,7 +10338,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "OPGUSDT_1794990586": {
       "symbol": "OPGUSDT",
@@ -10165,7 +10380,8 @@
       "closed_alerted": true,
       "sl_at": 1795016852,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "LITUSDT_1794990586": {
       "symbol": "LITUSDT",
@@ -10207,7 +10423,8 @@
       "closed_alerted": true,
       "sl_at": 1795042375,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SPACEUSDT_1794990586": {
       "symbol": "SPACEUSDT",
@@ -10249,7 +10466,8 @@
       "closed_alerted": false,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SENTUSDT_1794991208": {
       "symbol": "SENTUSDT",
@@ -10291,7 +10509,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "NIGHTUSDT_1794991208": {
       "symbol": "NIGHTUSDT",
@@ -10336,7 +10555,8 @@
       "closed_alerted": true,
       "sl_at": 1795187478,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ARIAUSDT_1794991208": {
       "symbol": "ARIAUSDT",
@@ -10377,7 +10597,8 @@
       "closed_alerted": true,
       "sl_at": 1794997267,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PIPPINUSDT_1794991832": {
       "symbol": "PIPPINUSDT",
@@ -10418,7 +10639,8 @@
       "closed_alerted": true,
       "sl_at": 1794995418,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZKUSDT_1794991832": {
       "symbol": "ZKUSDT",
@@ -10460,7 +10682,8 @@
       "closed_alerted": true,
       "sl_at": 1795042036,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZKCUSDT_1794995418": {
       "symbol": "ZKCUSDT",
@@ -10501,7 +10724,8 @@
       "closed_alerted": true,
       "sl_at": 1795002600,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "STABLEUSDT_1794995418": {
       "symbol": "STABLEUSDT",
@@ -10546,7 +10770,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "ZORAUSDT_1794996051": {
       "symbol": "ZORAUSDT",
@@ -10591,7 +10816,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795022486
+      "sl_at": 1795022486,
+      "tp3_at": 0
     },
     "MONUSDT_1794996051": {
       "symbol": "MONUSDT",
@@ -10632,7 +10858,8 @@
       "closed_alerted": true,
       "sl_at": 1795042375,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "IRYSUSDT_1794996051": {
       "symbol": "IRYSUSDT",
@@ -10674,7 +10901,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MMTUSDT_1794996673": {
       "symbol": "MMTUSDT",
@@ -10716,7 +10944,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "0GUSDT_1795002600": {
       "symbol": "0GUSDT",
@@ -10757,7 +10986,8 @@
       "closed_alerted": true,
       "sl_at": 1795018936,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MELANIAUSDT_1795002600": {
       "symbol": "MELANIAUSDT",
@@ -10802,7 +11032,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795139895
+      "sl_at": 1795139895,
+      "tp3_at": 0
     },
     "ASTERUSDT_1795002600": {
       "symbol": "ASTERUSDT",
@@ -10844,7 +11075,8 @@
       "closed_alerted": true,
       "sl_at": 1795086513,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ETHFIUSDT_1795003662": {
       "symbol": "ETHFIUSDT",
@@ -10889,7 +11121,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795190721
+      "sl_at": 1795190721,
+      "tp3_at": 0
     },
     "CAPUSDT_1795004016": {
       "symbol": "CAPUSDT",
@@ -10931,7 +11164,8 @@
       "closed_alerted": true,
       "sl_at": 1795049303,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CROSSUSDT_1795004016": {
       "symbol": "CROSSUSDT",
@@ -10973,7 +11207,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "TAIKOUSDT_1795004016": {
       "symbol": "TAIKOUSDT",
@@ -11018,7 +11253,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795232838
+      "sl_at": 1795232838,
+      "tp3_at": 0
     },
     "LAUSDT_1795004377": {
       "symbol": "LAUSDT",
@@ -11063,7 +11299,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795188156
+      "sl_at": 1795188156,
+      "tp3_at": 0
     },
     "RUNEUSDT_1795004377": {
       "symbol": "RUNEUSDT",
@@ -11104,7 +11341,8 @@
       "closed_alerted": true,
       "sl_at": 1795018936,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "HUMAUSDT_1795004730": {
       "symbol": "HUMAUSDT",
@@ -11146,7 +11384,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "FFUSDT_1795006367": {
       "symbol": "FFUSDT",
@@ -11191,7 +11430,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "MOCAUSDT_1795006734": {
       "symbol": "MOCAUSDT",
@@ -11232,7 +11472,8 @@
       "closed_alerted": true,
       "sl_at": 1795016852,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PIPPINUSDT_1795007078": {
       "symbol": "PIPPINUSDT",
@@ -11273,7 +11514,8 @@
       "closed_alerted": true,
       "sl_at": 1795011212,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "EVAAUSDT_1795008446": {
       "symbol": "EVAAUSDT",
@@ -11315,7 +11557,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "JCTUSDT_1795010848": {
       "symbol": "JCTUSDT",
@@ -11357,7 +11600,8 @@
       "closed_alerted": true,
       "sl_at": 1795108350,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZKCUSDT_1795010848": {
       "symbol": "ZKCUSDT",
@@ -11398,7 +11642,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "AKEUSDT_1795010848": {
       "symbol": "AKEUSDT",
@@ -11440,7 +11685,8 @@
       "closed_alerted": true,
       "sl_at": 1795099539,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "AEROUSDT_1795012246": {
       "symbol": "AEROUSDT",
@@ -11482,7 +11728,8 @@
       "closed_alerted": true,
       "sl_at": 1795139895,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "BEAMUSDT_1795013627": {
       "symbol": "BEAMUSDT",
@@ -11524,7 +11771,8 @@
       "closed_alerted": true,
       "sl_at": 1795074200,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "BLESSUSDT_1795017210": {
       "symbol": "BLESSUSDT",
@@ -11566,7 +11814,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "RAREUSDT_1795017559": {
       "symbol": "RAREUSDT",
@@ -11608,7 +11857,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "BARDUSDT_1795018256": {
       "symbol": "BARDUSDT",
@@ -11650,7 +11900,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZKPUSDT_1795020755": {
       "symbol": "ZKPUSDT",
@@ -11692,7 +11943,8 @@
       "closed_alerted": true,
       "sl_at": 1795051741,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SYRUPUSDT_1795021453": {
       "symbol": "SYRUPUSDT",
@@ -11737,7 +11989,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795190721
+      "sl_at": 1795190721,
+      "tp3_at": 0
     },
     "SOONUSDT_1795021799": {
       "symbol": "SOONUSDT",
@@ -11782,7 +12035,8 @@
       "closed_alerted": true,
       "sl_at": 1795189554,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PIPPINUSDT_1795021799": {
       "symbol": "PIPPINUSDT",
@@ -11823,7 +12077,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "RUNEUSDT_1795022486": {
       "symbol": "RUNEUSDT",
@@ -11868,7 +12123,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795188156
+      "sl_at": 1795188156,
+      "tp3_at": 0
     },
     "BTWUSDT_1795024453": {
       "symbol": "BTWUSDT",
@@ -11910,7 +12166,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MOCAUSDT_1795025127": {
       "symbol": "MOCAUSDT",
@@ -11952,7 +12209,8 @@
       "closed_alerted": true,
       "sl_at": 1795108009,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ARIAUSDT_1795025812": {
       "symbol": "ARIAUSDT",
@@ -11994,7 +12252,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "KAVAUSDT_1795026830": {
       "symbol": "KAVAUSDT",
@@ -12039,7 +12298,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795208653
+      "sl_at": 1795208653,
+      "tp3_at": 0
     },
     "SOPHUSDT_1795028323": {
       "symbol": "SOPHUSDT",
@@ -12084,7 +12344,8 @@
       "closed_alerted": true,
       "sl_at": 1795246058,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MAGMAUSDT_1795028677": {
       "symbol": "MAGMAUSDT",
@@ -12129,7 +12390,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795193373
+      "sl_at": 1795193373,
+      "tp3_at": 0
     },
     "ZILUSDT_1795030040": {
       "symbol": "ZILUSDT",
@@ -12171,7 +12433,8 @@
       "closed_alerted": true,
       "sl_at": 1795042375,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "2ZUSDT_1795034658": {
       "symbol": "2ZUSDT",
@@ -12216,7 +12479,8 @@
       "closed_alerted": true,
       "sl_at": 1795139895,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "AXISUSDT_1795034658": {
       "symbol": "AXISUSDT",
@@ -12261,7 +12525,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795205708
+      "sl_at": 1795205708,
+      "tp3_at": 0
     },
     "0GUSDT_1795035359": {
       "symbol": "0GUSDT",
@@ -12306,7 +12571,8 @@
       "closed_alerted": true,
       "sl_at": 1795139895,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZKCUSDT_1795035698": {
       "symbol": "ZKCUSDT",
@@ -12348,7 +12614,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PIPPINUSDT_1795036739": {
       "symbol": "PIPPINUSDT",
@@ -12390,7 +12657,8 @@
       "closed_alerted": true,
       "sl_at": 1795051741,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "USUALUSDT_1795038187": {
       "symbol": "USUALUSDT",
@@ -12435,7 +12703,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "PIEVERSEUSDT_1795039202": {
       "symbol": "PIEVERSEUSDT",
@@ -12477,7 +12746,8 @@
       "closed_alerted": true,
       "sl_at": 1795052765,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ERAUSDT_1795041691": {
       "symbol": "ERAUSDT",
@@ -12522,7 +12792,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "MEGAUSDT_1795043393": {
       "symbol": "MEGAUSDT",
@@ -12567,7 +12838,8 @@
       "closed_alerted": true,
       "sl_at": 1795146871,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CHIPUSDT_1795043745": {
       "symbol": "CHIPUSDT",
@@ -12609,7 +12881,8 @@
       "closed_alerted": true,
       "sl_at": 1795142014,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "HUSDT_1795044096": {
       "symbol": "HUSDT",
@@ -12654,7 +12927,8 @@
       "closed_alerted": true,
       "sl_at": 1795155012,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MONUSDT_1795044443": {
       "symbol": "MONUSDT",
@@ -12696,7 +12970,8 @@
       "closed_alerted": true,
       "sl_at": 1795107290,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "OPGUSDT_1795044443": {
       "symbol": "OPGUSDT",
@@ -12738,7 +13013,8 @@
       "closed_alerted": true,
       "sl_at": 1795085428,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MUBARAKUSDT_1795045561": {
       "symbol": "MUBARAKUSDT",
@@ -12780,7 +13056,8 @@
       "closed_alerted": true,
       "sl_at": 1795103229,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "BLESSUSDT_1795046913": {
       "symbol": "BLESSUSDT",
@@ -12822,7 +13099,8 @@
       "closed_alerted": true,
       "sl_at": 1795103229,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "BREVUSDT_1795047915": {
       "symbol": "BREVUSDT",
@@ -12864,7 +13142,8 @@
       "closed_alerted": true,
       "sl_at": 1795139895,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "VELVETUSDT_1795049303": {
       "symbol": "VELVETUSDT",
@@ -12909,7 +13188,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "LITUSDT_1795049660": {
       "symbol": "LITUSDT",
@@ -12954,7 +13234,8 @@
       "closed_alerted": true,
       "sl_at": 1795178031,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZILUSDT_1795049660": {
       "symbol": "ZILUSDT",
@@ -12999,7 +13280,8 @@
       "closed_alerted": true,
       "sl_at": 1795154672,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "BIRBUSDT_1795052425": {
       "symbol": "BIRBUSDT",
@@ -13044,7 +13326,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795170266
+      "sl_at": 1795170266,
+      "tp3_at": 0
     },
     "PIEVERSEUSDT_1795053783": {
       "symbol": "PIEVERSEUSDT",
@@ -13086,7 +13369,8 @@
       "closed_alerted": true,
       "sl_at": 1795060675,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZKUSDT_1795060675": {
       "symbol": "ZKUSDT",
@@ -13131,7 +13415,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795139895
+      "sl_at": 1795139895,
+      "tp3_at": 0
     },
     "PIPPINUSDT_1795061024": {
       "symbol": "PIPPINUSDT",
@@ -13176,7 +13461,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "BEAMUSDT_1795076822": {
       "symbol": "BEAMUSDT",
@@ -13221,7 +13507,8 @@
       "closed_alerted": true,
       "sl_at": 1795180904,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SENTUSDT_1795083286": {
       "symbol": "SENTUSDT",
@@ -13263,7 +13550,8 @@
       "closed_alerted": true,
       "sl_at": 1795103229,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "IRYSUSDT_1795092871": {
       "symbol": "IRYSUSDT",
@@ -13305,7 +13593,8 @@
       "closed_alerted": true,
       "sl_at": 1795103229,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CFGUSDT_1795092871": {
       "symbol": "CFGUSDT",
@@ -13347,7 +13636,8 @@
       "closed_alerted": true,
       "sl_at": 1795111576,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "HUMAUSDT_1795093253": {
       "symbol": "HUMAUSDT",
@@ -13392,7 +13682,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "RAVEUSDT_1795103940": {
       "symbol": "RAVEUSDT",
@@ -13437,7 +13728,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "USUSDT_1795105006": {
       "symbol": "USUSDT",
@@ -13482,7 +13774,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "AKEUSDT_1795106071": {
       "symbol": "AKEUSDT",
@@ -13527,7 +13820,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795156055
+      "sl_at": 1795156055,
+      "tp3_at": 0
     },
     "ASTERUSDT_1795106071": {
       "symbol": "ASTERUSDT",
@@ -13572,7 +13866,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795231986
+      "sl_at": 1795231986,
+      "tp3_at": 0
     },
     "IRYSUSDT_1795107290": {
       "symbol": "IRYSUSDT",
@@ -13617,7 +13912,8 @@
       "closed_alerted": true,
       "sl_at": 1795147591,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ZKPUSDT_1795107290": {
       "symbol": "ZKPUSDT",
@@ -13662,7 +13958,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "VIRTUALUSDT_1795110099": {
       "symbol": "VIRTUALUSDT",
@@ -13707,7 +14004,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795176290
+      "sl_at": 1795176290,
+      "tp3_at": 0
     },
     "BTWUSDT_1795111219": {
       "symbol": "BTWUSDT",
@@ -13752,7 +14050,8 @@
       "trailing_closed": true,
       "sl_alerted": false,
       "closed_alerted": true,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "YBUSDT_1795114359": {
       "symbol": "YBUSDT",
@@ -13797,7 +14096,8 @@
       "closed_alerted": true,
       "sl_at": 1795122059,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CROSSUSDT_1795116493": {
       "symbol": "CROSSUSDT",
@@ -13842,7 +14142,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795153971
+      "sl_at": 1795153971,
+      "tp3_at": 0
     },
     "NAORISUSDT_1795118707": {
       "symbol": "NAORISUSDT",
@@ -13887,7 +14188,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "ZKCUSDT_1795122403": {
       "symbol": "ZKCUSDT",
@@ -13932,7 +14234,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "ARIAUSDT_1795124403": {
       "symbol": "ARIAUSDT",
@@ -13977,7 +14280,8 @@
       "closed_alerted": true,
       "sl_at": 1795170624,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CAPUSDT_1795124403": {
       "symbol": "CAPUSDT",
@@ -14022,7 +14326,8 @@
       "closed_alerted": true,
       "sl_at": 1795212799,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "EVAAUSDT_1795126509": {
       "symbol": "EVAAUSDT",
@@ -14067,7 +14372,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "GRVTUSDT_1795127211": {
       "symbol": "GRVTUSDT",
@@ -14112,7 +14418,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795231986
+      "sl_at": 1795231986,
+      "tp3_at": 0
     },
     "MOCAUSDT_1795128327": {
       "symbol": "MOCAUSDT",
@@ -14157,7 +14464,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "JCTUSDT_1795130045": {
       "symbol": "JCTUSDT",
@@ -14202,7 +14510,8 @@
       "closed_alerted": true,
       "sl_at": 1795148987,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MONUSDT_1795131962": {
       "symbol": "MONUSDT",
@@ -14247,7 +14556,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795226403
+      "sl_at": 1795226403,
+      "tp3_at": 0
     },
     "MMTUSDT_1795137319": {
       "symbol": "MMTUSDT",
@@ -14292,7 +14602,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795158750
+      "sl_at": 1795158750,
+      "tp3_at": 0
     },
     "BLESSUSDT_1795137319": {
       "symbol": "BLESSUSDT",
@@ -14334,7 +14645,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "CFGUSDT_1795143505": {
       "symbol": "CFGUSDT",
@@ -14379,7 +14691,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795202578
+      "sl_at": 1795202578,
+      "tp3_at": 0
     },
     "CHIPUSDT_1795143505": {
       "symbol": "CHIPUSDT",
@@ -14424,7 +14737,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795189554
+      "sl_at": 1795189554,
+      "tp3_at": 0
     },
     "PIEVERSEUSDT_1795147591": {
       "symbol": "PIEVERSEUSDT",
@@ -14469,7 +14783,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "BREVUSDT_1795148287": {
       "symbol": "BREVUSDT",
@@ -14514,7 +14829,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795180555
+      "sl_at": 1795180555,
+      "tp3_at": 0
     },
     "ICNTUSDT_1795151567": {
       "symbol": "ICNTUSDT",
@@ -14556,7 +14872,8 @@
       "closed_alerted": true,
       "sl_at": 1795168159,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "OPGUSDT_1795152267": {
       "symbol": "OPGUSDT",
@@ -14601,7 +14918,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "SKYUSDT_1795154329": {
       "symbol": "SKYUSDT",
@@ -14646,7 +14964,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "EIGENUSDT_1795156413": {
       "symbol": "EIGENUSDT",
@@ -14691,7 +15010,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795187821
+      "sl_at": 1795187821,
+      "tp3_at": 0
     },
     "BLESSUSDT_1795159785": {
       "symbol": "BLESSUSDT",
@@ -14736,7 +15056,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "CTRUSDT_1795160485": {
       "symbol": "CTRUSDT",
@@ -14781,7 +15102,8 @@
       "closed_alerted": true,
       "sl_at": 1795172597,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "VVVUSDT_1795162274": {
       "symbol": "VVVUSDT",
@@ -14826,7 +15148,8 @@
       "closed_alerted": true,
       "sl_at": 1795192199,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MUBARAKUSDT_1795162637": {
       "symbol": "MUBARAKUSDT",
@@ -14871,7 +15194,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795187821
+      "sl_at": 1795187821,
+      "tp3_at": 0
     },
     "AEROUSDT_1795163359": {
       "symbol": "AEROUSDT",
@@ -14916,7 +15240,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795189554
+      "sl_at": 1795189554,
+      "tp3_at": 0
     },
     "BARDUSDT_1795172597": {
       "symbol": "BARDUSDT",
@@ -14961,7 +15286,8 @@
       "closed_alerted": true,
       "sl_at": 1795181612,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SENTUSDT_1795175041": {
       "symbol": "SENTUSDT",
@@ -15006,7 +15332,8 @@
       "closed_alerted": true,
       "sl_at": 1795190721,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ICNTUSDT_1795176290": {
       "symbol": "ICNTUSDT",
@@ -15051,7 +15378,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795190721
+      "sl_at": 1795190721,
+      "tp3_at": 0
     },
     "RAREUSDT_1795177327": {
       "symbol": "RAREUSDT",
@@ -15096,7 +15424,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "GRAMUSDT_1795179114": {
       "symbol": "GRAMUSDT",
@@ -15141,7 +15470,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795202578
+      "sl_at": 1795202578,
+      "tp3_at": 0
     },
     "CYBERUSDT_1795179476": {
       "symbol": "CYBERUSDT",
@@ -15186,7 +15516,8 @@
       "closed_alerted": true,
       "sl_at": 1795190721,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PONSUSDT_1795181961": {
       "symbol": "PONSUSDT",
@@ -15231,7 +15562,8 @@
       "closed_alerted": true,
       "sl_at": 1795200452,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SAPIENUSDT_1795183625": {
       "symbol": "SAPIENUSDT",
@@ -15276,7 +15608,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "XPLUSDT_1795183625": {
       "symbol": "XPLUSDT",
@@ -15321,7 +15654,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "HYPEUSDT_1795190721": {
       "symbol": "HYPEUSDT",
@@ -15366,7 +15700,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795231986
+      "sl_at": 1795231986,
+      "tp3_at": 0
     },
     "ARUSDT_1795190721": {
       "symbol": "ARUSDT",
@@ -15411,7 +15746,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795234273
+      "sl_at": 1795234273,
+      "tp3_at": 0
     },
     "BROCCOLIUSDT_1795191103": {
       "symbol": "BROCCOLIUSDT",
@@ -15456,7 +15792,8 @@
       "closed_alerted": true,
       "sl_at": 1795232323,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "SUSDT_1795191103": {
       "symbol": "SUSDT",
@@ -15501,7 +15838,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795231986
+      "sl_at": 1795231986,
+      "tp3_at": 0
     },
     "CTRUSDT_1795191476": {
       "symbol": "CTRUSDT",
@@ -15546,7 +15884,8 @@
       "closed_alerted": false,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "VELVETUSDT_1795191476": {
       "symbol": "VELVETUSDT",
@@ -15591,7 +15930,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795277148
+      "sl_at": 1795277148,
+      "tp3_at": 0
     },
     "NIGHTUSDT_1795191839": {
       "symbol": "NIGHTUSDT",
@@ -15636,7 +15976,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "WUSDT_1795192199": {
       "symbol": "WUSDT",
@@ -15681,7 +16022,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795234273
+      "sl_at": 1795234273,
+      "tp3_at": 0
     },
     "BEAMUSDT_1795192565": {
       "symbol": "BEAMUSDT",
@@ -15726,7 +16068,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "GRASSUSDT_1795192565": {
       "symbol": "GRASSUSDT",
@@ -15771,7 +16114,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795231986
+      "sl_at": 1795231986,
+      "tp3_at": 0
     },
     "HUSDT_1795192927": {
       "symbol": "HUSDT",
@@ -15816,7 +16160,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795200452
+      "sl_at": 1795200452,
+      "tp3_at": 0
     },
     "CTUSDT_1795195515": {
       "symbol": "CTUSDT",
@@ -15861,7 +16206,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795233908
+      "sl_at": 1795233908,
+      "tp3_at": 0
     },
     "MEGAUSDT_1795195515": {
       "symbol": "MEGAUSDT",
@@ -15906,7 +16252,8 @@
       "closed_alerted": true,
       "sl_at": 1795232838,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "YBUSDT_1795197629": {
       "symbol": "YBUSDT",
@@ -15951,7 +16298,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "CYBERUSDT_1795201874": {
       "symbol": "CYBERUSDT",
@@ -15996,7 +16344,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795229526
+      "sl_at": 1795229526,
+      "tp3_at": 0
     },
     "ENSOUSDT_1795204931": {
       "symbol": "ENSOUSDT",
@@ -16041,7 +16390,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "SENTUSDT_1795205287": {
       "symbol": "SENTUSDT",
@@ -16086,7 +16436,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "USELESSUSDT_1795207563": {
       "symbol": "USELESSUSDT",
@@ -16131,7 +16482,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795234273
+      "sl_at": 1795234273,
+      "tp3_at": 0
     },
     "2ZUSDT_1795207563": {
       "symbol": "2ZUSDT",
@@ -16176,7 +16528,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "BARDUSDT_1795207933": {
       "symbol": "BARDUSDT",
@@ -16221,7 +16574,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "EULUSDT_1795209009": {
       "symbol": "EULUSDT",
@@ -16266,7 +16620,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "CARVUSDT_1795210079": {
       "symbol": "CARVUSDT",
@@ -16311,7 +16666,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "PENGUUSDT_1795211377": {
       "symbol": "PENGUUSDT",
@@ -16356,7 +16712,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "JCTUSDT_1795221764": {
       "symbol": "JCTUSDT",
@@ -16401,7 +16758,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795234273
+      "sl_at": 1795234273,
+      "tp3_at": 0
     },
     "ZILUSDT_1795221764": {
       "symbol": "ZILUSDT",
@@ -16446,7 +16804,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795307669
+      "sl_at": 1795307669,
+      "tp3_at": 0
     },
     "ARIAUSDT_1795222155": {
       "symbol": "ARIAUSDT",
@@ -16491,7 +16850,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795267379
+      "sl_at": 1795267379,
+      "tp3_at": 0
     },
     "TRUMPUSDT_1795222528": {
       "symbol": "TRUMPUSDT",
@@ -16536,7 +16896,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795234273
+      "sl_at": 1795234273,
+      "tp3_at": 0
     },
     "LITUSDT_1795226403": {
       "symbol": "LITUSDT",
@@ -16581,7 +16942,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "PONSUSDT_1795226403": {
       "symbol": "PONSUSDT",
@@ -16626,7 +16988,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795234273
+      "sl_at": 1795234273,
+      "tp3_at": 0
     },
     "IRYSUSDT_1795226784": {
       "symbol": "IRYSUSDT",
@@ -16671,7 +17034,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795230591
+      "sl_at": 1795230591,
+      "tp3_at": 0
     },
     "CAPUSDT_1795227623": {
       "symbol": "CAPUSDT",
@@ -16716,7 +17080,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "EVAAUSDT_1795230952": {
       "symbol": "EVAAUSDT",
@@ -16761,7 +17126,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795235358
+      "sl_at": 1795235358,
+      "tp3_at": 0
     },
     "FLUIDUSDT_1795234632": {
       "symbol": "FLUIDUSDT",
@@ -16806,7 +17172,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "BROCCOLIUSDT_1795234632": {
       "symbol": "BROCCOLIUSDT",
@@ -16851,7 +17218,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "DOSUSDT_1795235358": {
       "symbol": "DOSUSDT",
@@ -16896,7 +17264,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795316704
+      "sl_at": 1795316704,
+      "tp3_at": 0
     },
     "SOONUSDT_1795236410": {
       "symbol": "SOONUSDT",
@@ -16941,7 +17310,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "MEGAUSDT_1795237138": {
       "symbol": "MEGAUSDT",
@@ -16986,7 +17356,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "0GUSDT_1795242119": {
       "symbol": "0GUSDT",
@@ -17031,7 +17402,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "PYTHUSDT_1795242497": {
       "symbol": "PYTHUSDT",
@@ -17076,7 +17448,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "IDOLUSDT_1795248057": {
       "symbol": "IDOLUSDT",
@@ -17121,7 +17494,8 @@
       "trailing_closed": true,
       "sl_alerted": false,
       "closed_alerted": true,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 1795268931
     },
     "SOPHUSDT_1795252660": {
       "symbol": "SOPHUSDT",
@@ -17166,7 +17540,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "ORCAUSDT_1795260794": {
       "symbol": "ORCAUSDT",
@@ -17211,7 +17586,8 @@
       "trailing_closed": true,
       "sl_alerted": false,
       "closed_alerted": true,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "CAKEUSDT_1795260794": {
       "symbol": "CAKEUSDT",
@@ -17256,7 +17632,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "KERNELUSDT_1795262395": {
       "symbol": "KERNELUSDT",
@@ -17301,7 +17678,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "BLURUSDT_1795263829": {
       "symbol": "BLURUSDT",
@@ -17346,7 +17724,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "PLUMEUSDT_1795264778": {
       "symbol": "PLUMEUSDT",
@@ -17391,7 +17770,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "VVVUSDT_1795265541": {
       "symbol": "VVVUSDT",
@@ -17436,7 +17816,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "GRAMUSDT_1795272026": {
       "symbol": "GRAMUSDT",
@@ -17481,7 +17862,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "ASTERUSDT_1795272750": {
       "symbol": "ASTERUSDT",
@@ -17526,7 +17908,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "BRUSDT_1795275269": {
       "symbol": "BRUSDT",
@@ -17571,7 +17954,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795319654
+      "sl_at": 1795319654,
+      "tp3_at": 0
     },
     "AEROUSDT_1795280672": {
       "symbol": "AEROUSDT",
@@ -17616,7 +18000,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "CYBERUSDT_1795281045": {
       "symbol": "CYBERUSDT",
@@ -17661,7 +18046,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "MORPHOUSDT_1795286212": {
       "symbol": "MORPHOUSDT",
@@ -17706,7 +18092,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "PARTIUSDT_1795288002": {
       "symbol": "PARTIUSDT",
@@ -17751,7 +18138,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "ELSAUSDT_1795291344": {
       "symbol": "ELSAUSDT",
@@ -17796,7 +18184,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "VIRTUALUSDT_1795291344": {
       "symbol": "VIRTUALUSDT",
@@ -17841,7 +18230,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "HYPEUSDT_1795292781": {
       "symbol": "HYPEUSDT",
@@ -17886,7 +18276,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "MAGMAUSDT_1795293727": {
       "symbol": "MAGMAUSDT",
@@ -17931,7 +18322,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "AKEUSDT_1795300146": {
       "symbol": "AKEUSDT",
@@ -17976,7 +18368,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795306507
+      "sl_at": 1795306507,
+      "tp3_at": 0
     },
     "ETHFIUSDT_1795302309": {
       "symbol": "ETHFIUSDT",
@@ -18021,7 +18414,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "BTWUSDT_1795304027": {
       "symbol": "BTWUSDT",
@@ -18066,7 +18460,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795321801
+      "sl_at": 1795321801,
+      "tp3_at": 0
     },
     "CTUSDT_1795304391": {
       "symbol": "CTUSDT",
@@ -18111,7 +18506,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "BREVUSDT_1795304748": {
       "symbol": "BREVUSDT",
@@ -18156,7 +18552,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "MONUSDT_1795305110": {
       "symbol": "MONUSDT",
@@ -18201,7 +18598,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "EVAAUSDT_1795305110": {
       "symbol": "EVAAUSDT",
@@ -18246,7 +18644,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795312664
+      "sl_at": 1795312664,
+      "tp3_at": 0
     },
     "MMTUSDT_1795306170": {
       "symbol": "MMTUSDT",
@@ -18291,7 +18690,8 @@
       "trailing_closed": true,
       "sl_alerted": false,
       "closed_alerted": true,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 1795346281
     },
     "ICNTUSDT_1795308759": {
       "symbol": "ICNTUSDT",
@@ -18336,7 +18736,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "IRYSUSDT_1795315992": {
       "symbol": "IRYSUSDT",
@@ -18381,7 +18782,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795349152
+      "sl_at": 1795349152,
+      "tp3_at": 0
     },
     "ARIAUSDT_1795320711": {
       "symbol": "ARIAUSDT",
@@ -18426,7 +18828,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "AKEUSDT_1795321452": {
       "symbol": "AKEUSDT",
@@ -18471,7 +18874,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795323933
+      "sl_at": 1795323933,
+      "tp3_at": 0
     },
     "EVAAUSDT_1795324670": {
       "symbol": "EVAAUSDT",
@@ -18516,7 +18920,8 @@
       "trailing_closed": false,
       "sl_alerted": true,
       "closed_alerted": true,
-      "sl_at": 1795325024
+      "sl_at": 1795325024,
+      "tp3_at": 0
     },
     "ORCAUSDT_1795348792": {
       "symbol": "ORCAUSDT",
@@ -18561,7 +18966,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "DGAIUSDT_1795351517": {
       "symbol": "DGAIUSDT",
@@ -18606,7 +19012,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "IRYSUSDT_1795351517": {
       "symbol": "IRYSUSDT",
@@ -18651,7 +19058,8 @@
       "trailing_closed": false,
       "sl_alerted": false,
       "closed_alerted": false,
-      "sl_at": 0
+      "sl_at": 0,
+      "tp3_at": 0
     },
     "PENGUUSDT_1794746836": {
       "symbol": "PENGUUSDT",
@@ -18686,7 +19094,8 @@
       "closed_alerted": true,
       "sl_at": 1794976466,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "UAIUSDT_1794746527": {
       "symbol": "UAIUSDT",
@@ -18721,7 +19130,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "HYPEUSDT_1794744726": {
       "symbol": "HYPEUSDT",
@@ -18766,7 +19176,8 @@
       "closed_alerted": true,
       "sl_at": 1795176290,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "1000BONKUSDT_1794743638": {
       "symbol": "1000BONKUSDT",
@@ -18795,7 +19206,8 @@
       "closed_alerted": false,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "TRUMPUSDT_1794743038": {
       "symbol": "TRUMPUSDT",
@@ -18840,7 +19252,8 @@
       "closed_alerted": true,
       "sl_at": 1795174693,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "GRAMUSDT_1794741572": {
       "symbol": "GRAMUSDT",
@@ -18882,7 +19295,8 @@
       "closed_alerted": false,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PIUSDT_1794741572": {
       "symbol": "PIUSDT",
@@ -18911,7 +19325,8 @@
       "closed_alerted": false,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "XPLUSDT_1794741572": {
       "symbol": "XPLUSDT",
@@ -18953,7 +19368,8 @@
       "closed_alerted": false,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PEPEUSDT_1794740973": {
       "symbol": "PEPEUSDT",
@@ -18982,7 +19398,8 @@
       "closed_alerted": true,
       "sl_at": 1794802096,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PONSUSDT_1794739772": {
       "symbol": "PONSUSDT",
@@ -19017,7 +19434,8 @@
       "closed_alerted": true,
       "sl_at": 1794975188,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "PYTHUSDT_1794739168": {
       "symbol": "PYTHUSDT",
@@ -19052,7 +19470,8 @@
       "closed_alerted": true,
       "sl_at": 1794975188,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "USELESSUSDT_1794737968": {
       "symbol": "USELESSUSDT",
@@ -19087,7 +19506,8 @@
       "closed_alerted": true,
       "sl_at": 1794809873,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ARIAUSDT_1794733602": {
       "symbol": "ARIAUSDT",
@@ -19117,7 +19537,8 @@
       "sl_at": 0,
       "trailing_closed": true,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "LITUSDT_1794733901": {
       "symbol": "LITUSDT",
@@ -19146,7 +19567,8 @@
       "closed_alerted": true,
       "sl_at": 1794766206,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "ETHFIUSDT_1794734501": {
       "symbol": "ETHFIUSDT",
@@ -19181,7 +19603,8 @@
       "closed_alerted": true,
       "sl_at": 1794809873,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "VVVUSDT_1794732102": {
       "symbol": "VVVUSDT",
@@ -19223,7 +19646,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "BANANAS31USDT_1794726571": {
       "symbol": "BANANAS31USDT",
@@ -19253,7 +19677,8 @@
       "sl_at": 0,
       "trailing_closed": true,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "GRASSUSDT_1794723913": {
       "symbol": "GRASSUSDT",
@@ -19282,7 +19707,8 @@
       "closed_alerted": true,
       "sl_at": 1794750217,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "MEGAUSDT_1794723613": {
       "symbol": "MEGAUSDT",
@@ -19323,7 +19749,8 @@
       "closed_alerted": true,
       "sl_at": 0,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "APRUSDT_1794722093": {
       "symbol": "APRUSDT",
@@ -19352,7 +19779,8 @@
       "closed_alerted": true,
       "sl_at": 1794748840,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     },
     "NIGHTUSDT_1794722093": {
       "symbol": "NIGHTUSDT",
@@ -19381,7 +19809,8 @@
       "closed_alerted": true,
       "sl_at": 1794793492,
       "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0
     }
   },
   "oi_snapshot": {
