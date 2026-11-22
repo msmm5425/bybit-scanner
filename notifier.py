@@ -209,6 +209,7 @@ def build_x_post_message(res):
     p2 = round(to_float(tp_pcts[1], 15.0), 1)
     p3 = round(to_float(tp_pcts[2], 22.0), 1)
     hook_line = build_x_hook_line(res)
+    footer_tags = "#코인시황 #코인신호 #코인 #재테크"
 
     if is_long:
         return (
@@ -222,7 +223,8 @@ def build_x_post_message(res):
             f"- tp2: {fmt_price(tps[1])}(+{p2:g}%)\n"
             f"- tp3: {fmt_price(tps[2])}(+{p3:g}%)\n\n"
             f"#{base} 어디까지 오를거 같나요?\n"
-            "보유중이신 분들 계신가요?"
+            "보유중이신 분들 계신가요?\n\n"
+            f"{footer_tags}"
         )
 
     return (
@@ -235,7 +237,8 @@ def build_x_post_message(res):
         f"- tp2: {fmt_price(tps[1])}(+{p2:g}%)\n"
         f"- tp3: {fmt_price(tps[2])}(+{p3:g}%)\n\n"
         f"#{base} 어디까지 오를거 같나요?\n"
-        "보유중이신 분들 계신가요?"
+        "보유중이신 분들 계신가요?\n\n"
+        f"{footer_tags}"
     )
 
 
@@ -320,13 +323,11 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     fib_dir_tag = "FIB"
 
     if fib_span > price * 0.005 and len(candles_js) >= 10:
-        # 스윙 시작점부터 우측 끝까지 선 작도 (최소 좌측 절반 이상 폭 확보)
         start_idx = min(min(high_idx, low_idx), max(0, len(candles_js) // 2))
         fib_start_time = candles_js[start_idx]["time"]
         is_up_impulse = low_idx <= high_idx
         fib_dir_tag = "FIB (L→H)" if is_up_impulse else "FIB (H→L)"
 
-        # 핵심 피보나치 비율 및 트레이딩뷰 스타일 배색 (priority 높을수록 라벨 우선 표기)
         fib_specs = [
             (0.0,   "0",     "#787b86", 1, 1, 1),
             (0.236, "0.236", "#9598a1", 1, 3, 2),
@@ -507,7 +508,6 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
       drawBand('0.5','0.618','rgba(255, 152, 0, 0.09)');
       drawBand('0.382','0.5','rgba(77, 208, 225, 0.045)');
 
-      // 우선순위 순으로 라벨 배치 (상단 MA 범례 및 인접 라벨 겹침 자동 회피)
       const placedY=[];
       const sortedFibs=[...fibLevels].sort((a,b)=>b.priority-a.priority);
       sortedFibs.forEach(fl=>{{
@@ -561,7 +561,6 @@ def generate_signal_chart_bytes(res):
     df = pd.DataFrame()
 
     if is_long:
-        # 장기 포지션: 12H(720) 최우선 조회 → 실패 시 4H(300봉)→12H 리샘플링 → 신규상장 예외 시 4H/1H 폴백
         df = fetch_exact_bybit_klines(symbol, interval="720", limit=130, min_rows=20)
         if df.empty:
             df_4h_raw = fetch_exact_bybit_klines(symbol, interval="240", limit=300, min_rows=30)
@@ -577,7 +576,6 @@ def generate_signal_chart_bytes(res):
             df = fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=20)
             actual_tf = "60"
     else:
-        # 단기·스윙 포지션: 1H(60) 최우선 조회 → 신규상장 예외 시 15m 폴백
         df = fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=20)
         if df.empty:
             df = fetch_exact_bybit_klines(symbol, interval="15", limit=130, min_rows=20)
