@@ -208,15 +208,11 @@ def _evaluate_weekly_daily_pro_filter(
 ):
     """
     [전문 트레이더 기준 주봉(1W) · 일봉(1D) 탑다운 + PPO(12,26,9) 검증 엔진]
-    - 50배 대시세의 '좋은 하자'(심층 낙폭, 저시총 바닥 매집봉, D6 와이코프 스프링, 숏 함정) 적극 보호·가산
-    - 선형 MACD 대신 비율 PPO의 0선 돌파/안착·바닥 반전·하락 가속 여부를 판별
     """
     out = {"allow": True, "score_adj": 0, "htf_tag": "", "reasons": [], "block_reason": ""}
     is_spring_d6 = "D6" in str(sub_strategy or "").upper()
 
-    # -------------------------------------------------------------------------
     # 1) 일봉(1D) 구조 및 1D PPO 진단
-    # -------------------------------------------------------------------------
     has_1d = df_1d is not None and not df_1d.empty and len(df_1d) >= 14
     dist_1d_ma20 = 0.0
     dd_30d_pct = 0.0
@@ -272,9 +268,7 @@ def _evaluate_weekly_daily_pro_filter(
             ppo1d_turn_up = (h1d_now > h1d_prev) and (p1d_now >= to_float(p1d.iloc[-2]))
             ppo1d_bear_accel = (p1d_now < 0.0) and (p1d_now < s1d_now) and (h1d_now < h1d_prev)
 
-    # -------------------------------------------------------------------------
     # 2) 주봉(1W) 구조 및 1W PPO 진단
-    # -------------------------------------------------------------------------
     has_1w = df_1w is not None and not df_1w.empty and len(df_1w) >= 4
     dist_1w_ma10 = 0.0
     dd_3w_pct = 0.0
@@ -346,9 +340,7 @@ def _evaluate_weekly_daily_pro_filter(
             ppo1w_turn_up = (h1w_now > h1w_prev) and (p1w_now >= to_float(p1w.iloc[-2]))
             ppo1w_bear_accel = (p1w_now < 0.0) and (p1w_now < s1w_now) and (h1w_now < h1w_prev)
 
-    # -------------------------------------------------------------------------
     # 3) 장기 포지션 (Track D1~D6) 전용 판정
-    # -------------------------------------------------------------------------
     if mode == "LONG":
         if has_1d:
             if (not is_spring_d6) and made_new_30d_low_recently and dd_30d_pct >= 45.0:
@@ -381,7 +373,6 @@ def _evaluate_weekly_daily_pro_filter(
                 out.update({"allow": False, "block_reason": f"1W 10MA 극단 괴리({dist_1w_ma10:+.1f}%)"})
                 return out
 
-            # 주봉 PPO 0선 안착 / 바닥 반전 + 캔들 구조 통합 가산점
             if ppo1w_zero_up:
                 out["score_adj"] += 4
                 out["reasons"].append("1W 주봉 PPO 0선 위 상승체제 안착")
@@ -426,9 +417,7 @@ def _evaluate_weekly_daily_pro_filter(
 
         return out
 
-    # -------------------------------------------------------------------------
     # 4) 단기·스윙 포지션 (Track A~H) 전용 판정
-    # -------------------------------------------------------------------------
     tk = str(track_type or "TRACK_A").upper()
     if has_1w:
         crash_cut = 65.0 if tk == "TRACK_E" else 50.0
@@ -461,7 +450,6 @@ def _evaluate_weekly_daily_pro_filter(
     elif has_1d:
         out["htf_tag"] = "1D PPO강세" if ppo1d_zero_up else ("1D강세" if daily_bull else "1D조정")
 
-    # 일봉 PPO 하락 가속 역풍 구간에서 단기 추세 추격 트랙 소폭 감점
     if has_1d and ppo1d_bear_accel and tk in ("TRACK_A", "TRACK_B", "TRACK_G", "TRACK_H") and dist_1d_ma20 <= -6.0:
         out["score_adj"] -= 2
 
@@ -654,9 +642,11 @@ def _calculate_macro_longterm_tps(price, turnover_m, df_4h, df_1d, df_1w=None):
 
 def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, funding_pct, df_4h):
     """
-    [장기 포지션 Track D 6대 전략 판별 — 전 트랙 4H PPO(12,26,9) 통합]
+    [장기 포지션 Track D 6대 전략 판별 — 전 트랙 4H PPO(12,26,9) 통합 + 기급등 추격 차단]
     """
     if df_4h is None or df_4h.empty or len(df_4h) < 55:
+        return None
+    if change_24h >= 22.0:
         return None
 
     c4 = df_4h["close"].astype(float)
@@ -725,13 +715,19 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
                 ],
             })
 
-    # D3: 4H 30일 장기 박스권 첫 돌파 + 4H PPO 강세 인증
+    # D3: 4H 30일 장기 박스권 첫 돌파 + 4H 20MA 이격(+15% 이내) 초입 검증
     if len(df_4h) >= 120:
         hi_30d = to_float(h4.iloc[:-1].max(), price)
         lo_30d = to_float(l4.iloc[:-1].min(), price * 0.8)
         range_30d_pct = (hi_30d - lo_30d) / max(lo_30d, 1e-8) * 100.0
         curr_vr_4h = to_float(v4_ratio.iloc[-1], 1.0)
-        if hi_30d * 0.996 <= price <= hi_30d * 1.045 and curr_vr_4h >= 2.4 and range_30d_pct <= 55.0 and ppo4_bull:
+        if (
+            hi_30d * 0.996 <= price <= hi_30d * 1.045
+            and price <= ma20_4h * 1.15
+            and curr_vr_4h >= 2.4
+            and range_30d_pct <= 55.0
+            and ppo4_bull
+        ):
             score_d3 = int(np.clip(88 + min(7, int(curr_vr_4h * 1.5)) + (2 if price >= ma50_4h else 0) + (2 if ppo4_zero_up else 1), 89, 99))
             candidates_d.append({
                 "sub_strategy": "D3 · 4H 30일 장기 박스권 첫 돌파",
@@ -773,7 +769,7 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
                 ],
             })
 
-    # D5: 4H 매크로 PPO·RSI14·OBV 3중 강세 다이버전스 바닥 매집 (선형 MACD 착시 원천 제거)
+    # D5: 4H 매크로 PPO·RSI14·OBV 3중 강세 다이버전스 바닥 매집
     if len(df_4h) >= 65:
         lo_14d = to_float(l4.iloc[-min(len(l4), 84):].min(), price)
         in_bottom_zone = price <= lo_14d * 1.12
@@ -914,7 +910,6 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
     kdj_j_prev = to_float(kdj_j_s.iloc[-2], 50.0)
     min_kdj_j_6 = round(to_float(kdj_j_s.iloc[-6:].min(), 50.0), 1)
 
-    # 15분봉 · 1시간봉 PPO(12, 26, 9) 산출 (선형 MACD 완전 대체)
     ppo15_s, ppo15_sig_s, ppo15_hist_s = _calc_ppo(closes, 12, 26, 9)
     ppo15_now = round(to_float(ppo15_s.iloc[-1], 0.0), 2)
     ppo15_sig_now = to_float(ppo15_sig_s.iloc[-1], 0.0)
@@ -975,8 +970,15 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
             cached_1d_1w.update({"fetched": True, "df_1d": d1, "df_1w": w1})
         return cached_1d_1w["df_1d"], cached_1d_1w["df_1w"]
 
-    # [1순위] 장기 포지션 (Track D1~D6) — 4H 매집·스프링·PPO + 1D·1W 주봉 PPO 탑다운 검증 + 고정손절 -20%
-    if (not counter_trend_only) and oi_m >= 0.4 and turnover_m >= 2.5 and rsi6_15m < 82.0 and ma20_disp_pct < 8.5:
+    # [1순위] 장기 포지션 (Track D1~D6) — 24h +22% 기급등 추격 차단 + 4H/1D/1W PPO 검증
+    if (
+        (not counter_trend_only)
+        and oi_m >= 0.4
+        and turnover_m >= 2.5
+        and change_24h < 22.0
+        and rsi6_15m < 82.0
+        and ma20_disp_pct < 8.5
+    ):
         df_4h = fetch_klines(symbol, interval="240", limit=180)
         macro_d = _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, funding_pct, df_4h)
         if macro_d is not None:
