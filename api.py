@@ -21,17 +21,18 @@ BYBIT_HOST_NAMES = (
     "api.bybit-tr.com",
 )
 
+# 주식 · ETF · 원자재 정적 백업 블랙리스트
 STOCK_TRADFI_EXACT_BLACKLIST = {
     "SAMSUNG", "HYNIX", "SKHYNIX", "SKHY", "SKH", "SSNLF", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
     "CELLTRION", "LGCHEM", "LGES", "KIA", "KB", "SHINHAN", "HANA", "WOORI", "COUPANG",
-    "KOSPI", "KOSDAQ", "KRW", "KRWUSDT", "LITE", "SNDK", "SOXL", "SOXS", "KORU", "CIEN",
+    "KOSPI", "KOSDAQ", "LITE", "SNDK", "SOXL", "SOXS", "KORU", "CIEN",
     "COHR", "MSI", "TSLL", "NVDL", "NVDX", "TQQQ", "SQQQ", "CONL", "MSTU", "MSTX", "ANTA",
     "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "GOOGL", "AMZN", "META", "NFLX", "AMD",
     "INTC", "TSM", "ASML", "ARM", "PLTR", "COIN", "MSTR", "HOOD", "BABA", "BIDU",
     "JD", "PDD", "NIO", "XPEV", "LI", "SPY", "QQQ", "IWM", "DIA", "TLT", "ARKK", "SMH",
     "GLD", "SLV", "USO", "UNG", "XAU", "XAG", "XPD", "XPT", "WTI", "BRENT", "OIL",
-    "NATGAS", "COPPER", "GOLD", "SILVER", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "CNH",
-    "HKD", "SGD", "SPX", "NDX", "NAS100", "US500", "US30", "DJI", "VIX", "NIKKEI", "FTSE",
+    "NATGAS", "COPPER", "GOLD", "SILVER", "PAXG", "XAUT", "XAUM", "KAU", "KAG", "DGX", "PMGT",
+    "SPX", "NDX", "NAS100", "US500", "US30", "DJI", "VIX", "NIKKEI", "FTSE",
     "DAX", "CAC", "HSI", "BRK", "JPM", "BAC", "WFC", "GS", "MS", "V", "MA", "UNH", "JNJ",
     "LLY", "NVO", "PFE", "MRK", "ABBV", "WMT", "COST", "HD", "PG", "KO", "PEP", "MCD",
     "SBUX", "NKE", "DIS", "XOM", "CVX", "BA", "CAT", "GE", "LMT", "RTX", "UBER", "ABNB",
@@ -40,6 +41,49 @@ STOCK_TRADFI_EXACT_BLACKLIST = {
     "CRCL", "RKLB", "ASTS", "IONQ", "RGTI", "OKLO", "HIMS", "RDDT", "VST", "CEG", "GEV",
     "DELL", "HPE", "WDC", "STX", "ANET", "VRT", "ALAB", "EWY", "EWJ", "FXI", "KWEB",
 }
+
+# 스테이블코인 · 각국 법정화폐(ISO 4217) · 통화 연동 토큰 영구 차단 목록
+STABLECOIN_FIAT_EXACT_BLACKLIST = {
+    # 주요 USD 스테이블코인 & 수익형(Yield-bearing) USD 토큰
+    "USD", "USDT", "USDC", "USDE", "SUSDE", "USDS", "SUSDS", "FDUSD", "DAI", "SDAI",
+    "TUSD", "BUSD", "USDP", "GUSD", "PYUSD", "RLUSD", "USDD", "USDJ", "USD0", "USD1",
+    "USDG", "USDL", "USDY", "USDQ", "USDR", "USDB", "USDA", "USDF", "USDM", "USDN",
+    "USDX", "USDK", "USDP", "USDCV", "USDCE", "USDTE", "USDTB", "STUSDT", "EUSD", "XUSD",
+    "AUSD", "CUSD", "DUSD", "FUSD", "HUSD", "IUSD", "LUSD", "MUSD", "NUSD", "OUSD",
+    "PUSD", "RUSD", "SUSD", "VUSD", "WUSD", "ZUSD", "FRAX", "SFRXUSD", "FRXUSD", "CRVUSD",
+    "GHO", "MIM", "DOLA", "FEI", "ALUSD", "LISUSD", "DEUSD", "FXUSD", "MKUSD", "HAY",
+    "USR", "UXD", "USTC", "UST", "TBILL", "OUSG", "BUIDL", "USYC", "USDZ", "USDO",
+    # 각국 법정화폐(Forex) 및 법정화폐 연동 스테이블코인
+    "EUR", "EURC", "EURT", "EURS", "EURI", "AEUR", "CEUR", "EURA", "AGEUR", "EURQ", "EURR", "JEUR", "SEUR", "EUROC",
+    "GBP", "GBPT", "GBPC", "EGBP", "BGBP", "VGBP",
+    "JPY", "JPYC", "GYEN", "ZJPY", "JPYT",
+    "KRW", "KRWUSDT", "KRWT", "KRWC", "XKRW", "DKRW", "KRT",
+    "CNY", "CNH", "CNHT", "CNYT",
+    "AUD", "AUDD", "AUDC", "AUDT", "AUDX", "TAUD",
+    "CAD", "CADC", "CADT", "CADX", "TCAD", "QCAD",
+    "CHF", "CHFT", "ZCHF", "XCHF", "VCHF",
+    "HKD", "HKDT", "HKDC", "THKD",
+    "SGD", "XSGD", "SGDT", "SGDC",
+    "NZD", "NZDS", "NZDT",
+    "TRY", "TRYB", "TRYC", "TRYT", "BIDR", "IDRT", "IDRX", "XIDR", "IDR",
+    "BRL", "BRZ", "BRLA", "BRLT", "CBRL",
+    "MXN", "MXNT", "MXNE", "MXNC",
+    "ZAR", "ZARP", "ZART",
+    "INR", "INRT", "VND", "VNDC", "THB", "THBT", "PHP", "PHPT", "MYR", "TWD",
+    "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "RUB", "UAH",
+    "ARS", "ARST", "CLP", "COP", "PEN", "AED", "AECOIN", "SAR", "ILS", "NGN", "NGNT", "KES", "EGP",
+}
+
+# 신규 상장되는 USD·EUR 계열 및 주요 법정화폐 파생 스테이블코인 자동 감지 정규식 (일반 알트코인 오탐 0%)
+STABLE_FIAT_REGEX = re.compile(
+    r"^(?:"
+    r"USD[A-Z0-9]*|"
+    r"[A-Z0-9]*USD|"
+    r"EUR[A-Z0-9]*|"
+    r"[A-Z0-9]*EUR|"
+    r"(?:GBP|JPY|KRW|CNY|CNH|CHF|HKD|SGD|NZD|TRY|BRL|MXN|ZAR|IDR|VND|THB|AED|SAR)(?:[CTSBDRQXENP])?"
+    r")$"
+)
 
 STOCK_SUBSTRING_KEYWORDS = (
     "SAMSUNG", "HYNIX", "SKHY", "HYUNDAI", "POSCO", "NAVER", "KAKAO", "KOSPI", "NASDAQ",
@@ -152,7 +196,31 @@ def _register_dynamic_tradfi(sym, base=None):
         _DYNAMIC_TRADFI_CACHE["symbols"].add(f"{b}USDT")
 
 
+def is_stablecoin_or_fiat_symbol(sym_or_base):
+    """스테이블코인(USDC/USDE/FDUSD/DAI 등) 및 나라별 법정화폐(EUR/JPY/KRW/GBP 등) 영구 차단"""
+    s = str(sym_or_base or "").upper().strip()
+    if not s:
+        return True
+    base = s[:-4] if s.endswith("USDT") else s
+    base_clean = re.sub(r"^(1000000|100000|10000|1000|100|10)", "", base)
+    if not base_clean:
+        return True
+    if base in STABLECOIN_FIAT_EXACT_BLACKLIST or base_clean in STABLECOIN_FIAT_EXACT_BLACKLIST:
+        return True
+    if STABLE_FIAT_REGEX.match(base) or STABLE_FIAT_REGEX.match(base_clean):
+        return True
+    return False
+
+
 def is_stock_or_tradfi_symbol(sym_or_base):
+    """
+    [영구적 비대상 자산 차단 필터]
+    1) 스테이블코인 및 각국 법정화폐(Fiat/Forex) 연동 토큰 차단
+    2) 거래소 공식 API 동적 수집 TradFi/주식/RWA 차단 목록
+    3) 정적 주식·ETF·원자재·금/은 페깅 블랙리스트 및 키워드 차단
+    """
+    if is_stablecoin_or_fiat_symbol(sym_or_base):
+        return True
     _ensure_dynamic_tradfi_blocklist()
     s = str(sym_or_base or "").upper().strip()
     if not s:
@@ -260,7 +328,6 @@ def _normalize_kline_df(rows, expected_interval_min=None):
             if not (target_sec * 0.5 <= median_diff_sec <= target_sec * 1.5):
                 return pd.DataFrame()
 
-        # 타임프레임에 비례한 만료 허용치 적용 (12H=30h, 일봉 D=60h, 주봉 W=17.5d, 분봉=6h)
         max_stale_sec = max(6 * 3600.0, float(expected_interval_min or 5) * 60.0 * 2.5)
         latest_ts_ms = to_float(df["timestamp"].iloc[-1], 0.0)
         if latest_ts_ms > 0 and (time.time() * 1000.0 - latest_ts_ms) > (max_stale_sec * 1000.0):
