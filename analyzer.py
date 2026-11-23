@@ -14,6 +14,8 @@ except ImportError:
         "SAMSUNG", "HYNIX", "SKHYNIX", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
         "KOSPI", "LITE", "ANTA", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "AMZN",
         "META", "NFLX", "MSTR", "COIN", "SPY", "QQQ", "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX",
+        "USDC", "USDT", "USDE", "FDUSD", "DAI", "TUSD", "BUSD", "PYUSD", "RLUSD", "USDS",
+        "EUR", "EURC", "EURT", "EURI", "GBP", "JPY", "KRW", "AUD", "CAD", "CHF", "CNH", "HKD", "SGD",
     }
     def is_stock_or_tradfi_symbol(sym_or_base):
         s = str(sym_or_base or "").upper().strip()
@@ -642,7 +644,7 @@ def _calculate_macro_longterm_tps(price, turnover_m, df_4h, df_1d, df_1w=None):
 
 def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, funding_pct, df_4h):
     """
-    [장기 포지션 Track D 6대 전략 판별 — 전 트랙 4H PPO(12,26,9) 통합 + 기급등 추격 차단]
+    [장기 포지션 Track D 6대 전략 판별 — 전 트랙 4H PPO(12,26,9) 통합 + 기급등/초저변동성 페깅 차단]
     """
     if df_4h is None or df_4h.empty or len(df_4h) < 55:
         return None
@@ -654,6 +656,12 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
     l4 = df_4h["low"].astype(float)
     o4 = df_4h["open"].astype(float)
     v4 = df_4h["volume"].astype(float).fillna(0.0)
+
+    # [2차 수학적 안전장치] 최근 4H 전체(최대 30일) 고저 변동폭이 5.0% 미만인 스테이블/페깅 토큰 영구 차단
+    hi_all_4h = to_float(h4.max(), price)
+    lo_all_4h = to_float(l4.min(), price)
+    if lo_all_4h <= 0 or ((hi_all_4h - lo_all_4h) / lo_all_4h * 100.0) < 5.0:
+        return None
 
     obv4 = (np.sign(c4.diff().fillna(0.0)) * v4).cumsum()
     rsi14_4h = _calc_rsi(c4, 14)
@@ -700,10 +708,11 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
         pump_open = to_float(pump_row["open"], price)
         pump_high = to_float(pump_row["high"], price)
         pump_mid = (pump_open + pump_high) * 0.5
+        pump_span_pct = ((pump_high - pump_open) / max(pump_open, 1e-8)) * 100.0
         curr_vol_4h = to_float(v4.iloc[-2], pump_vol)
         is_dry_up = pump_vol > 0 and (curr_vol_4h / pump_vol) <= 0.30
         is_turn_up = c4.iloc[-1] >= o4.iloc[-1] and price >= max(pump_open * 0.99, ma20_4h * 0.985) and price <= pump_high * 1.02
-        if is_dry_up and is_turn_up and (ppo4_turn_up or ppo4_zero_up):
+        if pump_span_pct >= 2.0 and is_dry_up and is_turn_up and (ppo4_turn_up or ppo4_zero_up):
             score_d2 = int(np.clip(87 + (5 if price >= pump_mid else 2) + (5 if oi_ratio >= 15.0 else 1) + (2 if ppo4_zero_up else 1), 88, 99))
             candidates_d.append({
                 "sub_strategy": "D2 · 매집봉 출현 후 거래량 건조 눌림",
@@ -725,7 +734,7 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
             hi_30d * 0.996 <= price <= hi_30d * 1.045
             and price <= ma20_4h * 1.15
             and curr_vr_4h >= 2.4
-            and range_30d_pct <= 55.0
+            and 5.0 <= range_30d_pct <= 55.0
             and ppo4_bull
         ):
             score_d3 = int(np.clip(88 + min(7, int(curr_vr_4h * 1.5)) + (2 if price >= ma50_4h else 0) + (2 if ppo4_zero_up else 1), 89, 99))
@@ -879,6 +888,13 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
     vols = df_15m["volume"].astype(float).fillna(0.0)
 
     price = to_float(closes.iloc[-1], price)
+
+    # [2차 수학적 안전장치] 최근 24시간(15m 96봉) 고저 변동폭이 0.8% 미만인 스테이블/페깅 토큰 영구 차단
+    hi_24_chk = to_float(highs.iloc[-96:].max(), price)
+    lo_24_chk = to_float(lows.iloc[-96:].min(), price)
+    if lo_24_chk <= 0 or ((hi_24_chk - lo_24_chk) / lo_24_chk * 100.0) < 0.8:
+        return None
+
     if abs(change_24h) < 0.05 and len(df_15m) >= 90:
         p_24h = to_float(opens.iloc[-min(len(df_15m), 96)], price)
         if p_24h > 0:
