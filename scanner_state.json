@@ -2737,51 +2737,6 @@
       "sl_at": 0,
       "hold_minutes": 435
     },
-    "USDCUSDT": {
-      "created_at": 1795410058,
-      "track_type": "TRACK_D",
-      "is_long_term": true,
-      "score": 99,
-      "entry_price": 1.0009,
-      "swing_high_line": 1.0017,
-      "entry_low": 0.992893,
-      "entry_high": 1.005904,
-      "initial_stop_price": 0.80072,
-      "stop_price": 0.80072,
-      "sl_pct": 20,
-      "tps": [
-        1.20108,
-        1.481332,
-        2.452205
-      ],
-      "tp_pcts": [
-        20.0,
-        48.0,
-        145.0
-      ],
-      "vol_mult": 1.8,
-      "rsi6_15m": 54.0,
-      "oi_m": 5.8,
-      "oi_ratio": 196.9,
-      "turnover_m": 2.9,
-      "change_24h": -0.04,
-      "funding_pct": 0.0063,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "장기 전략: D2 · 매집봉 출현 후 거래량 건조 눌림",
-        "최근 5일 내 4H 매집봉(거래량 6.2배) 출현",
-        "조정 구간 거래량 70% 이상 건조(세력 이탈 없음)",
-        "1W 주봉 10MA 추세 전환 초입 확인"
-      ],
-      "max_high_price": 1.0009,
-      "peak_ts_ms": 1795412700000,
-      "max_favorable_pct": 0.0,
-      "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0,
-      "tp3_at": 0,
-      "sl_at": 0,
-      "hold_minutes": 175
-    },
     "WLFIUSDT": {
       "created_at": 1795418415,
       "track_type": "TRACK_E",
@@ -4950,7 +4905,6 @@
     "ACEUSDT": 1795374104,
     "HUSDT": 1795381472,
     "INITUSDT": 1795394443,
-    "USDCUSDT": 1795410058,
     "WLFIUSDT": 1795418415,
     "UNITASUSDT": 1794821652,
     "SOONUSDT": 1795236410,
@@ -19428,52 +19382,6 @@
       "closed_alerted": false,
       "sl_at": 0
     },
-    "USDCUSDT_1795410058": {
-      "symbol": "USDCUSDT",
-      "created_at": 1795410058,
-      "track_type": "TRACK_D",
-      "is_long_term": true,
-      "score": 99,
-      "entry_price": 1.0009,
-      "initial_stop_price": 0.80072,
-      "stop_price": 0.80072,
-      "sl_pct": 20.0,
-      "tps": [
-        1.20108,
-        1.481332,
-        2.452205
-      ],
-      "tp_pcts": [
-        20.0,
-        48.0,
-        145.0
-      ],
-      "max_high_price": 1.0009,
-      "max_favorable_pct": 0.0,
-      "realized_weighted_pct": 0.0,
-      "vol_mult": 1.8,
-      "rsi6_15m": 54.0,
-      "oi_m": 5.8,
-      "oi_ratio": 196.9,
-      "funding_pct": 0.0063,
-      "change_24h": -0.04,
-      "btc_1h_pct": 0.0,
-      "hold_minutes": 175,
-      "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0,
-      "tp3_at": 0,
-      "tp1_hit": false,
-      "tp2_hit": false,
-      "tp3_hit": false,
-      "tp1_alerted": false,
-      "tp2_alerted": false,
-      "tp3_alerted": false,
-      "tp3_completed": false,
-      "trailing_closed": false,
-      "sl_alerted": false,
-      "closed_alerted": false,
-      "sl_at": 0
-    },
     "MONUSDT_1795418051": {
       "symbol": "MONUSDT",
       "created_at": 1795418051,
@@ -21869,28 +21777,6 @@
         1795420568,
         0.042,
         1.454
-      ]
-    ],
-    "USDCUSDT": [
-      [
-        1795419486,
-        1.001,
-        5.757
-      ],
-      [
-        1795419847,
-        1.001,
-        5.757
-      ],
-      [
-        1795420214,
-        1.001,
-        5.757
-      ],
-      [
-        1795420568,
-        1.001,
-        5.757
       ]
     ],
     "MUBARAKUSDT": [
