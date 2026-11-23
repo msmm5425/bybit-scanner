@@ -31,6 +31,11 @@ if not TELEGRAM_CHAT_ID:
 SCHEME = "ht" + "tps://"
 WATERMARK_HANDLE = "@DnaPyung"
 _PLAYWRIGHT_READY = False
+LAST_VIDEO_ERROR = ""
+
+
+def get_last_video_error():
+    return LAST_VIDEO_ERROR
 
 
 def clean_url(raw_url):
@@ -86,11 +91,16 @@ def _ensure_playwright():
             return False
 
 
-def fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=20):
+def fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=10):
     if api_mod is not None and hasattr(api_mod, "fetch_klines"):
-        df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
-        if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= min_rows:
-            return df
+        for attempt in range(2):
+            df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
+            if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= min_rows:
+                df = df.drop_duplicates(subset=["timestamp"], keep="last").sort_values("timestamp", ascending=True).reset_index(drop=True)
+                if len(df) >= min_rows:
+                    return df
+            if attempt == 0:
+                time.sleep(0.5)
     return pd.DataFrame()
 
 
@@ -288,8 +298,7 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     tp1_p, tp2_p, tp3_p = to_float(tps[0]) * ratio_adj, to_float(tps[1]) * ratio_adj, to_float(tps[2]) * ratio_adj
     p1, p2, p3 = round(to_float(tp_pcts[0], 8.0), 1), round(to_float(tp_pcts[1], 15.0), 1), round(to_float(tp_pcts[2], 22.0), 1)
 
-    # [핵심 버그 수정] 96캔들 전체(최저~최고)와 피보나치(0~1) 구간은 100% 정배율(무압축)로 유지!
-    # 오직 캔들 최고가보다 더 위에 있는 빈 공간(candle_max_high ~ TP3)과 최저가 아래(SL)만 부드럽게 압축
+    # 96캔들 전체(최저~최고)와 피보나치(0~1) 구간 100% 정배율 유지
     candle_min_low = to_float(df["low"].min(), price * 0.97)
     candle_max_high = to_float(df["high"].max(), price * 1.02)
     low_piv = min(candle_min_low, price * 0.988)
@@ -330,7 +339,6 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     step_sec = {"720": 43200, "240": 14400, "60": 3600, "15": 900}.get(tf_str, 43200 if is_long else 3600)
     whitespace_js = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 6)]
 
-    # 포착 정적 차트 전용 자동 피보나치 되돌림 계산 (전 구간 정배율 1:1 렌더링)
     high_idx = int(df["high"].astype(float).idxmax())
     low_idx = int(df["low"].astype(float).idxmin())
     fib_high = to_float(df["high"].iloc[high_idx], candle_max_high)
@@ -389,8 +397,11 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     decimals = 6 if price < 0.01 else (5 if price < 1 else (4 if price < 10 else (3 if price < 1000 else 2)))
     min_move = 10 ** (-decimals)
     lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
+    lw_fallback_url = clean_url(f"{SCHEME}cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
 
-    html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><script src="{lw_script_url}"></script>
+    html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<script src="{lw_script_url}"></script>
+<script>if(typeof LightweightCharts==='undefined'){{document.write('<scr'+'ipt src="{lw_fallback_url}"></scr'+'ipt>');}}</script>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#d1d4dc;width:1160px;height:680px;overflow:hidden}}
@@ -542,7 +553,6 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
         const tag=document.createElement('div');
         tag.className='fib-lbl';
         let lblLeft = xStart + 6;
-        // 상단 MA 범례와 겹치는 높이면 우측으로 자연스럽게 비켜서 배치
         if(y < maBottom && lblLeft < maRight){{
           lblLeft = Math.min(plotRight - 135, maRight);
         }}
@@ -566,8 +576,8 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
             page = browser.new_page(viewport={"width": 1160, "height": 680}, device_scale_factor=1.5)
-            page.goto(f"file://{tmp_html_path}", wait_until="networkidle", timeout=20000)
-            page.wait_for_function("window.__CHART_DONE === true", timeout=8000)
+            page.goto(f"file://{tmp_html_path}", wait_until="load", timeout=25000)
+            page.wait_for_function("window.__CHART_DONE === true", timeout=10000)
             page.wait_for_timeout(200)
             png_bytes = page.screenshot(type="png")
             browser.close()
@@ -622,26 +632,33 @@ def generate_signal_chart_bytes(res):
 
 def generate_profit_replay_video_bytes(close_info):
     """
-    [최종 전량 익절 10초 HD MP4 리플레이 영상 자동 제작 엔진 v2]
-    - 규격: X(트위터) 최적화 1280×720 (16:9), 15fps × 150프레임 = 정확히 10.0초, H.264/yuv420p/+faststart
-    - 연출 타임라인:
-      * 0.0초 ~ 1.0초 (프레임 0~14): 썸네일 완성 이미지 (진입봉→익절봉 파란 곡선 화살표 + 진입/익절 날짜·가격 + 최종 수익률%)
-      * 1.0초 ~ 2.0초 (프레임 15~29): 진입 시점(ENTRY) 리셋 및 출발 준비
-      * 2.0초 ~ 8.0초 (프레임 30~119): 2초부터 진입봉→익절봉 실시간 캔들 상승 리플레이 재생
-      * 8.0초 ~ 10.0초 (프레임 120~149): 최종 익절 완성 엔딩 (파란 곡선 화살표 드로잉 + 진입/익절 날짜·가격 + 최종 수익률%)
+    [최종 전량 익절 10초 HD MP4 리플레이 영상 자동 제작 엔진 v3 (안정화)]
+    - 규격: X 최적화 1280×720 (16:9), 12fps × 120프레임 = 정확히 10.0초, H.264/yuv420p/+faststart
+    - 타임라인:
+      * 0.0초 ~ 1.0초 (0~11): 썸네일 완성 이미지 (파란 곡선 화살표 + 진입/익절 날짜·가격 + 최종 수익률%)
+      * 1.0초 ~ 2.0초 (12~23): 진입 봉 시점(ENTRY) 리셋 및 출발 준비
+      * 2.0초 ~ 8.0초 (24~95): 정확히 2초부터 진입봉→익절봉 실시간 캔들 상승 리플레이
+      * 8.0초 ~ 10.0초 (96~119): 마지막 완성 엔딩 (파란 곡선 화살표 드로잉 + 진입/익절 날짜·가격 + 최종 수익률%)
     - 보유 기간별 캔들 자동 선택: 12시간 미만(15m) / 1~2일 이내(1H) / 3일 이상(4H)
-    - 피보나치 제외 · 배경 대형 워터마크(@DnaPyung) · 최하단 시뮬레이션 안내 문구 표기
+    - 이중 CDN 폴백 · 중복 타임스탬프 제거 · 상세 에러 진단(LAST_VIDEO_ERROR) 완비
     """
+    global LAST_VIDEO_ERROR
+    LAST_VIDEO_ERROR = ""
+
     if not shutil.which("ffmpeg"):
-        print("[리플레이 영상 생략] ffmpeg가 설치되어 있지 않습니다.")
+        LAST_VIDEO_ERROR = "ffmpeg 미설치 (scan.yml 확인 필요)"
+        print(f"[리플레이 영상 실패] {LAST_VIDEO_ERROR}")
         return None
     if not _ensure_playwright():
+        LAST_VIDEO_ERROR = "Playwright/Chromium 준비 실패"
+        print(f"[리플레이 영상 실패] {LAST_VIDEO_ERROR}")
         return None
 
     symbol = str(close_info.get("symbol", "")).upper().strip()
     base = close_info.get("base_coin") or symbol.replace("USDT", "")
     entry_p = to_float(close_info.get("entry_price"))
     if not symbol or entry_p <= 0:
+        LAST_VIDEO_ERROR = f"유효하지 않은 심볼/진입가({symbol}, {entry_p})"
         return None
 
     created_at = int(to_float(close_info.get("created_at"), 0))
@@ -652,6 +669,7 @@ def generate_profit_replay_video_bytes(close_info):
     hold_minutes = max(1, int(to_float(close_info.get("hold_minutes"), (closed_at - created_at) // 60)))
     hold_hours = (closed_at - created_at) / 3600.0
 
+    # 보유 기간별 타임프레임 규칙 엄격 적용
     if hold_hours < 12.0:
         tf_code, tf_label, step_sec, fetch_lim = "15", "15m", 900, 180
     elif hold_hours < 72.0:
@@ -659,14 +677,16 @@ def generate_profit_replay_video_bytes(close_info):
     else:
         tf_code, tf_label, step_sec, fetch_lim = "240", "4H", 14400, 260
 
-    df_raw = fetch_exact_bybit_klines(symbol, interval=tf_code, limit=fetch_lim, min_rows=15)
+    df_raw = fetch_exact_bybit_klines(symbol, interval=tf_code, limit=fetch_lim, min_rows=10)
     if df_raw.empty and tf_code != "15":
         tf_code, tf_label, step_sec = "15", "15m", 900
-        df_raw = fetch_exact_bybit_klines(symbol, interval="15", limit=200, min_rows=15)
+        df_raw = fetch_exact_bybit_klines(symbol, interval="15", limit=200, min_rows=10)
     if df_raw.empty:
+        LAST_VIDEO_ERROR = f"{symbol} {tf_label} 캔들 데이터 API 조회 실패"
+        print(f"[리플레이 영상 실패] {LAST_VIDEO_ERROR}")
         return None
 
-    df = df_raw.copy()
+    df = df_raw.drop_duplicates(subset=["timestamp"], keep="last").sort_values("timestamp", ascending=True).reset_index(drop=True)
     df["ma5"] = df["close"].rolling(5, min_periods=2).mean()
     df["ma9"] = df["close"].rolling(9, min_periods=3).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=5).mean()
@@ -687,7 +707,9 @@ def generate_profit_replay_video_bytes(close_info):
     pre_bars = 26 if post_count <= 90 else 18
     slice_start = max(0, entry_abs - pre_bars)
     df_win = df.iloc[slice_start : exit_abs + 1].reset_index(drop=True)
-    if len(df_win) < 8:
+    if len(df_win) < 4:
+        LAST_VIDEO_ERROR = f"{symbol} 리플레이 구간 캔들 부족({len(df_win)}개)"
+        print(f"[리플레이 영상 실패] {LAST_VIDEO_ERROR}")
         return None
 
     entry_idx = max(0, entry_abs - slice_start)
@@ -723,9 +745,13 @@ def generate_profit_replay_video_bytes(close_info):
     y_max_anchor = win_high + (y_span * 0.24)
 
     candles_js, vol_js, ma5_js, ma9_js, ma20_js, kst_strs = [], [], [], [], [], []
+    last_ts_sec = -1
     for _, row in df_win.iterrows():
         ts_ms = to_float(row["timestamp"])
         ts_sec = int(ts_ms // 1000) + (9 * 3600)
+        if ts_sec <= last_ts_sec:
+            ts_sec = last_ts_sec + step_sec
+        last_ts_sec = ts_sec
         o_v, h_v, l_v, c_v, v_v = (
             to_float(row["open"]), to_float(row["high"]),
             to_float(row["low"]), to_float(row["close"]), to_float(row["volume"]),
@@ -741,16 +767,20 @@ def generate_profit_replay_video_bytes(close_info):
     decimals = 6 if entry_p < 0.01 else (5 if entry_p < 1 else (4 if entry_p < 10 else (3 if entry_p < 1000 else 2)))
     min_move = 10 ** (-decimals)
     lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
+    lw_fallback_url = clean_url(f"{SCHEME}cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
 
     pos_badge = "LONG-TERM REPLAY" if is_long else f"{track_type.replace('_', ' ')} REPLAY"
     price_diff_abs = abs(exit_p - entry_p)
     price_diff_prefix = "+" if exit_p >= entry_p else "-"
     exit_headline = f"{price_diff_prefix}{fmt_price(price_diff_abs)} (+{total_realized_pct:.2f}%) in {hold_str}"
 
-    total_frames = 150
-    fps = 15
+    # 12fps × 120프레임 = 정확히 10.0초 (GitHub Actions 안정성 최적화)
+    fps = 12
+    total_frames = 120
 
-    html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><script src="{lw_script_url}"></script>
+    html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<script src="{lw_script_url}"></script>
+<script>if(typeof LightweightCharts==='undefined'){{document.write('<scr'+'ipt src="{lw_fallback_url}"></scr'+'ipt>');}}</script>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR',sans-serif;color:#d1d4dc;width:1280px;height:720px;overflow:hidden}}
@@ -766,7 +796,7 @@ body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI'
 .tv-handle-pill{{background:rgba(255,255,255,0.07);border:1px solid #363a45;color:#f0f3fa;font-size:12.5px;font-weight:800;padding:4px 11px;border-radius:5px;letter-spacing:0.3px}}
 #chart-box{{position:relative;flex:1;width:1280px;height:650px;overflow:hidden}}
 .tv-ma-legend{{position:absolute;top:12px;left:16px;z-index:20;display:flex;gap:14px;font-size:12.5px;font-weight:700;background:rgba(19,23,34,0.86);padding:5px 12px;border-radius:5px;border:1px solid #2a2e39}}
-.live-hud{{position:absolute;top:12px;right:110px;z-index:25;display:flex;align-items:center;gap:10px;transition:none}}
+.live-hud{{position:absolute;top:12px;right:110px;z-index:25;display:flex;align-items:center;gap:10px}}
 .pnl-pill{{background:rgba(19,23,34,0.90);border:1.5px solid #26a69a;border-radius:8px;padding:7px 14px;display:flex;flex-direction:column;align-items:flex-end;min-width:142px;box-shadow:0 6px 18px rgba(0,0,0,0.4)}}
 .pnl-label{{font-size:10.5px;font-weight:700;color:#9598a1;letter-spacing:0.5px}}
 .pnl-val{{font-size:22px;font-weight:900;color:#00e676;line-height:1.15}}
@@ -874,7 +904,7 @@ const kstAll={json.dumps(kst_strs)};
 const wsTail={json.dumps(ws_tail)};
 const entryIdx={entry_idx}, exitIdx={exit_idx}, entryP={entry_p}, exitP={exit_p};
 const tp1P={tp1_p}, tp2P={tp2_p}, tp3P={tp3_p}, slP={sl_p};
-const decimals={decimals}, totalFrames={total_frames};
+const decimals={decimals};
 const yMinAnchor={y_min_anchor}, yMaxAnchor={y_max_anchor};
 
 function fmtP(v){{
@@ -937,7 +967,7 @@ const elDotEntry=document.getElementById('dot-entry'), elDotExit=document.getEle
 const elCoExit=document.getElementById('callout-exit'), elCoEntry=document.getElementById('callout-entry');
 const elCaretExit=document.getElementById('caret-exit'), elCaretEntry=document.getElementById('caret-entry');
 
-let arcTotalLen=0;
+let arcTotalLen=1;
 let geometryReady=false;
 
 function setupResultOverlayGeometry(){{
@@ -1031,9 +1061,14 @@ function setResultOverlayVisual(overlayOpacity, arrowProgress, showCallouts){{
   elCoExit.style.opacity=(p >= 0.85 ? boxAlpha : 0).toFixed(2);
 }}
 
-const THUMB_END=15;
-const PLAY_START=30;
-const PLAY_END=119;
+// 10초 타임라인 (12fps × 120프레임):
+// [0..11]  0.0s~1.0s : 처음 썸네일 완성 이미지 (1초 고정)
+// [12..23] 1.0s~2.0s : 진입 봉 시점 리셋 및 출발 준비 (1초)
+// [24..95] 2.0s~8.0s : 정확히 2초부터 본격 캔들 상승 리플레이 (6초)
+// [96..119] 8.0s~10.0s: 마지막 완성 장면 (파란 곡선 화살표 + 진입/익절 날짜·가격·최종 수익률) (2초)
+const THUMB_END=12;
+const PLAY_START=24;
+const PLAY_END=95;
 const postSteps=Math.max(1, exitIdx - entryIdx);
 
 window.__renderFrame=function(f){{
@@ -1151,7 +1186,7 @@ window.__renderFrame=function(f){{
   }} else {{
     elHud.style.opacity='0';
     const outroStep=f - PLAY_END;
-    const arrowP=Math.min(1.0, outroStep / 8.0);
+    const arrowP=Math.min(1.0, outroStep / 7.0);
     setResultOverlayVisual(1.0, arrowP, true);
   }}
 }};
@@ -1163,6 +1198,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
 }}));
 </script></body></html>"""
 
+    js_errors = []
     try:
         from playwright.sync_api import sync_playwright
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1177,16 +1213,17 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
                 )
                 page = browser.new_page(viewport={"width": 1280, "height": 720}, device_scale_factor=1)
-                page.goto(f"file://{html_path}", wait_until="networkidle", timeout=25000)
-                page.wait_for_function("window.__REPLAY_READY === true", timeout=10000)
-                page.wait_for_timeout(150)
+                page.on("pageerror", lambda err: js_errors.append(str(err)))
+                page.goto(f"file://{html_path}", wait_until="load", timeout=25000)
+                page.wait_for_function("window.__REPLAY_READY === true", timeout=15000)
+                page.wait_for_timeout(120)
 
                 for fi in range(total_frames):
                     page.evaluate(f"window.__renderFrame({fi})")
                     page.screenshot(
                         path=os.path.join(tmpdir, f"f_{fi:04d}.jpg"),
                         type="jpeg",
-                        quality=92,
+                        quality=88,
                     )
                 browser.close()
 
@@ -1197,19 +1234,22 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 "-c:v", "libx264",
                 "-pix_fmt", "yuv420p",
                 "-preset", "fast",
-                "-crf", "20",
+                "-crf", "21",
                 "-movflags", "+faststart",
                 out_mp4,
             ]
             res_ff = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if res_ff.returncode != 0 or not os.path.exists(out_mp4):
-                print(f"[ffmpeg 인코딩 오류] {res_ff.stderr}")
+                LAST_VIDEO_ERROR = f"ffmpeg 인코딩 오류: {(res_ff.stderr or '')[:180]}"
+                print(f"[리플레이 영상 실패] {LAST_VIDEO_ERROR}")
                 return None
 
             with open(out_mp4, "rb") as vf:
                 return vf.read()
     except Exception as e:
-        print(f"[리플레이 영상 제작 예외] {symbol}: {e}")
+        err_extra = f" | JS: {js_errors[0][:120]}" if js_errors else ""
+        LAST_VIDEO_ERROR = f"렌더링 예외: {str(e)[:150]}{err_extra}"
+        print(f"[리플레이 영상 예외] {symbol}: {LAST_VIDEO_ERROR}")
         return None
 
 
@@ -1253,12 +1293,15 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
 
 
 def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=None, filename="profit_replay.mp4"):
-    """10초 HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송"""
+    """10초 HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송 (실패 사유 기록 포함)"""
+    global LAST_VIDEO_ERROR
     token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
     if not video_bytes or not token or not chat_id:
+        LAST_VIDEO_ERROR = "영상 데이터 또는 텔레그램 토큰/챗ID 누락"
         return False
     url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendVideo")
+    last_resp_err = ""
     for _ in range(3):
         try:
             files = {"video": (filename, video_bytes, "video/mp4")}
@@ -1277,8 +1320,11 @@ def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=
             if resp.status_code == 200:
                 time.sleep(0.8)
                 return True
-        except Exception:
-            pass
+            last_resp_err = f"Telegram HTTP {resp.status_code}: {resp.text[:160]}"
+        except Exception as e:
+            last_resp_err = f"Telegram 전송 예외: {str(e)[:150]}"
         time.sleep(1.5)
+    LAST_VIDEO_ERROR = last_resp_err or "Telegram sendVideo 3회 실패"
+    print(f"[sendVideo 실패] {LAST_VIDEO_ERROR}")
     return False
 # === END OF FILE ===
