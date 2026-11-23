@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
+    inputs:
+      test_video:
+        description: '최근 익절 종목($BTW 등) 10초 리플레이 영상 즉시 테스트 발송'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: bybit-scanner-main
@@ -36,7 +42,17 @@ jobs:
       - name: Ensure ffmpeg is available
         run: which ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
 
+      - name: Run Replay Video Test (if selected)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_video == true }}
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python scanner.py --test-video
+
       - name: Run Scanner Loop
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_video == true) }}
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
