@@ -19,6 +19,8 @@ except ImportError:
         "SAMSUNG", "HYNIX", "SKHYNIX", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
         "KOSPI", "LITE", "ANTA", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "AMZN",
         "META", "NFLX", "MSTR", "COIN", "SPY", "QQQ", "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX",
+        "USDC", "USDT", "USDE", "FDUSD", "DAI", "TUSD", "BUSD", "PYUSD", "RLUSD", "USDS",
+        "EUR", "EURC", "EURT", "EURI", "GBP", "JPY", "KRW", "AUD", "CAD", "CHF", "CNH", "HKD", "SGD",
     }
     def is_stock_or_tradfi_symbol(sym_or_base):
         s = str(sym_or_base or "").upper().strip()
@@ -43,6 +45,18 @@ from notifier import (
 )
 
 try:
+    from notifier import (
+        generate_profit_replay_video_bytes,
+        send_telegram_video_with_caption,
+        get_last_video_error,
+    )
+except Exception as _imp_e:
+    print(f"[경고] notifier 영상 함수 import 실패: {_imp_e}")
+    generate_profit_replay_video_bytes = None
+    send_telegram_video_with_caption = None
+    get_last_video_error = lambda: f"notifier 영상 함수 import 실패: {_imp_e}"
+
+try:
     import postmortem
 except Exception:
     postmortem = None
@@ -50,7 +64,7 @@ except Exception:
 SCHEME = "ht" + "tps://"
 RE_ALERT_COOLDOWN_SEC = 86400
 SL_RECOVERY_COOLDOWN_SEC = 14400
-TP_CLOSE_REENTRY_COOLDOWN_SEC = 21600  # 수익 마감(TP1 방어선 / TP3 트레일링) 후 6시간 즉시 재포착 차단
+TP_CLOSE_REENTRY_COOLDOWN_SEC = 21600
 HISTORY_RETENTION_SEC = 259200
 EPISODE_RETENTION_SEC = 604800
 MAX_NEW_ALERTS_PER_SCAN = 2
@@ -112,12 +126,6 @@ def _read_json(path):
 
 
 def check_btc_market_regime():
-    """
-    [BTC 3단계 마켓 레짐 게이트 · A안 반영]
-    - OPEN: 정상 구간 → 전체 트랙(A~H, D1~D6) 탐색
-    - COUNTER_TREND_ONLY: 완만 조정(15m <= -0.7% 또는 1H <= -1.5%, 단 1H > -2.5%) → Track E(SFP)·Track F(RS)만 예외 허용
-    - FULL_LOCK: 폭락 구간(1H <= -2.5% 또는 15m <= -1.5%) → 모든 신규 진입 100% 전면 차단
-    """
     regime = {
         "gate_mode": "OPEN",
         "gate_locked": False,
@@ -202,10 +210,6 @@ def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
 
 
 def sanitize_flags_by_mfe(item):
-    """
-    단순 윗꼬리 MFE(fav)만으로 tp2_hit을 강제 승격하지 않도록 유지
-    - tp2_hit은 오직 15분봉(장기 1H) 확정 종가 돌파(tp2_alerted / tp2_hit) 또는 TP3 돌파 시에만 유지
-    """
     if not isinstance(item, dict):
         return item
     entry_p = to_float(item.get("entry_price"))
@@ -386,13 +390,7 @@ def _record_pm_win(symbol, t_item, now_ts, max_fav):
 
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
-    """
-    [방어선 캔들 마감 확정 엔진]
-    1) 진입 시각(created_ms) 이후 캔들만 엄격 집계 (진입 전 15분봉 고점·저점 오염 원천 차단)
-    2) TP2 방어선 상향: 단기 '15분봉' / 장기 '1시간봉' 마감 종가(close >= TP2) 확정 시에만 상향
-    3) 동시 마감 원천 차단: 방어선을 상향한 회차에서는 절대 즉시 마감하지 않음
-    4) 방어선 이탈 마감(TP1 방어선 & TP3 트레일링): 상향 이후 마감된 '15분봉'(장기 '1시간봉') 종가 이탈 시 마감
-    """
+    """[방어선 캔들 마감 확정 + 전량 수익 마감 시 10초 리플레이 영상 트리거 반환]"""
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("closed_alerted"):
         return None
     entry_ref = to_float(t_item.get("entry_price"))
@@ -493,7 +491,27 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     last_closed_c = to_float(closed_post_tf["close"].iloc[-1], 0.0) if has_closed_bar else 0.0
     last_closed_ts_ms = int(to_float(closed_post_tf["close_ts_ms"].iloc[-1], 0)) if has_closed_bar else 0
 
-    # [3차 돌파]: 50% 익절 확정 + 방어선 TP2 상향 + 잔여 50% 트레일링(이후 15m/1H 종가 이탈 시 마감)
+    def _make_video_payload(close_type_str, exit_price_val, total_cum_val):
+        return {
+            "symbol": symbol,
+            "base_coin": base,
+            "track_type": t_item.get("track_type", "TRACK_A"),
+            "is_long_term": is_long,
+            "close_type": close_type_str,
+            "entry_price": entry_ref,
+            "initial_stop_price": init_stop_p,
+            "sl_pct": sl_pct_use,
+            "tps": [tp1_p, tp2_p, tp3_p],
+            "max_high_price": max_high,
+            "max_favorable_pct": max_fav,
+            "exit_price": exit_price_val,
+            "realized_weighted_pct": total_cum_val,
+            "created_at": created_at,
+            "closed_at": now_ts,
+            "hold_minutes": hold_min,
+        }
+
+    # [3차 돌파]: 50% 익절 확정 + 잔여 50% 트레일링 최종 익절 완료 시에만 영상 제작
     if max_high >= tp3_p or t_item.get("tp3_hit"):
         for fg in ("tp1_hit", "tp2_hit", "tp3_hit", "tp1_alerted", "tp2_alerted"):
             t_item[fg] = True
@@ -516,6 +534,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 🎯 남은 50% 물량은 바닥 방어선 TP2({fmt_price(tp2_p)}, +{g2:.1f}%) + 고점 대비 -{trail_drop_pct}% 자동 트레일링({fmt_price(stop_p)}, +{tr_pct:.1f}% · {confirm_tf_lbl} 종가 이탈 시 마감)으로 추적합니다!"
             )
 
+        video_payload = None
         tp3_armed_ms = int(to_float(t_item.get("tp3_armed_ts_ms"), default=peak_ts_ms))
         if (
             (not just_armed_tp3)
@@ -539,9 +558,10 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 📊 [최종 익절 내역]: 3차(50%) +{g3:.1f}%(+{w3:.2f}%) + 잔여(50%) +{exit_g:.1f}%(+{w_rem:.2f}%)\n"
                 f"• 💰 [최종 합산 확정 수익률]: +{total_cum:.2f}% 달성 (비중 100% 합산)"
             )
-        return {"messages": msgs, "sl_record": None}
+            video_payload = _make_video_payload("TP3_TRAILING", last_closed_c, total_cum)
+        return {"messages": msgs, "sl_record": None, "video_payload": video_payload}
 
-    # [2차 돌파]: 단기 15m / 장기 1H 마감 종가가 TP2 위 안착 시에만 방어선 TP1 상향 고정
+    # [2차 돌파]: TP1 방어선 100% 전량 수익 마감 완료 시에만 영상 제작
     tp2_confirmed = bool(t_item.get("tp2_hit") or t_item.get("tp2_alerted"))
     tp2_confirm_close_ts = int(to_float(t_item.get("tp2_armed_ts_ms"), 0))
 
@@ -569,6 +589,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 🛡️ [방어선 상향 고정]: {confirm_tf_lbl} 종가 돌파 확인 완료! 추가 익절 없이 100% 전량 홀딩하며 방어선을 TP1({fmt_price(tp1_p)}, +{g1:.1f}%)로 상향 고정합니다. (이탈 판정: 이후 {confirm_tf_lbl} 종가 기준)"
             )
 
+        video_payload = None
         tp2_armed_ms = int(to_float(t_item.get("tp2_armed_ts_ms"), default=peak_ts_ms))
         if (
             (not just_armed_tp2)
@@ -589,9 +610,10 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 TP1({fmt_price(stop_p)})을 {confirm_tf_lbl} 종가({fmt_price(last_closed_c)})로 이탈하여 전량(100%) 익절 마감합니다.\n"
                 f"• 💰 [최종 합산 확정 수익률]: +{exit_g:.2f}% 달성 (100% 전량 익절)"
             )
-        return {"messages": msgs, "sl_record": None}
+            video_payload = _make_video_payload("TP1_DEFENSE", last_closed_c, exit_g)
+        return {"messages": msgs, "sl_record": None, "video_payload": video_payload}
 
-    # [1차 돌파]: 익절·방어선 이동 없이 100% 홀딩 유지
+    # [1차 돌파]: 익절·방어선 이동 없이 100% 홀딩 유지 (영상 제작 안 함)
     if max_high >= tp1_p or t_item.get("tp1_hit"):
         t_item["tp1_hit"] = True
         if not t_item.get("tp1_alerted"):
@@ -602,7 +624,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 📈 분할 익절 없이 100% 전량 홀딩하며 2차 목표가({fmt_price(tp2_p)}, +{g2:.1f}% · {confirm_tf_lbl} 종가 안착 시 방어선 상향) 돌파를 추적합니다."
             )
 
-    # [2차 확정 전]: 고정 손절선 이탈 감시 (단기 -6% / 장기 -20%)
+    # [2차 확정 전]: 고정 손절선 이탈 감시 (영상 제작 안 함)
     valid_lows = [v for v in (hist_min_low, min_1m_low) if v is not None and v > 0]
     valid_closes = [v for v in (hist_min_close, min_1m_close) if v is not None and v > 0]
     if has_live_price and valid_lows and valid_closes:
@@ -638,9 +660,9 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 이탈 확인가: {fmt_price(trig)} USDT (손절선 {fmt_price(init_stop_p)}, -{sl_pct_use}% 이탈)\n"
                 f"• 진입 후 최고 상승폭: +{max_fav:.1f}% (보유 {hold_min}분)"
             )
-            return {"messages": msgs, "sl_record": (f"{symbol}_{created_at}", sl_payload)}
+            return {"messages": msgs, "sl_record": (f"{symbol}_{created_at}", sl_payload), "video_payload": None}
 
-    return {"messages": msgs, "sl_record": None}
+    return {"messages": msgs, "sl_record": None, "video_payload": None}
 
 
 def _send_signal_notifications(res, now_str):
@@ -652,6 +674,114 @@ def _send_signal_notifications(res, now_str):
     chart_bytes = generate_signal_chart_bytes(res)
     if not (chart_bytes and send_telegram_photo_with_caption(chart_bytes, caption_text="", reply_markup=markup)):
         send_telegram_reliable(f"📲 ${base} ({sym}) X 포스팅 바로가기", reply_markup=markup)
+
+
+def _send_profit_replay_video(vp, notify_error=True):
+    """전량 수익 마감 완료 시 10초 HD MP4 리플레이 영상 전송 (버튼 없음 · 실패 시 정확한 사유 진단 출력)"""
+    if not vp:
+        return False
+    sym = str(vp.get("symbol", "")).upper()
+    base = vp.get("base_coin") or sym.replace("USDT", "")
+    if not callable(generate_profit_replay_video_bytes) or not callable(send_telegram_video_with_caption):
+        err_msg = get_last_video_error() if callable(get_last_video_error) else "notifier 영상 모듈 미로드"
+        print(f"[리플레이 영상 불가] {sym}: {err_msg}")
+        if notify_error:
+            send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 제작 실패 진단]: {err_msg}")
+        return False
+    try:
+        video_bytes = generate_profit_replay_video_bytes(vp)
+        if not video_bytes:
+            err_msg = get_last_video_error() if callable(get_last_video_error) else "영상 생성 결과 비어 있음"
+            print(f"[리플레이 영상 생성 실패] {sym}: {err_msg}")
+            if notify_error:
+                send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 제작 실패 진단]: {err_msg}")
+            return False
+        tot_pct = to_float(vp.get("realized_weighted_pct"))
+        max_fav = to_float(vp.get("max_favorable_pct"))
+        caption = f"🎬 ${base} 최종 익절 10초 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+        fname = f"{base.lower()}_profit_replay.mp4"
+        ok = send_telegram_video_with_caption(video_bytes, caption_text=caption, reply_markup=None, filename=fname)
+        if not ok:
+            err_msg = get_last_video_error() if callable(get_last_video_error) else "텔레그램 전송 실패"
+            print(f"[리플레이 영상 전송 실패] {sym}: {err_msg}")
+            if notify_error:
+                send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 전송 실패 진단]: {err_msg}")
+        return ok
+    except Exception as e:
+        print(f"[리플레이 영상 발송 예외] {sym}: {e}")
+        if notify_error:
+            send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 예외 진단]: {str(e)[:160]}")
+        return False
+
+
+def run_latest_profit_video_test():
+    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목(예: $BTW)을 찾아 10초 리플레이 영상을 즉시 테스트 발송"""
+    state = load_state()
+    episodes = state.get("signal_episodes") or {}
+    tracked = state.get("tracked") or {}
+    now_ts = int(time.time())
+
+    pool = []
+    for ep in episodes.values():
+        if isinstance(ep, dict) and ep.get("symbol") and not is_stock_or_tradfi_symbol(ep.get("symbol")):
+            pool.append(ep)
+    for sym, tv in tracked.items():
+        if isinstance(tv, dict) and not is_stock_or_tradfi_symbol(sym):
+            item = dict(tv)
+            item["symbol"] = sym
+            pool.append(item)
+
+    profit_closed = [
+        x for x in pool
+        if (x.get("tp3_completed") or x.get("trailing_closed") or x.get("closed_alerted"))
+        and not x.get("sl_alerted")
+        and to_float(x.get("entry_price")) > 0
+    ]
+
+    if profit_closed:
+        profit_closed.sort(key=lambda x: int(to_float(x.get("tp3_at") or x.get("created_at"), 0)), reverse=True)
+        target = profit_closed[0]
+    else:
+        positive = [x for x in pool if to_float(x.get("entry_price")) > 0 and to_float(x.get("max_favorable_pct")) > 0]
+        if not positive:
+            send_telegram_reliable("⚠️ [리플레이 영상 테스트] 저장된 익절/수익 종목 기록이 없습니다.")
+            return
+        positive.sort(key=lambda x: int(to_float(x.get("created_at"), 0)), reverse=True)
+        target = positive[0]
+
+    sym = str(target.get("symbol", "")).upper()
+    base = sym.replace("USDT", "")
+    entry_p = to_float(target.get("entry_price"))
+    tps = target.get("tps") or [entry_p * 1.08, entry_p * 1.15, entry_p * 1.22]
+    created_at = int(to_float(target.get("created_at"), now_ts - 7200))
+    closed_at = int(to_float(target.get("tp3_at"), 0))
+    if closed_at <= created_at:
+        closed_at = min(now_ts, created_at + max(1800, int(to_float(target.get("hold_minutes"), 120)) * 60))
+
+    close_type = "TP3_TRAILING" if target.get("tp3_hit") else "TP1_DEFENSE"
+    exit_p = to_float(target.get("stop_price"), to_float(tps[0], entry_p * 1.08))
+    realized_pct = to_float(target.get("realized_weighted_pct"), round((exit_p - entry_p) / entry_p * 100.0, 2))
+    vp = {
+        "symbol": sym,
+        "base_coin": base,
+        "track_type": target.get("track_type", "TRACK_A"),
+        "is_long_term": bool(target.get("is_long_term") or target.get("track_type") == "TRACK_D"),
+        "close_type": close_type,
+        "entry_price": entry_p,
+        "initial_stop_price": to_float(target.get("initial_stop_price"), entry_p * 0.94),
+        "sl_pct": int(round(to_float(target.get("sl_pct"), 6))),
+        "tps": tps,
+        "max_high_price": max(to_float(target.get("max_high_price"), entry_p), exit_p),
+        "max_favorable_pct": to_float(target.get("max_favorable_pct"), realized_pct),
+        "exit_price": exit_p,
+        "realized_weighted_pct": realized_pct,
+        "created_at": created_at,
+        "closed_at": closed_at,
+        "hold_minutes": max(1, int((closed_at - created_at) // 60)),
+    }
+    print(f"[리플레이 영상 수동 테스트 시작] 대상: {sym} (진입 {entry_p} → 마감 {exit_p}, +{realized_pct:.2f}%)")
+    ok = _send_profit_replay_video(vp, notify_error=True)
+    print(f"[리플레이 영상 수동 테스트 결과] {'성공' if ok else '실패'}")
 
 
 def _git_sync_state():
@@ -770,6 +900,7 @@ def main():
 
     if active_syms:
         pending_msgs = []
+        pending_videos = []
         with ThreadPoolExecutor(max_workers=8) as ex:
             f_map = {ex.submit(evaluate_single_tracked_1m, s, tracked[s], now_ts, tp_params): s for s in active_syms}
             for fut in as_completed(f_map):
@@ -782,6 +913,8 @@ def main():
                     sync_episode_ledger(signal_episodes, s, tracked[s], sl_history)
                     for m in (out or {}).get("messages", []):
                         pending_msgs.append(m)
+                    if out and out.get("video_payload"):
+                        pending_videos.append(out["video_payload"])
                 except Exception as e:
                     print(f"[1분봉 감시 예외] {s}: {e}")
         save_state(state)
@@ -790,6 +923,10 @@ def main():
                 for m in pending_msgs:
                     send_telegram_reliable(m)
                     sent_count += 1
+                # 최종 전량 익절 마감 종목이 있으면 10초 리플레이 영상 제작 및 발송 (버튼 없음)
+                for vp in pending_videos:
+                    if _send_profit_replay_video(vp, notify_error=True):
+                        sent_count += 1
             else:
                 print(f"[중복방지 보류] Git 동기화 실패로 추적 알림 {len(pending_msgs)}건 발송 보류")
 
@@ -830,7 +967,6 @@ def main():
         return _recent_sl_count(sym_check) > 0
 
     def _closed_profit_recently(sym_check):
-        """[안전 보강] 익절/방어선 마감 후 최소 6시간(21600초) 동일 종목 즉시 재포착 차단"""
         pt = tracked.get(sym_check)
         if pt and (pt.get("tp3_completed") or pt.get("trailing_closed") or pt.get("closed_alerted")) and not pt.get("sl_alerted"):
             close_ts = int(to_float(pt.get("tp3_at"), 0))
@@ -945,7 +1081,9 @@ def run_loop_mode(iterations=9, sleep_sec=295):
 
 
 if __name__ == "__main__":
-    if "--loop" in sys.argv:
+    if "--test-video" in sys.argv:
+        run_latest_profit_video_test()
+    elif "--loop" in sys.argv:
         run_loop_mode()
     else:
         main()
