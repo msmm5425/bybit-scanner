@@ -1,4 +1,4 @@
-import os, re, io, sys, time, json, tempfile, subprocess, urllib.parse, requests
+import os, re, io, sys, time, json, shutil, tempfile, subprocess, urllib.parse, requests
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -29,6 +29,7 @@ if not TELEGRAM_CHAT_ID:
     TELEGRAM_CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
 
 SCHEME = "ht" + "tps://"
+WATERMARK_HANDLE = "@DnaPyung"
 _PLAYWRIGHT_READY = False
 
 
@@ -54,6 +55,17 @@ def fmt_price(price):
     if p <= 0:
         return "0.0000"
     return f"{p:,.2f}" if p >= 1000 else (f"{p:.3f}" if p >= 10 else (f"{p:.4f}" if p >= 1 else (f"{p:.5f}" if p >= 0.01 else f"{p:.6f}")))
+
+
+def _fmt_hold_duration(hold_minutes):
+    m = max(1, int(to_float(hold_minutes, 1)))
+    if m < 60:
+        return f"{m}분"
+    h, rem_m = divmod(m, 60)
+    if h < 24:
+        return f"{h}시간 {rem_m}분" if rem_m > 0 else f"{h}시간"
+    d, rem_h = divmod(h, 24)
+    return f"{d}일 {rem_h}시간" if rem_h > 0 else f"{d}일"
 
 
 def _ensure_playwright():
@@ -242,10 +254,10 @@ def build_x_post_message(res):
     )
 
 
-def build_x_intent_reply_markup(x_post_text):
+def build_x_intent_reply_markup(x_post_text, button_label="🚀 X(트위터) 앱에 본문 자동 입력하기"):
     encoded_text = urllib.parse.quote(str(x_post_text or ""), safe="")
     intent_url = clean_url(f"{SCHEME}x.com/intent/post?text={encoded_text}")
-    return {"inline_keyboard": [[{"text": "🚀 X(트위터) 앱에 본문 자동 입력하기", "url": intent_url}]]}
+    return {"inline_keyboard": [[{"text": button_label, "url": intent_url}]]}
 
 
 def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
@@ -308,9 +320,7 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     step_sec = {"720": 43200, "240": 14400, "60": 3600, "15": 900}.get(tf_str, 43200 if is_long else 3600)
     whitespace_js = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 6)]
 
-    # -------------------------------------------------------------------------
-    # [자동 피보나치 되돌림 계산] 96캔들 구간 스윙 고점·저점 기준 (추세 방향 자동 판별)
-    # -------------------------------------------------------------------------
+    # 포착 정적 차트 전용 자동 피보나치 되돌림 계산 (기존 그대로 유지)
     high_idx = int(df["high"].astype(float).idxmax())
     low_idx = int(df["low"].astype(float).idxmin())
     fib_high = to_float(df["high"].iloc[high_idx], candle_max_high)
@@ -436,7 +446,6 @@ const cData={json.dumps(candles_js)};
 candleSeries.setData([...cData,...{json.dumps(whitespace_js)}]);
 candleSeries.setMarkers([{{time:cData[cData.length-1].time,position:'belowBar',color:'#00e676',shape:'arrowUp',text:'ENTRY',size:2}}]);
 
-// 피보나치 수평선 작도 (스윙 기점 → 우측 끝)
 const fibLevels={json.dumps(fib_levels_js)};
 const fibStartTime={fib_start_time}, fibEndTime={fib_end_time};
 fibLevels.forEach(fl=>{{
@@ -459,7 +468,6 @@ const volSeries=chart.addHistogramSeries({{priceFormat:{{type:'volume'}},priceSc
 chart.priceScale('vol_scale').applyOptions({{scaleMargins:{{top:0.90,bottom:0.0}}}});
 volSeries.setData({json.dumps(vol_js)});
 
-// TP1·TP2·TP3·SL 가격선만 표시 (엔트리 흰색선 제거)
 [
   {{price:{_fwd(tp3_p)},color:'#ffd166',title:'TP3 (+{p3:g}%)',style:2,width:2}},
   {{price:{_fwd(tp2_p)},color:'#06d6a0',title:'TP2 (+{p2:g}%)',style:2,width:2}},
@@ -473,7 +481,6 @@ chart.addLineSeries({{color:'rgba(0,0,0,0)',lineWidth:1,priceLineVisible:false,l
 ]);
 chart.timeScale().fitContent();
 
-// 피보나치 골든포켓 음영 & 좌측 라벨 오버레이 렌더링
 requestAnimationFrame(()=>requestAnimationFrame(()=>{{
   try{{
     const ov=document.getElementById('fib-overlay');
@@ -591,6 +598,616 @@ def generate_signal_chart_bytes(res):
     return _render_tradingview_lightweight_chart(df.iloc[-96:].reset_index(drop=True), res, chart_tf=actual_tf)
 
 
+def generate_profit_replay_video_bytes(close_info):
+    """
+    [최종 전량 익절 10초 HD MP4 리플레이 영상 자동 제작 엔진 v2]
+    - 규격: X(트위터) 최적화 1280×720 (16:9), 15fps × 150프레임 = 정확히 10.0초, H.264/yuv420p/+faststart
+    - 연출 타임라인:
+      * 0.0초 ~ 1.0초 (프레임 0~14): 썸네일 완성 이미지 (진입봉→익절봉 파란 곡선 화살표 + 진입/익절 날짜·가격 + 최종 수익률%)
+      * 1.0초 ~ 2.0초 (프레임 15~29): 진입 시점(ENTRY) 리셋 및 출발 준비
+      * 2.0초 ~ 8.0초 (프레임 30~119): 2초부터 진입봉→익절봉 실시간 캔들 상승 리플레이 재생
+      * 8.0초 ~ 10.0초 (프레임 120~149): 최종 익절 완성 엔딩 (파란 곡선 화살표 드로잉 + 진입/익절 날짜·가격 + 최종 수익률%)
+    - 보유 기간별 캔들 자동 선택: 12시간 미만(15m) / 1~2일 이내(1H) / 3일 이상(4H)
+    - 피보나치 제외 · 배경 대형 워터마크(@DnaPyung) · 최하단 시뮬레이션 안내 문구 표기
+    """
+    if not shutil.which("ffmpeg"):
+        print("[리플레이 영상 생략] ffmpeg가 설치되어 있지 않습니다.")
+        return None
+    if not _ensure_playwright():
+        return None
+
+    symbol = str(close_info.get("symbol", "")).upper().strip()
+    base = close_info.get("base_coin") or symbol.replace("USDT", "")
+    entry_p = to_float(close_info.get("entry_price"))
+    if not symbol or entry_p <= 0:
+        return None
+
+    created_at = int(to_float(close_info.get("created_at"), 0))
+    closed_at = int(to_float(close_info.get("closed_at"), time.time()))
+    if created_at <= 0 or closed_at <= created_at:
+        created_at = closed_at - 3600
+
+    hold_minutes = max(1, int(to_float(close_info.get("hold_minutes"), (closed_at - created_at) // 60)))
+    hold_hours = (closed_at - created_at) / 3600.0
+
+    # 보유 기간별 타임프레임 규칙 엄격 적용
+    if hold_hours < 12.0:
+        tf_code, tf_label, step_sec, fetch_lim = "15", "15m", 900, 180
+    elif hold_hours < 72.0:
+        tf_code, tf_label, step_sec, fetch_lim = "60", "1H", 3600, 180
+    else:
+        tf_code, tf_label, step_sec, fetch_lim = "240", "4H", 14400, 260
+
+    df_raw = fetch_exact_bybit_klines(symbol, interval=tf_code, limit=fetch_lim, min_rows=15)
+    if df_raw.empty and tf_code != "15":
+        tf_code, tf_label, step_sec = "15", "15m", 900
+        df_raw = fetch_exact_bybit_klines(symbol, interval="15", limit=200, min_rows=15)
+    if df_raw.empty:
+        return None
+
+    df = df_raw.copy()
+    df["ma5"] = df["close"].rolling(5, min_periods=2).mean()
+    df["ma9"] = df["close"].rolling(9, min_periods=3).mean()
+    df["ma20"] = df["close"].rolling(20, min_periods=5).mean()
+
+    created_ms = created_at * 1000
+    closed_ms = closed_at * 1000
+    ts_arr = df["timestamp"].astype("int64").values
+
+    entry_matches = np.where(ts_arr <= created_ms)[0]
+    entry_abs = int(entry_matches[-1]) if len(entry_matches) > 0 else max(0, len(df) - 20)
+
+    exit_matches = np.where(ts_arr <= closed_ms)[0]
+    exit_abs = int(exit_matches[-1]) if len(exit_matches) > 0 else (len(df) - 1)
+    if exit_abs < entry_abs:
+        exit_abs = min(len(df) - 1, entry_abs)
+
+    post_count = (exit_abs - entry_abs) + 1
+    pre_bars = 26 if post_count <= 90 else 18
+    slice_start = max(0, entry_abs - pre_bars)
+    df_win = df.iloc[slice_start : exit_abs + 1].reset_index(drop=True)
+    if len(df_win) < 8:
+        return None
+
+    entry_idx = max(0, entry_abs - slice_start)
+    exit_idx = len(df_win) - 1
+
+    is_long = bool(close_info.get("is_long_term") or close_info.get("track_type") == "TRACK_D")
+    track_type = str(close_info.get("track_type", "TRACK_A"))
+    close_type = str(close_info.get("close_type", "TP3_TRAILING"))
+    sl_pct = int(round(to_float(close_info.get("sl_pct"), 20 if is_long else FIXED_SL_PCT)))
+    sl_p = to_float(close_info.get("initial_stop_price"), entry_p * (1.0 - sl_pct / 100.0))
+    tps = close_info.get("tps") or [entry_p * 1.08, entry_p * 1.15, entry_p * 1.22]
+    tp1_p = to_float(tps[0], entry_p * 1.08)
+    tp2_p = to_float(tps[1], entry_p * 1.15)
+    tp3_p = to_float(tps[2], entry_p * 1.22)
+    p1 = round((tp1_p - entry_p) / entry_p * 100.0, 1)
+    p2 = round((tp2_p - entry_p) / entry_p * 100.0, 1)
+    p3 = round((tp3_p - entry_p) / entry_p * 100.0, 1)
+
+    max_high_val = max(to_float(close_info.get("max_high_price"), entry_p), to_float(df_win["high"].max(), entry_p))
+    exit_p = to_float(close_info.get("exit_price"), to_float(df_win["close"].iloc[-1], entry_p))
+    total_realized_pct = round(to_float(close_info.get("realized_weighted_pct"), max(p1, (exit_p - entry_p) / entry_p * 100.0)), 2)
+    hold_str = _fmt_hold_duration(hold_minutes)
+
+    entry_dt_str = datetime.fromtimestamp(created_at, tz=KST).strftime("%Y-%m-%d %H:%M")
+    exit_dt_str = datetime.fromtimestamp(closed_at, tz=KST).strftime("%Y-%m-%d %H:%M")
+
+    # 상·하단 블루 콜아웃 박스가 캔들과 겹치지 않도록 넉넉한 고정 Y축 여백 확보
+    win_low = min(to_float(df_win["low"].min(), entry_p * 0.94), sl_p, entry_p)
+    win_high = max(to_float(df_win["high"].max(), entry_p * 1.15), tp2_p, exit_p)
+    if close_type == "TP3_TRAILING" or max_high_val >= tp3_p * 0.92:
+        win_high = max(win_high, tp3_p)
+    y_span = max(win_high - win_low, entry_p * 0.05)
+    y_min_anchor = win_low - (y_span * 0.16)
+    y_max_anchor = win_high + (y_span * 0.24)
+
+    candles_js, vol_js, ma5_js, ma9_js, ma20_js, kst_strs = [], [], [], [], [], []
+    for _, row in df_win.iterrows():
+        ts_ms = to_float(row["timestamp"])
+        ts_sec = int(ts_ms // 1000) + (9 * 3600)
+        o_v, h_v, l_v, c_v, v_v = (
+            to_float(row["open"]), to_float(row["high"]),
+            to_float(row["low"]), to_float(row["close"]), to_float(row["volume"]),
+        )
+        candles_js.append({"time": ts_sec, "open": o_v, "high": h_v, "low": l_v, "close": c_v})
+        vol_js.append({"time": ts_sec, "value": v_v, "color": "rgba(38, 166, 154, 0.38)" if c_v >= o_v else "rgba(239, 83, 80, 0.38)"})
+        ma5_js.append({"time": ts_sec, "value": to_float(row["ma5"])} if pd.notna(row.get("ma5")) else None)
+        ma9_js.append({"time": ts_sec, "value": to_float(row["ma9"])} if pd.notna(row.get("ma9")) else None)
+        ma20_js.append({"time": ts_sec, "value": to_float(row["ma20"])} if pd.notna(row.get("ma20")) else None)
+        kst_strs.append(datetime.fromtimestamp(ts_ms / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST"))
+
+    # 우측 여백 7캔들 확보 (파란 곡선 화살표가 우측으로 자연스럽게 휘어질 공간)
+    ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 8)]
+    decimals = 6 if entry_p < 0.01 else (5 if entry_p < 1 else (4 if entry_p < 10 else (3 if entry_p < 1000 else 2)))
+    min_move = 10 ** (-decimals)
+    lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
+
+    pos_badge = "LONG-TERM REPLAY" if is_long else f"{track_type.replace('_', ' ')} REPLAY"
+    price_diff_abs = abs(exit_p - entry_p)
+    price_diff_prefix = "+" if exit_p >= entry_p else "-"
+    exit_headline = f"{price_diff_prefix}{fmt_price(price_diff_abs)} (+{total_realized_pct:.2f}%) in {hold_str}"
+
+    total_frames = 150  # 15fps × 10.0초 = 정확히 10초
+    fps = 15
+
+    html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><script src="{lw_script_url}"></script>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR',sans-serif;color:#d1d4dc;width:1280px;height:720px;overflow:hidden}}
+.tv-wrap{{width:1280px;height:720px;background:#131722;display:flex;flex-direction:column}}
+.tv-topbar{{height:46px;background:#181c27;border-bottom:1px solid #2a2e39;display:flex;align-items:center;justify-content:space-between;padding:0 18px}}
+.tv-left,.tv-right{{display:flex;align-items:center;gap:11px}}
+.tv-symbol{{font-size:18px;font-weight:800;color:#fff;letter-spacing:0.2px}}
+.tv-tf-badge{{background:#2a2e39;color:#e0e3eb;font-size:12px;font-weight:700;padding:3px 9px;border-radius:4px}}
+.tv-ohlc{{display:flex;gap:10px;font-size:12.5px;font-weight:600;color:#9598a1}}
+.tv-val-up{{color:#26a69a}}
+.tv-val-dn{{color:#ef5350}}
+.tv-replay-pill{{background:#2962ff;color:#fff;font-size:12px;font-weight:800;padding:4px 11px;border-radius:5px}}
+.tv-handle-pill{{background:rgba(255,255,255,0.07);border:1px solid #363a45;color:#f0f3fa;font-size:12.5px;font-weight:800;padding:4px 11px;border-radius:5px;letter-spacing:0.3px}}
+#chart-box{{position:relative;flex:1;width:1280px;height:650px;overflow:hidden}}
+.tv-ma-legend{{position:absolute;top:12px;left:16px;z-index:20;display:flex;gap:14px;font-size:12.5px;font-weight:700;background:rgba(19,23,34,0.86);padding:5px 12px;border-radius:5px;border:1px solid #2a2e39}}
+.live-hud{{position:absolute;top:12px;right:110px;z-index:25;display:flex;align-items:center;gap:10px;transition:none}}
+.pnl-pill{{background:rgba(19,23,34,0.90);border:1.5px solid #26a69a;border-radius:8px;padding:7px 14px;display:flex;flex-direction:column;align-items:flex-end;min-width:142px;box-shadow:0 6px 18px rgba(0,0,0,0.4)}}
+.pnl-label{{font-size:10.5px;font-weight:700;color:#9598a1;letter-spacing:0.5px}}
+.pnl-val{{font-size:22px;font-weight:900;color:#00e676;line-height:1.15}}
+.stage-pill{{background:rgba(41,98,255,0.22);border:1px solid #4cc9f0;color:#e0f7fa;font-size:12px;font-weight:800;padding:7px 12px;border-radius:7px;display:none}}
+
+/* 트레이딩뷰 스타일 진입→익절 곡선 화살표 및 블루 콜아웃 오버레이 */
+#result-overlay{{position:absolute;inset:0;pointer-events:none;z-index:30;opacity:0}}
+#arc-svg{{position:absolute;inset:0;width:1280px;height:650px;overflow:visible}}
+.tv-callout{{
+  position:absolute;
+  background:linear-gradient(135deg,#2962ff 0%,#1e53e5 100%);
+  color:#ffffff;
+  border-radius:8px;
+  padding:8px 13px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.52), 0 0 0 1px rgba(255,255,255,0.14) inset;
+  white-space:nowrap;
+}}
+.tv-callout-exit .co-main{{font-size:16px;font-weight:900;letter-spacing:-0.2px;line-height:1.25;color:#ffffff}}
+.tv-callout-exit .co-sub{{font-size:12.5px;font-weight:700;color:#e3ecff;margin-top:3px;display:flex;align-items:center;gap:8px}}
+.tv-callout-entry .co-main{{font-size:14px;font-weight:900;line-height:1.2;color:#ffffff}}
+.tv-callout-entry .co-sub{{font-size:12px;font-weight:600;color:#dbeafe;margin-top:2px}}
+.co-caret-down{{
+  position:absolute;bottom:-7px;width:0;height:0;
+  border-left:7px solid transparent;border-right:7px solid transparent;border-top:7px solid #2258ee;
+}}
+.co-caret-up{{
+  position:absolute;top:-7px;width:0;height:0;
+  border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:7px solid #2962ff;
+}}
+
+.tv-footer{{height:24px;background:#0e121b;border-top:1px solid #222632;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:10.5px;color:#787b86;font-weight:500}}
+.prog-wrap{{width:160px;height:4px;background:#222632;border-radius:2px;overflow:hidden}}
+.prog-fill{{height:100%;width:0%;background:linear-gradient(90deg,#2962ff,#00e676)}}
+</style></head>
+<body>
+<div class="tv-wrap">
+  <div class="tv-topbar">
+    <div class="tv-left">
+      <span class="tv-symbol">${base}USDT.P</span>
+      <span class="tv-tf-badge">{tf_label} · REPLAY</span>
+      <div class="tv-ohlc">
+        <span>O <span id="oh-o" class="tv-val-up">{fmt_price(entry_p)}</span></span>
+        <span>H <span id="oh-h" class="tv-val-up">{fmt_price(entry_p)}</span></span>
+        <span>L <span id="oh-l" class="tv-val-up">{fmt_price(entry_p)}</span></span>
+        <span>C <span id="oh-c" class="tv-val-up">{fmt_price(entry_p)}</span></span>
+      </div>
+    </div>
+    <div class="tv-right">
+      <span id="top-time" style="font-size:12px;color:#b2b5be">{kst_strs[exit_idx]}</span>
+      <span class="tv-replay-pill">{pos_badge}</span>
+      <span class="tv-handle-pill">{WATERMARK_HANDLE}</span>
+    </div>
+  </div>
+  <div id="chart-box">
+    <div class="tv-ma-legend">
+      <span style="color:#00e5ff">● MA(5) <span id="lg-m5">-</span></span>
+      <span style="color:#ffd166">● MA(9) <span id="lg-m9">-</span></span>
+      <span style="color:#2962ff">● MA(20) <span id="lg-m20">-</span></span>
+    </div>
+    <div class="live-hud" id="live-hud">
+      <div id="stage-pill" class="stage-pill"></div>
+      <div class="pnl-pill" id="pnl-box">
+        <span class="pnl-label">LIVE RETURN</span>
+        <span class="pnl-val" id="pnl-val">+0.0%</span>
+      </div>
+    </div>
+
+    <!-- 진입봉→익절봉 파란 곡선 화살표 & 진입/익절 날짜·가격·최종수익률 블루 콜아웃 -->
+    <div id="result-overlay">
+      <svg id="arc-svg" viewBox="0 0 1280 650">
+        <defs>
+          <filter id="arc-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#2962ff" flood-opacity="0.55"/>
+          </filter>
+        </defs>
+        <path id="arc-path" d="" fill="none" stroke="#2962ff" stroke-width="3.6" stroke-linecap="round" filter="url(#arc-glow)"/>
+        <circle id="dot-entry" cx="0" cy="0" r="5.5" fill="#2962ff" stroke="#ffffff" stroke-width="2"/>
+        <circle id="dot-exit" cx="0" cy="0" r="5.5" fill="#2962ff" stroke="#ffffff" stroke-width="2"/>
+        <polygon id="arc-head" points="0,0 -13,-6.5 -10,0 -13,6.5" fill="#3b82f6" stroke="#ffffff" stroke-width="0.6"/>
+      </svg>
+
+      <div id="callout-exit" class="tv-callout tv-callout-exit">
+        <div class="co-main">{exit_headline}</div>
+        <div class="co-sub"><span>EXIT {fmt_price(exit_p)}</span><span>🕒 {exit_dt_str}</span></div>
+        <div id="caret-exit" class="co-caret-down"></div>
+      </div>
+
+      <div id="callout-entry" class="tv-callout tv-callout-entry">
+        <div id="caret-entry" class="co-caret-up"></div>
+        <div class="co-main">ENTRY {fmt_price(entry_p)}</div>
+        <div class="co-sub">🕒 {entry_dt_str}</div>
+      </div>
+    </div>
+  </div>
+  <div class="tv-footer">
+    <span>※ 본 영상은 스캐너 포착 진입가·TP·방어선/트레일링 기준을 활용한 시뮬레이션 리플레이 영상이며, 실제 체결 결과와 다를 수 있습니다.</span>
+    <div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
+  </div>
+</div>
+<script>
+const cAll={json.dumps(candles_js)};
+const vAll={json.dumps(vol_js)};
+const m5All={json.dumps(ma5_js)};
+const m9All={json.dumps(ma9_js)};
+const m20All={json.dumps(ma20_js)};
+const kstAll={json.dumps(kst_strs)};
+const wsTail={json.dumps(ws_tail)};
+const entryIdx={entry_idx}, exitIdx={exit_idx}, entryP={entry_p}, exitP={exit_p};
+const tp1P={tp1_p}, tp2P={tp2_p}, tp3P={tp3_p}, slP={sl_p};
+const decimals={decimals}, totalFrames={total_frames};
+const yMinAnchor={y_min_anchor}, yMaxAnchor={y_max_anchor};
+
+function fmtP(v){{
+  if(!v || v<=0) return '0.0000';
+  if(v>=1000) return v.toLocaleString('en-US',{{minimumFractionDigits:2,maximumFractionDigits:2}});
+  return v.toFixed(decimals);
+}}
+
+const chart=LightweightCharts.createChart(document.getElementById('chart-box'),{{
+  width:1280, height:650,
+  layout:{{background:{{type:'solid',color:'#131722'}},textColor:'#d1d4dc',fontSize:12}},
+  grid:{{vertLines:{{color:'#1e222d'}},horzLines:{{color:'#1e222d'}}}},
+  watermark:{{
+    visible:true,
+    fontSize:82,
+    horzAlign:'center',
+    vertAlign:'center',
+    color:'rgba(209, 212, 220, 0.16)',
+    text:'{WATERMARK_HANDLE}',
+    fontFamily:'-apple-system,BlinkMacSystemFont,Roboto,sans-serif',
+    fontStyle:'bold'
+  }},
+  rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.05,bottom:0.12}},entireTextOnly:true}},
+  timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:5}},
+  localization:{{priceFormatter:fmtP}}
+}});
+
+const anchorSeries=chart.addLineSeries({{color:'rgba(0,0,0,0)',lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false}});
+anchorSeries.setData([{{time:cAll[0].time,value:yMinAnchor}},{{time:wsTail[wsTail.length-1].time,value:yMaxAnchor}}]);
+
+const candleSeries=chart.addCandlestickSeries({{
+  upColor:'#26a69a',downColor:'#ef5350',
+  borderUpColor:'#26a69a',borderDownColor:'#ef5350',
+  wickUpColor:'#26a69a',wickDownColor:'#ef5350',
+  priceLineVisible:false,lastValueVisible:false,
+  priceFormat:{{type:'custom',minMove:{min_move},formatter:fmtP}}
+}});
+const ma5Series=chart.addLineSeries({{color:'#00e5ff',lineWidth:1.6,priceLineVisible:false,lastValueVisible:false}});
+const ma9Series=chart.addLineSeries({{color:'#ffd166',lineWidth:1.6,priceLineVisible:false,lastValueVisible:false}});
+const ma20Series=chart.addLineSeries({{color:'#2962ff',lineWidth:2.0,priceLineVisible:false,lastValueVisible:false}});
+const volSeries=chart.addHistogramSeries({{priceFormat:{{type:'volume'}},priceScaleId:'vol_scale',priceLineVisible:false,lastValueVisible:false}});
+chart.priceScale('vol_scale').applyOptions({{scaleMargins:{{top:0.89,bottom:0.0}}}});
+
+candleSeries.createPriceLine({{price:tp3P,color:'#ffd166',lineWidth:2,lineStyle:2,axisLabelVisible:true,title:'TP3 (+{p3:g}%)'}});
+candleSeries.createPriceLine({{price:tp2P,color:'#06d6a0',lineWidth:2,lineStyle:2,axisLabelVisible:true,title:'TP2 (+{p2:g}%)'}});
+candleSeries.createPriceLine({{price:tp1P,color:'#4cc9f0',lineWidth:2,lineStyle:2,axisLabelVisible:true,title:'TP1 (+{p1:g}%)'}});
+candleSeries.createPriceLine({{price:slP,color:'#ef476f',lineWidth:2,lineStyle:2,axisLabelVisible:true,title:'SL (-{sl_pct}%)'}});
+
+candleSeries.setData(cAll.concat(wsTail));
+chart.timeScale().fitContent();
+
+const elO=document.getElementById('oh-o'), elH=document.getElementById('oh-h'), elL=document.getElementById('oh-l'), elC=document.getElementById('oh-c');
+const elTime=document.getElementById('top-time');
+const elM5=document.getElementById('lg-m5'), elM9=document.getElementById('lg-m9'), elM20=document.getElementById('lg-m20');
+const elHud=document.getElementById('live-hud'), elPnl=document.getElementById('pnl-val'), elPnlBox=document.getElementById('pnl-box');
+const elStage=document.getElementById('stage-pill'), elProg=document.getElementById('prog-fill');
+const elOverlay=document.getElementById('result-overlay');
+const elArcPath=document.getElementById('arc-path'), elArcHead=document.getElementById('arc-head');
+const elDotEntry=document.getElementById('dot-entry'), elDotExit=document.getElementById('dot-exit');
+const elCoExit=document.getElementById('callout-exit'), elCoEntry=document.getElementById('callout-entry');
+const elCaretExit=document.getElementById('caret-exit'), elCaretEntry=document.getElementById('caret-entry');
+
+let arcTotalLen=0;
+let geometryReady=false;
+
+function setupResultOverlayGeometry(){{
+  const psW=(chart.priceScale('right') && chart.priceScale('right').width) ? chart.priceScale('right').width() : 92;
+  const plotRight=Math.max(400, 1280 - (psW || 92) - 8);
+  const totalSlots=cAll.length + wsTail.length;
+
+  let x1=chart.timeScale().timeToCoordinate(cAll[entryIdx].time);
+  let x2=chart.timeScale().timeToCoordinate(cAll[exitIdx].time);
+  if(x1===null || !isFinite(x1)) x1=40 + (entryIdx / Math.max(1, totalSlots)) * (plotRight - 80);
+  if(x2===null || !isFinite(x2)) x2=40 + (exitIdx / Math.max(1, totalSlots)) * (plotRight - 80);
+
+  let y1=candleSeries.priceToCoordinate(entryP);
+  let y1Low=candleSeries.priceToCoordinate(cAll[entryIdx].low);
+  let y2=candleSeries.priceToCoordinate(exitP);
+  let y2High=candleSeries.priceToCoordinate(cAll[exitIdx].high);
+  if(y1===null || !isFinite(y1)) y1=480;
+  if(y1Low===null || !isFinite(y1Low)) y1Low=y1;
+  if(y2===null || !isFinite(y2)) y2=160;
+  if(y2High===null || !isFinite(y2High)) y2High=y2;
+
+  y1=Math.max(60, Math.min(585, y1));
+  y1Low=Math.max(y1, Math.min(595, y1Low));
+  y2=Math.max(76, Math.min(560, y2));
+  y2High=Math.max(54, Math.min(y2, y2High));
+
+  // 트레이딩뷰 레퍼런스 스타일 곡선 화살표 제어점 (우측으로 부드럽게 휘어 위로 꽂히는 곡선)
+  const dx=x2 - x1;
+  const dy=y1 - y2;
+  let cx, cy;
+  if(dx >= 45){{
+    cx = Math.min(plotRight - 14, x1 + dx * 0.88 + 18);
+    cy = Math.min(592, y1 - dy * 0.04 + 12);
+  }} else {{
+    cx = Math.min(plotRight - 14, Math.max(x1, x2) + 72);
+    cy = Math.min(592, y1 - dy * 0.25 + 14);
+  }}
+
+  const dStr='M ' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' Q ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ' ' + x2.toFixed(1) + ' ' + y2.toFixed(1);
+  elArcPath.setAttribute('d', dStr);
+  elDotEntry.setAttribute('cx', x1.toFixed(1));
+  elDotEntry.setAttribute('cy', y1.toFixed(1));
+  elDotExit.setAttribute('cx', x2.toFixed(1));
+  elDotExit.setAttribute('cy', y2.toFixed(1));
+
+  arcTotalLen=Math.max(1, elArcPath.getTotalLength());
+  elArcPath.style.strokeDasharray=arcTotalLen.toFixed(1);
+
+  // 1) 익절 블루 콜아웃 (상단: 익절 봉 위쪽 배치 + 캔들/축 겹침 방지)
+  const exitW=elCoExit.offsetWidth || 275;
+  const exitH=elCoExit.offsetHeight || 56;
+  let exitLeft=Math.max(16, Math.min(plotRight - exitW - 10, x2 - exitW * 0.55));
+  let exitTop=Math.min(y2, y2High) - exitH - 18;
+  if(exitTop < 48) exitTop = 48;
+  elCoExit.style.left=exitLeft.toFixed(1) + 'px';
+  elCoExit.style.top=exitTop.toFixed(1) + 'px';
+  const exitCaretX=Math.max(14, Math.min(exitW - 24, x2 - exitLeft - 7));
+  elCaretExit.style.left=exitCaretX.toFixed(1) + 'px';
+
+  // 2) 진입 블루 콜아웃 (하단: 진입 봉 아래쪽 배치 + 익절 박스와 겹침 자동 회피)
+  const entryW=elCoEntry.offsetWidth || 185;
+  const entryH=elCoEntry.offsetHeight || 50;
+  let entryLeft=Math.max(16, Math.min(plotRight - entryW - 10, x1 - entryW * 0.42));
+  let entryTop=y1Low + 14;
+  if(entryTop + entryH > 634) entryTop = 634 - entryH;
+  if(entryTop < exitTop + exitH + 12){{
+    entryTop = Math.min(634 - entryH, exitTop + exitH + 14);
+  }}
+  elCoEntry.style.left=entryLeft.toFixed(1) + 'px';
+  elCoEntry.style.top=entryTop.toFixed(1) + 'px';
+  const entryCaretX=Math.max(14, Math.min(entryW - 24, x1 - entryLeft - 7));
+  elCaretEntry.style.left=entryCaretX.toFixed(1) + 'px';
+
+  geometryReady=true;
+}}
+
+function setResultOverlayVisual(overlayOpacity, arrowProgress, showCallouts){{
+  if(!geometryReady) setupResultOverlayGeometry();
+  elOverlay.style.opacity=overlayOpacity.toFixed(2);
+  if(overlayOpacity <= 0.01) return;
+
+  const p=Math.max(0.02, Math.min(1.0, arrowProgress));
+  const curLen=arcTotalLen * p;
+  elArcPath.style.strokeDashoffset=(arcTotalLen - curLen).toFixed(1);
+
+  const pt=elArcPath.getPointAtLength(curLen);
+  const ptPrev=elArcPath.getPointAtLength(Math.max(0, curLen - 3));
+  const ang=Math.atan2(pt.y - ptPrev.y, pt.x - ptPrev.x) * 180 / Math.PI;
+  elArcHead.setAttribute('transform', 'translate(' + pt.x.toFixed(1) + ',' + pt.y.toFixed(1) + ') rotate(' + ang.toFixed(1) + ')');
+  elDotExit.style.opacity=(p >= 0.95 ? '1' : '0');
+
+  const boxAlpha=showCallouts ? Math.min(1.0, overlayOpacity) : 0;
+  elCoEntry.style.opacity=boxAlpha.toFixed(2);
+  elCoExit.style.opacity=(p >= 0.85 ? boxAlpha : 0).toFixed(2);
+}}
+
+// 10초 타임라인 (15fps × 150프레임):
+// [0..14]   0.0s~1.0s : 처음 썸네일 완성 이미지 (1초 고정)
+// [15..29]  1.0s~2.0s : 진입 봉 시점 리셋 및 출발 준비 (1초)
+// [30..119] 2.0s~8.0s : 정확히 2초부터 본격 캔들 상승 리플레이 (6초)
+// [120..149] 8.0s~10.0s: 마지막 완성 장면 (파란 곡선 화살표 + 진입/익절 날짜·가격·최종 수익률) (2초)
+const THUMB_END=15;
+const PLAY_START=30;
+const PLAY_END=119;
+const postSteps=Math.max(1, exitIdx - entryIdx);
+
+window.__renderFrame=function(f){{
+  let showIdx=entryIdx;
+  let frac=1.0;
+  let isThumb=(f < THUMB_END);
+  let isPrep=(f >= THUMB_END && f < PLAY_START);
+  let isPlay=(f >= PLAY_START && f <= PLAY_END);
+  let isOutro=(f > PLAY_END);
+
+  if(isThumb){{
+    showIdx=exitIdx;
+    frac=1.0;
+    elProg.style.width='0.0%';
+  }} else if(isPrep){{
+    showIdx=entryIdx;
+    frac=1.0;
+    elProg.style.width='0.0%';
+  }} else if(isPlay){{
+    const progress=(f - PLAY_START) / (PLAY_END - PLAY_START);
+    elProg.style.width=(progress * 100).toFixed(1) + '%';
+    const pos=entryIdx + progress * postSteps;
+    showIdx=Math.min(exitIdx, Math.floor(pos));
+    frac=Math.min(1.0, Math.max(0.15, pos - Math.floor(pos)));
+    if(f === PLAY_END){{ showIdx=exitIdx; frac=1.0; }}
+  }} else {{
+    showIdx=exitIdx;
+    frac=1.0;
+    elProg.style.width='100.0%';
+  }}
+
+  const dispC=[];
+  for(let i=0;i<=showIdx;i++){{
+    const src=cAll[i];
+    if(i === showIdx && i > entryIdx && frac < 0.999){{
+      const cNow=src.open + (src.close - src.open) * frac;
+      const hNow=Math.max(src.open, cNow, src.open + (src.high - src.open) * frac);
+      const lNow=Math.min(src.open, cNow, src.open + (src.low - src.open) * frac);
+      dispC.push({{time:src.time,open:src.open,high:hNow,low:lNow,close:cNow}});
+    }} else {{
+      dispC.push(src);
+    }}
+  }}
+  for(let i=showIdx+1;i<cAll.length;i++) dispC.push({{time:cAll[i].time}});
+  for(let i=0;i<wsTail.length;i++) dispC.push(wsTail[i]);
+  candleSeries.setData(dispC);
+
+  volSeries.setData(vAll.slice(0, showIdx + 1));
+  ma5Series.setData(m5All.slice(0, showIdx + 1).filter(Boolean));
+  ma9Series.setData(m9All.slice(0, showIdx + 1).filter(Boolean));
+  ma20Series.setData(m20All.slice(0, showIdx + 1).filter(Boolean));
+
+  const lastBar=dispC[showIdx];
+  const isUp=lastBar.close >= lastBar.open;
+  const cls=isUp ? 'tv-val-up' : 'tv-val-dn';
+  elO.textContent=fmtP(lastBar.open); elO.className=cls;
+  elH.textContent=fmtP(lastBar.high); elH.className=cls;
+  elL.textContent=fmtP(lastBar.low);  elL.className=cls;
+  elC.textContent=fmtP(lastBar.close); elC.className=cls;
+  elTime.textContent=kstAll[showIdx];
+
+  const m5v=m5All[showIdx], m9v=m9All[showIdx], m20v=m20All[showIdx];
+  elM5.textContent=m5v ? fmtP(m5v.value) : '-';
+  elM9.textContent=m9v ? fmtP(m9v.value) : '-';
+  elM20.textContent=m20v ? fmtP(m20v.value) : '-';
+
+  // 마커 설정
+  const markers=[{{time:cAll[entryIdx].time,position:'belowBar',color:'#00e676',shape:'arrowUp',text:'ENTRY',size:2}}];
+  if(isThumb || isOutro){{
+    markers.push({{time:cAll[exitIdx].time,position:'aboveBar',color:'#ffd166',shape:'arrowDown',text:'EXIT',size:2}});
+  }}
+  candleSeries.setMarkers(markers);
+
+  if(isThumb){{
+    // 0.0초~1.0초: 썸네일 완성 이미지 (라이브 HUD 숨김, 파란 곡선 화살표 & 진입/익절 콜아웃 100% 표시)
+    elHud.style.opacity='0';
+    setResultOverlayVisual(1.0, 1.0, true);
+  }} else if(isPrep || isPlay){{
+    // 1.0초~8.0초: 리플레이 준비 & 본격 상승 리플레이 (라이브 수익률 HUD 표시, 결과 오버레이 숨김)
+    elHud.style.opacity='1';
+    setResultOverlayVisual(0.0, 0.0, false);
+
+    let hitTp1=false, hitTp2=false, hitTp3=false;
+    for(let i=entryIdx;i<=showIdx;i++){{
+      const b=dispC[i];
+      if(b.high >= tp1P) hitTp1=true;
+      if(b.close >= tp2P || b.high >= tp3P) hitTp2=true;
+      if(b.high >= tp3P) hitTp3=true;
+    }}
+    const livePnl=isPrep ? 0.0 : ((lastBar.close - entryP) / entryP * 100.0);
+    elPnl.textContent=(livePnl >= 0 ? '+' : '') + livePnl.toFixed(1) + '%';
+    elPnl.style.color=livePnl >= 0 ? '#00e676' : '#ef5350';
+    elPnlBox.style.borderColor=livePnl >= 0 ? '#26a69a' : '#ef5350';
+
+    if(isPrep){{
+      elStage.style.display='block';
+      elStage.style.borderColor='#00e676';
+      elStage.style.background='rgba(0,230,118,0.16)';
+      elStage.textContent='🟢 ENTRY 포착 완료 · 리플레이 시작';
+    }} else if(hitTp3){{
+      elStage.style.display='block';
+      elStage.style.borderColor='#ffd166';
+      elStage.style.background='rgba(255,209,102,0.18)';
+      elStage.textContent='🚀 TP3 50% 익절 · 트레일링 가동';
+    }} else if(hitTp2){{
+      elStage.style.display='block';
+      elStage.style.borderColor='#06d6a0';
+      elStage.style.background='rgba(6,214,160,0.18)';
+      elStage.textContent='🛡️ TP2 안착 · TP1 방어선 고정';
+    }} else if(hitTp1){{
+      elStage.style.display='block';
+      elStage.style.borderColor='#4cc9f0';
+      elStage.style.background='rgba(76,201,240,0.18)';
+      elStage.textContent='✅ TP1 돌파 · 100% 홀딩';
+    }} else {{
+      elStage.style.display='none';
+    }}
+  }} else {{
+    // 8.0초~10.0초: 최종 익절 완성 엔딩 (파란 곡선 화살표가 진입봉→익절봉으로 그려지며 블루 콜아웃 완성)
+    elHud.style.opacity='0';
+    const outroStep=f - PLAY_END;
+    const arrowP=Math.min(1.0, outroStep / 8.0);
+    setResultOverlayVisual(1.0, arrowP, true);
+  }}
+}};
+
+requestAnimationFrame(()=>requestAnimationFrame(()=>{{
+  setupResultOverlayGeometry();
+  window.__renderFrame(0);
+  window.__REPLAY_READY=true;
+}}));
+</script></body></html>"""
+
+    try:
+        from playwright.sync_api import sync_playwright
+        with tempfile.TemporaryDirectory() as tmpdir:
+            html_path = os.path.join(tmpdir, "replay.html")
+            out_mp4 = os.path.join(tmpdir, "replay.mp4")
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+
+            with sync_playwright() as p:
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+                )
+                page = browser.new_page(viewport={"width": 1280, "height": 720}, device_scale_factor=1)
+                page.goto(f"file://{html_path}", wait_until="networkidle", timeout=25000)
+                page.wait_for_function("window.__REPLAY_READY === true", timeout=10000)
+                page.wait_for_timeout(150)
+
+                for fi in range(total_frames):
+                    page.evaluate(f"window.__renderFrame({fi})")
+                    page.screenshot(
+                        path=os.path.join(tmpdir, f"f_{fi:04d}.jpg"),
+                        type="jpeg",
+                        quality=92,
+                    )
+                browser.close()
+
+            cmd = [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-framerate", str(fps),
+                "-i", os.path.join(tmpdir, "f_%04d.jpg"),
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-preset", "fast",
+                "-crf", "20",
+                "-movflags", "+faststart",
+                out_mp4,
+            ]
+            res_ff = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if res_ff.returncode != 0 or not os.path.exists(out_mp4):
+                print(f"[ffmpeg 인코딩 오류] {res_ff.stderr}")
+                return None
+
+            with open(out_mp4, "rb") as vf:
+                return vf.read()
+    except Exception as e:
+        print(f"[리플레이 영상 제작 예외] {symbol}: {e}")
+        return None
+
+
 def send_telegram_single(text, reply_markup=None):
     token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
@@ -627,5 +1244,36 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
         except Exception:
             pass
         time.sleep(1.2)
+    return False
+
+
+def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=None, filename="profit_replay.mp4"):
+    """10초 HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송"""
+    token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+    chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
+    if not video_bytes or not token or not chat_id:
+        return False
+    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendVideo")
+    for _ in range(3):
+        try:
+            files = {"video": (filename, video_bytes, "video/mp4")}
+            data = {
+                "chat_id": chat_id,
+                "width": "1280",
+                "height": "720",
+                "duration": "10",
+                "supports_streaming": "true",
+            }
+            if caption_text:
+                data["caption"] = caption_text
+            if reply_markup:
+                data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False) if isinstance(reply_markup, dict) else str(reply_markup)
+            resp = requests.post(url, data=data, files=files, timeout=45)
+            if resp.status_code == 200:
+                time.sleep(0.8)
+                return True
+        except Exception:
+            pass
+        time.sleep(1.5)
     return False
 # === END OF FILE ===
