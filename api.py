@@ -44,16 +44,14 @@ STOCK_TRADFI_EXACT_BLACKLIST = {
 
 # 스테이블코인 · 각국 법정화폐(ISO 4217) · 통화 연동 토큰 영구 차단 목록
 STABLECOIN_FIAT_EXACT_BLACKLIST = {
-    # 주요 USD 스테이블코인 & 수익형(Yield-bearing) USD 토큰
     "USD", "USDT", "USDC", "USDE", "SUSDE", "USDS", "SUSDS", "FDUSD", "DAI", "SDAI",
     "TUSD", "BUSD", "USDP", "GUSD", "PYUSD", "RLUSD", "USDD", "USDJ", "USD0", "USD1",
     "USDG", "USDL", "USDY", "USDQ", "USDR", "USDB", "USDA", "USDF", "USDM", "USDN",
-    "USDX", "USDK", "USDP", "USDCV", "USDCE", "USDTE", "USDTB", "STUSDT", "EUSD", "XUSD",
+    "USDX", "USDK", "USDCV", "USDCE", "USDTE", "USDTB", "STUSDT", "EUSD", "XUSD",
     "AUSD", "CUSD", "DUSD", "FUSD", "HUSD", "IUSD", "LUSD", "MUSD", "NUSD", "OUSD",
     "PUSD", "RUSD", "SUSD", "VUSD", "WUSD", "ZUSD", "FRAX", "SFRXUSD", "FRXUSD", "CRVUSD",
     "GHO", "MIM", "DOLA", "FEI", "ALUSD", "LISUSD", "DEUSD", "FXUSD", "MKUSD", "HAY",
     "USR", "UXD", "USTC", "UST", "TBILL", "OUSG", "BUIDL", "USYC", "USDZ", "USDO",
-    # 각국 법정화폐(Forex) 및 법정화폐 연동 스테이블코인
     "EUR", "EURC", "EURT", "EURS", "EURI", "AEUR", "CEUR", "EURA", "AGEUR", "EURQ", "EURR", "JEUR", "SEUR", "EUROC",
     "GBP", "GBPT", "GBPC", "EGBP", "BGBP", "VGBP",
     "JPY", "JPYC", "GYEN", "ZJPY", "JPYT",
@@ -74,7 +72,6 @@ STABLECOIN_FIAT_EXACT_BLACKLIST = {
     "ARS", "ARST", "CLP", "COP", "PEN", "AED", "AECOIN", "SAR", "ILS", "NGN", "NGNT", "KES", "EGP",
 }
 
-# 신규 상장되는 USD·EUR 계열 및 주요 법정화폐 파생 스테이블코인 자동 감지 정규식 (일반 알트코인 오탐 0%)
 STABLE_FIAT_REGEX = re.compile(
     r"^(?:"
     r"USD[A-Z0-9]*|"
@@ -197,7 +194,6 @@ def _register_dynamic_tradfi(sym, base=None):
 
 
 def is_stablecoin_or_fiat_symbol(sym_or_base):
-    """스테이블코인(USDC/USDE/FDUSD/DAI 등) 및 나라별 법정화폐(EUR/JPY/KRW/GBP 등) 영구 차단"""
     s = str(sym_or_base or "").upper().strip()
     if not s:
         return True
@@ -213,12 +209,6 @@ def is_stablecoin_or_fiat_symbol(sym_or_base):
 
 
 def is_stock_or_tradfi_symbol(sym_or_base):
-    """
-    [영구적 비대상 자산 차단 필터]
-    1) 스테이블코인 및 각국 법정화폐(Fiat/Forex) 연동 토큰 차단
-    2) 거래소 공식 API 동적 수집 TradFi/주식/RWA 차단 목록
-    3) 정적 주식·ETF·원자재·금/은 페깅 블랙리스트 및 키워드 차단
-    """
     if is_stablecoin_or_fiat_symbol(sym_or_base):
         return True
     _ensure_dynamic_tradfi_blocklist()
@@ -302,7 +292,7 @@ def _fetch_24h_change_and_funding_backup_map():
     return chg_map, fund_map
 
 
-def _normalize_kline_df(rows, expected_interval_min=None):
+def _normalize_kline_df(rows, expected_interval_min=None, allow_historical=False):
     if not isinstance(rows, list) or len(rows) == 0:
         return pd.DataFrame()
     try:
@@ -318,6 +308,7 @@ def _normalize_kline_df(rows, expected_interval_min=None):
 
         df = (
             df.dropna(subset=["timestamp", "open", "high", "low", "close"])
+            .drop_duplicates(subset=["timestamp"], keep="last")
             .sort_values("timestamp", ascending=True)
             .reset_index(drop=True)
         )
@@ -328,10 +319,11 @@ def _normalize_kline_df(rows, expected_interval_min=None):
             if not (target_sec * 0.5 <= median_diff_sec <= target_sec * 1.5):
                 return pd.DataFrame()
 
-        max_stale_sec = max(6 * 3600.0, float(expected_interval_min or 5) * 60.0 * 2.5)
-        latest_ts_ms = to_float(df["timestamp"].iloc[-1], 0.0)
-        if latest_ts_ms > 0 and (time.time() * 1000.0 - latest_ts_ms) > (max_stale_sec * 1000.0):
-            return pd.DataFrame()
+        if not allow_historical:
+            max_stale_sec = max(6 * 3600.0, float(expected_interval_min or 5) * 60.0 * 2.5)
+            latest_ts_ms = to_float(df["timestamp"].iloc[-1], 0.0)
+            if latest_ts_ms > 0 and (time.time() * 1000.0 - latest_ts_ms) > (max_stale_sec * 1000.0):
+                return pd.DataFrame()
 
         return df
     except Exception:
@@ -548,7 +540,10 @@ def get_scanner_candidates():
     return candidates, pure_crypto_bases, rwa_blocked_bases
 
 
-def fetch_klines(symbol, interval="5", limit=150):
+def fetch_klines(symbol, interval="5", limit=150, end_ms=None, allow_historical=False):
+    """
+    [보강] 최대 1000봉 조회 + 과거 구간(end_ms) 조회 지원 (기존 호출부 100% 하위 호환)
+    """
     sym = str(symbol).upper().strip()
     if not sym.endswith("USDT") or is_stock_or_tradfi_symbol(sym):
         return pd.DataFrame()
@@ -562,17 +557,24 @@ def fetch_klines(symbol, interval="5", limit=150):
         "1": 1, "3": 3, "5": 5, "15": 15, "30": 30,
         "60": 60, "120": 120, "240": 240, "360": 360, "720": 720, "D": 1440, "W": 10080,
     }.get(iv_str, 5)
-    lim = int(min(limit, 300))
-    min_bars = 4 if iv_str == "W" else (10 if iv_str in ("D", "720") else 15)
+    lim = int(min(max(limit, 10), 1000))
+    hist_ok = bool(allow_historical or (end_ms is not None))
+    min_bars = 4 if iv_str == "W" else (5 if hist_ok else (10 if iv_str in ("D", "720") else 15))
 
     if not _BYBIT_DIRECT_BLOCKED:
         params = {"category": "linear", "symbol": sym, "interval": iv_str, "limit": lim}
+        if end_ms is not None:
+            params["end"] = int(end_ms)
         for host in BYBIT_HOST_NAMES:
             try:
                 url = clean_url(f"{SCHEME}{host}/v5/market/kline")
-                resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=2.5)
+                resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=3.0)
                 if resp.status_code == 200:
-                    df = _normalize_kline_df(resp.json().get("result", {}).get("list", []), expected_interval_min=iv_min)
+                    df = _normalize_kline_df(
+                        resp.json().get("result", {}).get("list", []),
+                        expected_interval_min=iv_min,
+                        allow_historical=hist_ok,
+                    )
                     if not df.empty and len(df) >= min_bars:
                         return df
             except Exception:
@@ -582,27 +584,97 @@ def fetch_klines(symbol, interval="5", limit=150):
         "1": "1m", "3": "3m", "5": "5m", "15": "15m", "30": "30m",
         "60": "1H", "120": "2H", "240": "4H", "360": "6H", "720": "12H", "D": "1D", "W": "1W",
     }.get(iv_str, "5m")
-    try:
-        bg_url = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/candles")
-        bg_resp = requests.get(
-            bg_url,
-            params={"symbol": sym, "productType": "USDT-FUTURES", "granularity": bg_gran, "limit": str(lim)},
-            headers=BROWSER_HEADERS, timeout=4.0,
-        )
-        if bg_resp.status_code == 200:
-            df = _normalize_kline_df(bg_resp.json().get("data", []), expected_interval_min=iv_min)
-            if not df.empty and len(df) >= min_bars:
-                return df
-    except Exception:
-        pass
 
-    proxy_data = _fetch_bybit_json_via_proxy(f"/v5/market/kline?category=linear&symbol={sym}&interval={iv_str}&limit={lim}", timeout=4.5)
+    bg_endpoints = (
+        (f"{SCHEME}api.bitget.com/api/v2/mix/market/candles", min(lim, 1000)),
+        (f"{SCHEME}api.bitget.com/api/v2/mix/market/history-candles", min(lim, 200)),
+    )
+    for bg_raw_url, bg_lim in bg_endpoints:
+        try:
+            bg_params = {
+                "symbol": sym,
+                "productType": "USDT-FUTURES",
+                "granularity": bg_gran,
+                "limit": str(bg_lim),
+            }
+            if end_ms is not None:
+                bg_params["endTime"] = str(int(end_ms))
+            bg_resp = requests.get(clean_url(bg_raw_url), params=bg_params, headers=BROWSER_HEADERS, timeout=4.5)
+            if bg_resp.status_code == 200:
+                df = _normalize_kline_df(
+                    bg_resp.json().get("data", []),
+                    expected_interval_min=iv_min,
+                    allow_historical=hist_ok,
+                )
+                if not df.empty and len(df) >= min_bars:
+                    return df
+        except Exception:
+            continue
+
+    proxy_q = f"/v5/market/kline?category=linear&symbol={sym}&interval={iv_str}&limit={lim}"
+    if end_ms is not None:
+        proxy_q += f"&end={int(end_ms)}"
+    proxy_data = _fetch_bybit_json_via_proxy(proxy_q, timeout=5.0)
     if proxy_data:
-        df = _normalize_kline_df(proxy_data.get("result", {}).get("list", []), expected_interval_min=iv_min)
+        df = _normalize_kline_df(
+            proxy_data.get("result", {}).get("list", []),
+            expected_interval_min=iv_min,
+            allow_historical=hist_ok,
+        )
         if not df.empty and len(df) >= min_bars:
             return df
 
     return pd.DataFrame()
+
+
+def fetch_klines_window(symbol, interval="5", start_ms=0, end_ms=None, max_bars=850):
+    """
+    [리플레이 영상 전용 역방향 페이지네이션 캔들 로더]
+    - 10시간 미만 1m(최대 650봉), 20~70시간 15m(최대 330봉) 등 단일 API 한도를 넘는 구간도
+      end_ms부터 start_ms까지 역방향 자동 페이지네이션으로 누락 없이 수집
+    """
+    iv_str = str(interval).upper().strip()
+    iv_min = {
+        "1": 1, "3": 3, "5": 5, "15": 15, "30": 30,
+        "60": 60, "120": 120, "240": 240, "360": 360, "720": 720, "D": 1440, "W": 10080,
+    }.get(iv_str, 5)
+    iv_ms = iv_min * 60 * 1000
+    cur_end = int(end_ms) if end_ms is not None else int(time.time() * 1000)
+    target_start = int(start_ms) if start_ms else 0
+
+    chunks = []
+    collected = 0
+    for _ in range(5):
+        remain = max(50, int(max_bars) - collected)
+        batch_lim = min(remain, 1000)
+        df_b = fetch_klines(symbol, interval=iv_str, limit=batch_lim, end_ms=cur_end, allow_historical=True)
+        if df_b.empty:
+            break
+        chunks.append(df_b)
+        earliest = int(to_float(df_b["timestamp"].iloc[0], 0))
+        collected += len(df_b)
+        if target_start > 0 and earliest <= target_start:
+            break
+        if collected >= max_bars or len(df_b) < 20:
+            break
+        next_end = earliest - iv_ms
+        if next_end >= cur_end:
+            break
+        cur_end = next_end
+        time.sleep(0.12)
+
+    if not chunks:
+        return pd.DataFrame()
+
+    merged = (
+        pd.concat(chunks, ignore_index=True)
+        .drop_duplicates(subset=["timestamp"], keep="last")
+        .sort_values("timestamp", ascending=True)
+        .reset_index(drop=True)
+    )
+    if end_ms is not None:
+        merged = merged[merged["timestamp"] <= (int(end_ms) + iv_ms)].reset_index(drop=True)
+    return merged
 
 
 def fetch_verified_1m_klines(symbol, entry_ref=0.0, limit=25):
