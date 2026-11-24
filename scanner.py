@@ -931,7 +931,6 @@ def main():
                 for m in pending_msgs:
                     send_telegram_reliable(m)
                     sent_count += 1
-                # 최종 전량 익절 마감 종목이 있으면 30초 리플레이 영상 제작 및 발송 (버튼 없음)
                 for vp in pending_videos:
                     if _send_profit_replay_video(vp, notify_error=True):
                         sent_count += 1
@@ -1039,7 +1038,10 @@ def main():
         if was_sl and elapsed_alert < RE_ALERT_COOLDOWN_SEC:
             if sl_cnt >= 2 or elapsed_alert < SL_RECOVERY_COOLDOWN_SEC or res["score"] < 92 or to_float(res.get("rsi6_15m"), 50.0) >= 68.0:
                 continue
-            res["track_title"] = "🔄 [스탑헌팅 후 V자 탈환 정예 재진입]"
+            # [수정] 원래 포착 전략 제목을 절대 덮어쓰지 않고 보존한 채 (🔄재진입) 태그만 병기
+            orig_title = str(res.get("track_title", "🚀 [타점 포착]"))
+            if "재진입" not in orig_title:
+                res["track_title"] = f"{orig_title} (🔄재진입)"
             if "스탑헌팅 바닥 확인 후 비과열 V자 재탈환" not in res["reasons"]:
                 res["reasons"].insert(0, "스탑헌팅 바닥 확인 후 비과열 V자 재탈환")
             res["reason_str"] = " / ".join(res["reasons"])
