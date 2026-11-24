@@ -34,7 +34,7 @@ DNA_PROFILE_FILE = "top5_dna_profile.json"
 DNA_RETENTION_SEC = 14 * 86400
 STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json"]))
 
-# [백그라운드 자동 학습 전용 모드] 일간 텔레그램 알림 OFF (필요 시 True로 변경 가능)
+# [백그라운드 자동 학습 전용 모드] 일간 텔레그램 알림 OFF
 SEND_DAILY_TELEGRAM = False
 
 
@@ -141,7 +141,6 @@ def load_merged_state():
 
 
 def get_recent_scanner_caught_map(state, now_ts, lookback_sec=172800):
-    """최근 48시간 내 스캐너가 포착한 종목 및 트랙 매핑 (사각지대 대조용)"""
     caught = {}
     for ep in (state.get("signal_episodes") or {}).values():
         if not isinstance(ep, dict):
@@ -171,9 +170,6 @@ def calc_rsi(series, period=6):
 
 
 def _find_launchpad_index(df_15m):
-    """
-    최근 24~36시간(15분봉) 내에서 급등 1파가 시작된 정확한 '발사 직전/초입 시점(Launch Index)' 역산
-    """
     n = len(df_15m)
     if n < 35:
         return max(20, n - 4)
@@ -186,7 +182,6 @@ def _find_launchpad_index(df_15m):
 
     vol_ma20 = pd.Series(vols).rolling(20, min_periods=5).mean().replace(0, np.nan).values
 
-    # 최근 96봉(24시간) 내 최고가와 그 이전 저점 탐색
     search_start = max(22, n - 108)
     peak_idx = search_start + int(np.argmax(highs[search_start:]))
     pre_peak_start = max(22, peak_idx - 72)
@@ -196,7 +191,6 @@ def _find_launchpad_index(df_15m):
 
     trough_idx = pre_peak_start + int(np.argmin(lows[pre_peak_start : peak_idx + 1]))
 
-    # 저점(trough_idx)부터 고점(peak_idx) 사이에서 첫 거래량 폭발 + 강한 양봉이 터진 발사 캔들 탐색
     for i in range(max(22, trough_idx), min(peak_idx + 1, n - 1)):
         v_ma = vol_ma20[i - 1] if i > 0 and not np.isnan(vol_ma20[i - 1]) else np.nanmean(vols[max(0, i - 20) : i])
         v_ratio = vols[i] / max(v_ma, 1e-8) if v_ma and v_ma > 0 else 1.0
@@ -205,12 +199,10 @@ def _find_launchpad_index(df_15m):
         if v_ratio >= 1.8 and bar_gain >= 1.2 and gain_2bar >= 2.5:
             return i
 
-    # 못 찾으면 저점 직후 첫 양봉 반등 지점 반환
     return min(max(22, trough_idx + 1), n - 2)
 
 
 def analyze_top_gainer_with_dna(coin, caught_map):
-    """Top 5 급등주의 현재 상태 + 발사 직전(Pre-Pump Launchpad) 7대 DNA 정밀 역추적"""
     sym = coin["symbol"]
     base = coin.get("base_coin") or sym.replace("USDT", "")
     price = to_float(coin.get("price"))
@@ -230,8 +222,6 @@ def analyze_top_gainer_with_dna(coin, caught_map):
 
     if not df_15m.empty and len(df_15m) >= 35:
         closes = df_15m["close"].astype(float)
-        highs = df_15m["high"].astype(float)
-        lows = df_15m["low"].astype(float)
         vols = df_15m["volume"].astype(float).fillna(0.0)
 
         live_p = to_float(closes.iloc[-1], 0.0)
@@ -245,7 +235,6 @@ def analyze_top_gainer_with_dna(coin, caught_map):
         std20_s = closes.rolling(20, min_periods=5).std().fillna(0.0)
         bb_width_s = ((std20_s * 4.0) / ma20_s.replace(0, np.nan) * 100.0).fillna(6.0)
 
-        # 발사 직전 시점(Launch Index) 역산 및 7대 DNA 추출
         l_idx = _find_launchpad_index(df_15m)
         pre_idx = max(20, l_idx - 1)
         l_ts = to_float(df_15m["timestamp"].iloc[l_idx], 0.0)
@@ -262,7 +251,6 @@ def analyze_top_gainer_with_dna(coin, caught_map):
         v_launch_max = to_float(vols.iloc[l_idx : min(len(vols), l_idx + 2)].max(), v_base_20)
         launch_vol_mult = round(float(np.clip(v_launch_max / max(v_base_20, 1e-8), 0.5, 25.0)), 2)
 
-        # 발사 시점의 1시간봉 20MA 대비 이격도 역산
         pre_1h_ma20_dist = 0.0
         if not df_1h.empty and len(df_1h) >= 20:
             c1h = df_1h["close"].astype(float)
@@ -319,12 +307,7 @@ def analyze_top_gainer_with_dna(coin, caught_map):
 
 
 def update_top5_dna_profile(analyzed_top5, now_ts):
-    """
-    [폐쇄형 자가 진화 엔진]
-    - 최근 14일간 Top 5 급등주의 '발사 직전 DNA'를 누적 저장
-    - 우리 스캐너가 놓친(MISSED) 사각지대 대장주에 2배 가중치를 부여해
-      Track H가 실시간으로 사냥할 'active_dna_formula' 자동 산출
-    """
+    """[보완] Track H 변별력 극대화를 위해 DNA 상·하한선을 정예 범위로 정밀화"""
     profile = load_json_safe(DNA_PROFILE_FILE, {"samples": [], "active_dna_formula": {}, "updated_at": 0})
     samples = [
         s for s in (profile.get("samples") or [])
@@ -347,7 +330,6 @@ def update_top5_dna_profile(analyzed_top5, now_ts):
 
     samples = samples[:120]
 
-    # 미포착(MISSED) 종목에 2배 가중치를 부여한 표본 풀 구성
     weighted_pool = []
     missed_cnt = 0
     for s in samples:
@@ -373,15 +355,16 @@ def update_top5_dna_profile(analyzed_top5, now_ts):
             "sample_count": len(samples),
             "missed_count": missed_cnt,
             "dominant_tag": dominant_tag,
-            "bb_width_max": round(float(np.clip(np.percentile(bb_vals, 78), 4.5, 16.0)), 2),
-            "vol_dry_max": round(float(np.clip(np.percentile(dry_vals, 78), 0.55, 1.35)), 2),
-            "launch_vol_min": round(float(np.clip(np.percentile(lvol_vals, 30), 1.6, 3.8)), 2),
-            "pre_rsi_min": round(float(np.clip(np.percentile(rsi_vals, 15), 18.0, 48.0)), 1),
-            "pre_rsi_max": round(float(np.clip(np.percentile(rsi_vals, 85), 55.0, 72.0)), 1),
-            "ma20_1h_dist_min": round(float(np.clip(np.percentile(dist_vals, 15), -8.0, 0.5)), 2),
-            "ma20_1h_dist_max": round(float(np.clip(np.percentile(dist_vals, 85), 2.0, 9.0)), 2),
-            "oi_ratio_min": round(float(np.clip(np.percentile(oi_vals, 25), 4.0, 22.0)), 1),
-            "funding_max": round(float(np.clip(np.percentile(fund_vals, 80), -0.005, 0.015)), 5),
+            # 정예 변별력 보정: 응축 <= 9.5%, 건조 <= 0.95, OI >= 8.0%, 펀딩 <= 0.010%
+            "bb_width_max": round(float(np.clip(np.percentile(bb_vals, 72), 4.0, 9.5)), 2),
+            "vol_dry_max": round(float(np.clip(np.percentile(dry_vals, 72), 0.50, 0.95)), 2),
+            "launch_vol_min": round(float(np.clip(np.percentile(lvol_vals, 35), 1.8, 3.8)), 2),
+            "pre_rsi_min": round(float(np.clip(np.percentile(rsi_vals, 15), 22.0, 48.0)), 1),
+            "pre_rsi_max": round(float(np.clip(np.percentile(rsi_vals, 82), 55.0, 68.0)), 1),
+            "ma20_1h_dist_min": round(float(np.clip(np.percentile(dist_vals, 15), -4.5, 0.5)), 2),
+            "ma20_1h_dist_max": round(float(np.clip(np.percentile(dist_vals, 82), 2.0, 7.0)), 2),
+            "oi_ratio_min": round(float(np.clip(np.percentile(oi_vals, 30), 8.0, 22.0)), 1),
+            "funding_max": round(float(np.clip(np.percentile(fund_vals, 75), -0.005, 0.010)), 5),
             "updated_at": now_ts,
         }
 
@@ -481,10 +464,8 @@ def main():
                 pass
         analyzed_top5 = [x for x in temp_list if x is not None]
 
-    # Top 5 발사 직전 DNA 프로필 갱신 (Track H 실시간 연동)
     dna_formula = update_top5_dna_profile(analyzed_top5, now_ts)
 
-    # 48시간 사후검증용 기록 추가 (6시간 내 중복 기록 방지)
     for info in analyzed_top5:
         already_recent = any(
             isinstance(r, dict)
@@ -498,7 +479,6 @@ def main():
                 "max_high_48h": info["price"], "max_gain_pct": 0.0, "timestamp": now_ts,
             })
 
-    # 자율 학습 백업 TP 파라미터 갱신
     gains = [to_float(x.get("max_gain_pct")) for x in history_data.get("records", []) if to_float(x.get("max_gain_pct")) >= 6.0]
     p1_l, p2_l, p3_l = (
         (float(np.clip(np.percentile(gains, 35), 7.5, 11.0)),
@@ -514,7 +494,6 @@ def main():
     history_data["dynamic_tp_tuning"] = tp_obj
     save_json_safe(HISTORY_FILE, history_data)
 
-    # GitHub Actions 실행 로그용 백그라운드 학습 요약 출력
     log_lines = [
         f"🧬 [Bybit Top 5 백그라운드 DNA 학습 완료] ({now_str})",
         f"• 48h 사후검증 추적: {len(verified_48h_lines)}건 | 백업 TP: +{p1_l:.1f}% / +{p2_l:.1f}% / +{p3_l:.1f}%",
