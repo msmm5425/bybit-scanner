@@ -68,6 +68,12 @@ TP_CLOSE_REENTRY_COOLDOWN_SEC = 21600
 HISTORY_RETENTION_SEC = 259200
 EPISODE_RETENTION_SEC = 604800
 MAX_NEW_ALERTS_PER_SCAN = 2
+ELITE_SCORE_THRESHOLD = max(90, int(getattr(cfg, "SCORE_THRESHOLD", 90)))
+# [2단계] 포트폴리오 동시 노출 소프트 캡 (단기 10종목+ / 장기 6종목+ → 커트라인 +2점 상향)
+SHORT_SOFT_CAP_COUNT = 10
+LONG_SOFT_CAP_COUNT = 6
+SOFT_CAP_SCORE_BUMP = 2
+
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 DEFAULT_LONGTERM_SL_PCT = 20
 BTC_DUMP_DROP_15M_PCT = to_float(getattr(cfg, "BTC_DUMP_DROP_15M_PCT", -0.70), -0.70)
@@ -170,6 +176,10 @@ def check_btc_market_regime():
 
 
 def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
+    """
+    [2단계] 종목별 OI 스냅샷을 최대 8개(2시간) 보관하고,
+    15~45분 전(목표 30분)에 가장 가까운 기준 스냅샷을 우선 매칭
+    """
     ref_map = {}
     for sym in list(oi_snapshot.keys()):
         if is_stock_or_tradfi_symbol(sym):
@@ -181,7 +191,7 @@ def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
             continue
         hist = [h for h in hist if isinstance(h, list) and len(h) == 3 and (now_ts - int(h[0])) <= 7200]
         if hist:
-            oi_snapshot[sym] = hist[-4:]
+            oi_snapshot[sym] = hist[-8:]
         else:
             del oi_snapshot[sym]
 
@@ -193,18 +203,30 @@ def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
             continue
 
         hist = oi_snapshot.get(sym, [])
-        best_ref = None
+        # 1순위: 15~45분(900~2700초) 내 30분(1800초)에 가장 가까운 기록 / 2순위: 10~90분(600~5400초)
+        ideal_pool = []
+        fallback_pool = []
         for h in hist:
             age = now_ts - int(h[0])
-            if 600 <= age <= 5400:
-                best_ref = {"ts": int(h[0]), "price": to_float(h[1]), "oi_m": to_float(h[2])}
-                break
-        if best_ref:
-            ref_map[sym] = best_ref
+            if 900 <= age <= 2700:
+                ideal_pool.append((abs(age - 1800), h))
+            elif 600 <= age <= 5400:
+                fallback_pool.append((abs(age - 1800), h))
+
+        chosen = None
+        if ideal_pool:
+            ideal_pool.sort(key=lambda x: x[0])
+            chosen = ideal_pool[0][1]
+        elif fallback_pool:
+            fallback_pool.sort(key=lambda x: x[0])
+            chosen = fallback_pool[0][1]
+
+        if chosen is not None:
+            ref_map[sym] = {"ts": int(chosen[0]), "price": to_float(chosen[1]), "oi_m": to_float(chosen[2])}
 
         if not hist or (now_ts - int(hist[-1][0])) >= 240:
             hist.append([now_ts, round(p, 6), round(oi, 3)])
-            oi_snapshot[sym] = hist[-4:]
+            oi_snapshot[sym] = hist[-8:]
 
     return ref_map
 
@@ -247,7 +269,7 @@ def _merge_state_dicts(base_state, incoming_state):
         if not is_stock_or_tradfi_symbol(s) and isinstance(h_list, list):
             cur_list = base_state.setdefault("oi_snapshot", {}).get(s, [])
             by_ts = {int(x[0]): x for x in cur_list + h_list if isinstance(x, list) and len(x) == 3}
-            base_state["oi_snapshot"][s] = [by_ts[t] for t in sorted(by_ts.keys())][-4:]
+            base_state["oi_snapshot"][s] = [by_ts[t] for t in sorted(by_ts.keys())][-8:]
     for ek, ev in (incoming_state.get("signal_episodes") or {}).items():
         if not isinstance(ev, dict) or is_stock_or_tradfi_symbol(ev.get("symbol", "")):
             continue
@@ -793,6 +815,10 @@ def run_latest_profit_video_test():
 
 
 def _git_sync_state():
+    """
+    [2단계 보강] bot_state.json·scanner_state.json뿐만 아니라
+    postmortem_db.json도 origin/main과 ID 기준 합집합 병합 후 영구 동기화
+    """
     is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
     try:
         subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
@@ -813,13 +839,26 @@ def _git_sync_state():
                         pass
             save_state(loc_dict)
 
-            pm_raw = None
-            if os.path.exists(POSTMORTEM_DB_FILE):
+            # postmortem_db.json 원격+로컬 합집합 병합 (덮어쓰기 유실 방지)
+            pm_merged = None
+            local_pm = _read_json(POSTMORTEM_DB_FILE)
+            remote_pm = {}
+            show_pm = subprocess.run(["git", "show", f"origin/main:{POSTMORTEM_DB_FILE}"], capture_output=True, text=True, check=False)
+            if show_pm.returncode == 0 and show_pm.stdout:
                 try:
-                    with open(POSTMORTEM_DB_FILE, "r", encoding="utf-8") as pf:
-                        pm_raw = pf.read()
+                    parsed_rpm = json.loads(show_pm.stdout)
+                    if isinstance(parsed_rpm, dict):
+                        remote_pm = parsed_rpm
                 except Exception:
                     pass
+            if local_pm or remote_pm:
+                if postmortem is not None and hasattr(postmortem, "merge_postmortem_dbs"):
+                    try:
+                        pm_merged = postmortem.merge_postmortem_dbs(local_pm, remote_pm)
+                    except Exception:
+                        pm_merged = local_pm or remote_pm
+                else:
+                    pm_merged = local_pm or remote_pm
 
             subprocess.run(["git", "reset", "--soft", "origin/main"], check=False)
             with open(LOCAL_RUNTIME_CACHE, "r", encoding="utf-8") as s:
@@ -828,9 +867,13 @@ def _git_sync_state():
                 with open(target_f, "w", encoding="utf-8") as d:
                     d.write(raw_txt)
                 subprocess.run(["git", "add", target_f], check=False)
-            if pm_raw:
-                with open(POSTMORTEM_DB_FILE, "w", encoding="utf-8") as pf:
-                    pf.write(pm_raw)
+            if pm_merged:
+                pm_tmp = f"{POSTMORTEM_DB_FILE}.tmp"
+                with open(pm_tmp, "w", encoding="utf-8") as pf:
+                    json.dump(pm_merged, pf, ensure_ascii=False, indent=2)
+                    pf.flush()
+                    os.fsync(pf.fileno())
+                os.replace(pm_tmp, POSTMORTEM_DB_FILE)
                 subprocess.run(["git", "add", POSTMORTEM_DB_FILE], check=False)
 
             if subprocess.run(["git", "diff", "--staged", "--quiet"], check=False).returncode != 0:
@@ -852,7 +895,7 @@ def _ensure_synced_before_alert():
     return _git_sync_state()
 
 
-def main():
+def main(scan_long_term=True):
     start_t = time.time()
     state = load_state()
     tracked, alert_history = state["tracked"], state["alert_history"]
@@ -937,7 +980,7 @@ def main():
             else:
                 print(f"[중복방지 보류] Git 동기화 실패로 추적 알림 {len(pending_msgs)}건 발송 보류")
 
-    # [오답노트 v2.0] 손절 후 2시간+ 경과 종목 자동 사후 부검
+    # [오답노트 v3] 손절 후 2시간+ 경과 종목 자동 사후 부검 (25시간 커버)
     if postmortem is not None and hasattr(postmortem, "run_post_sl_autopsy"):
         try:
             autopsied = postmortem.run_post_sl_autopsy(fetch_klines, max_checks=4)
@@ -960,6 +1003,22 @@ def main():
         return
     if market_regime["gate_mode"] == "COUNTER_TREND_ONLY":
         print(f"[{now_str}] ⚠️ {market_regime['reason']}")
+
+    # [2단계] 동시 노출 소프트 캡 집계 (단기 10종목+ / 장기 6종목+ 시 커트라인 +2점 상향)
+    active_short_cnt = 0
+    active_long_cnt = 0
+    for s_k, t_v in tracked.items():
+        if not isinstance(t_v, dict) or is_stock_or_tradfi_symbol(s_k):
+            continue
+        if t_v.get("sl_alerted") or t_v.get("tp3_completed") or t_v.get("closed_alerted"):
+            continue
+        if t_v.get("is_long_term") or t_v.get("track_type") == "TRACK_D":
+            active_long_cnt += 1
+        else:
+            active_short_cnt += 1
+
+    min_score_short = ELITE_SCORE_THRESHOLD + (SOFT_CAP_SCORE_BUMP if active_short_cnt >= SHORT_SOFT_CAP_COUNT else 0)
+    min_score_long = ELITE_SCORE_THRESHOLD + (SOFT_CAP_SCORE_BUMP if active_long_cnt >= LONG_SOFT_CAP_COUNT else 0)
 
     def _recent_sl_count(sym_check):
         return sum(
@@ -1006,7 +1065,15 @@ def main():
     results = []
     with ThreadPoolExecutor(max_workers=8) as ex:
         f_map = {
-            ex.submit(analyze_symbol, c, oi_ref_map.get(c["symbol"]), market_regime): c["symbol"]
+            ex.submit(
+                analyze_symbol,
+                c,
+                oi_ref_map.get(c["symbol"]),
+                market_regime,
+                scan_long_term,
+                min_score_short,
+                min_score_long,
+            ): c["symbol"]
             for c in to_analyze
         }
         for fut in as_completed(f_map):
@@ -1031,14 +1098,23 @@ def main():
         if _closed_profit_recently(sym):
             continue
 
+        # 회차 중 신규 편입에 따른 동적 소프트 캡 재검증
+        is_res_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
+        dyn_cut = (
+            ELITE_SCORE_THRESHOLD + (SOFT_CAP_SCORE_BUMP if active_long_cnt >= LONG_SOFT_CAP_COUNT else 0)
+            if is_res_long
+            else ELITE_SCORE_THRESHOLD + (SOFT_CAP_SCORE_BUMP if active_short_cnt >= SHORT_SOFT_CAP_COUNT else 0)
+        )
+        if int(res.get("score", 0)) < dyn_cut:
+            continue
+
         elapsed_alert = now_ts - int(alert_history.get(sym, 0))
         was_sl = _was_stopped_recently(sym)
         sl_cnt = _recent_sl_count(sym)
 
         if was_sl and elapsed_alert < RE_ALERT_COOLDOWN_SEC:
-            if sl_cnt >= 2 or elapsed_alert < SL_RECOVERY_COOLDOWN_SEC or res["score"] < 92 or to_float(res.get("rsi6_15m"), 50.0) >= 68.0:
+            if sl_cnt >= 2 or elapsed_alert < SL_RECOVERY_COOLDOWN_SEC or res["score"] < max(92, dyn_cut) or to_float(res.get("rsi6_15m"), 50.0) >= 68.0:
                 continue
-            # [수정] 원래 포착 전략 제목을 절대 덮어쓰지 않고 보존한 채 (🔄재진입) 태그만 병기
             orig_title = str(res.get("track_title", "🚀 [타점 포착]"))
             if "재진입" not in orig_title:
                 res["track_title"] = f"{orig_title} (🔄재진입)"
@@ -1050,7 +1126,7 @@ def main():
 
         tracked[sym] = {
             "created_at": now_ts, "track_type": res["track_type"],
-            "is_long_term": bool(res.get("is_long_term", False)),
+            "is_long_term": is_res_long,
             "score": res["score"], "entry_price": res["price"], "swing_high_line": res["swing_high_line"],
             "entry_low": res["entry_low"], "entry_high": res["entry_high"],
             "initial_stop_price": res["stop_price"], "stop_price": res["stop_price"],
@@ -1070,19 +1146,33 @@ def main():
             _send_signal_notifications(res, now_str)
             new_sent += 1
             sent_count += 1
+            if is_res_long:
+                active_long_cnt += 1
+            else:
+                active_short_cnt += 1
         else:
             print(f"[중복방지 보류] Git 동기화 실패로 {sym} 신규 알림 발송 보류")
 
     save_state(state)
-    print(f"[{now_str}] 스캔 완료 ({time.time() - start_t:.1f}초 | BTC 15m {market_regime['btc_15m_pct']:+.2f}% / 4H {market_regime['btc_4h_pct']:+.2f}%) - 전송 {sent_count}건")
+    lt_lbl = "장기ON" if scan_long_term else "단기전용"
+    print(
+        f"[{now_str}] 스캔 완료 ({time.time() - start_t:.1f}초 | {lt_lbl} | "
+        f"보유 단기{active_short_cnt}(컷{min_score_short})·장기{active_long_cnt}(컷{min_score_long}) | "
+        f"BTC 15m {market_regime['btc_15m_pct']:+.2f}% / 4H {market_regime['btc_4h_pct']:+.2f}%) - 전송 {sent_count}건"
+    )
 
 
-def run_loop_mode(iterations=9, sleep_sec=295):
+def run_loop_mode(iterations=11, sleep_sec=290):
+    """
+    [2단계] 11회 × ~290초 (매시 :53~:55까지 연속 감시하여 18분 사각지대 해소)
+    - 장기 포지션(Track D)은 1 · 4 · 7 · 10회차(약 15분 주기)에만 탐색해 4H API 부하 65% 절감
+    """
     for i in range(1, iterations + 1):
-        print(f"=== [회차 {i}/{iterations}] 5분 주기 스캔 시작 ===")
+        scan_lt = (i % 3 == 1)
+        print(f"=== [회차 {i}/{iterations}] 5분 주기 스캔 시작 ({'단기+장기' if scan_lt else '단기전용'}) ===")
         _git_sync_state()
         try:
-            main()
+            main(scan_long_term=scan_lt)
         except Exception as e:
             print(f"[스캔 루프 예외] {e}")
         _git_sync_state()
@@ -1096,5 +1186,5 @@ if __name__ == "__main__":
     elif "--loop" in sys.argv:
         run_loop_mode()
     else:
-        main()
+        main(scan_long_term=True)
 # === END OF FILE ===
