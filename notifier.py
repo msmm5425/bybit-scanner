@@ -104,8 +104,16 @@ def fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=10):
     return pd.DataFrame()
 
 
+def _fetch_replay_klines_window(symbol, interval, start_ms, end_ms, max_bars=850):
+    """api.fetch_klines_window 우선 사용 (구버전 api.py 호환 백업 포함)"""
+    if api_mod is not None and hasattr(api_mod, "fetch_klines_window"):
+        df = api_mod.fetch_klines_window(symbol, interval=str(interval), start_ms=start_ms, end_ms=end_ms, max_bars=max_bars)
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            return df
+    return fetch_exact_bybit_klines(symbol, interval=str(interval), limit=min(max_bars, 300), min_rows=10)
+
+
 def _resample_4h_to_12h(df_4h):
-    """12H 직접 조회가 일시 실패할 경우 4H 캔들을 12H UTC 버킷(00:00/12:00)으로 자동 리샘플링"""
     if df_4h is None or df_4h.empty or len(df_4h) < 30:
         return pd.DataFrame()
     try:
@@ -631,18 +639,15 @@ def generate_signal_chart_bytes(res):
 
 def generate_profit_replay_video_bytes(close_info):
     """
-    [최종 전량 익절 30초 HD MP4 리플레이 영상 자동 제작 엔진 v6 (X 알고리즘 최적화)]
-    - 규격: X 최적화 1280×720 (16:9), 10fps 캡처 → 30fps 표준 H.264 출력, 정확히 30.5초 (30초+ 보장)
-    - 타임라인 (305프레임 @ 10fps):
-      * 0.0초 ~ 2.0초 (0~19): 썸네일 완성 이미지 2초 고정 (대형 진입/익절 블루 콜아웃 + 파란 곡선 화살표)
-      * 2.0초 ~ 3.0초 (20~29): 진입 봉 시점(ENTRY) 리셋 및 출발 준비 (1초)
-      * 3.0초 ~ 26.0초 (30~259): 진입봉→익절봉 실시간 캔들 상승 리플레이 (23초)
-      * 26.0초 ~ 30.5초 (260~304): 마지막 완성 엔딩 4.5초 (화살표 드로잉 1.0초 + 완성 고정 3.5초)
-    - 보유 기간별 차트 타임프레임 자동 선택:
-      * 5시간 미만 (초단기 빠른 익절): 5분봉 (5m)
-      * 5시간 ~ 18시간 미만 (당일 익절): 15분봉 (15m)
-      * 18시간 ~ 72시간 미만 (1~2일 이내): 1시간봉 (1H)
-      * 72시간 이상 (3일 이상): 4시간봉 (4H)
+    [최종 전량 익절 30초 HD MP4 리플레이 영상 자동 제작 엔진 v7 (5단계 캔들 + 페이지네이션)]
+    - 규격: X 최적화 1280×720 (16:9), 10fps 캡처 → 30fps 표준 H.264 출력, 정확히 30.5초
+    - 보유 기간별 5단계 타임프레임 자동 선택:
+      * 10시간 미만: 1분봉 (1m)
+      * 10시간 ~ 20시간 미만: 5분봉 (5m)
+      * 20시간 ~ 70시간 미만: 15분봉 (15m)
+      * 70시간 ~ 90시간 미만: 1시간봉 (1H)
+      * 90시간 이상: 4시간봉 (4H)
+    - 진입 시각 커버 실패 시 다음 상위 타임프레임으로 자동 안전 폴백
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -671,20 +676,57 @@ def generate_profit_replay_video_bytes(close_info):
     hold_minutes = max(1, int(to_float(close_info.get("hold_minutes"), (closed_at - created_at) // 60)))
     hold_hours = (closed_at - created_at) / 3600.0
 
-    # 보유 기간별 타임프레임 규칙 적용 (초단기 5시간 미만 → 5분봉)
-    if hold_hours < 5.0:
-        tf_code, tf_label, step_sec, fetch_lim = "5", "5m", 300, 180
-    elif hold_hours < 18.0:
-        tf_code, tf_label, step_sec, fetch_lim = "15", "15m", 900, 180
-    elif hold_hours < 72.0:
-        tf_code, tf_label, step_sec, fetch_lim = "60", "1H", 3600, 180
+    # 5단계 보유 기간별 타임프레임 규칙 엄격 적용
+    tf_ladder = [
+        ("1", "1m", 60, 820),
+        ("5", "5m", 300, 420),
+        ("15", "15m", 900, 420),
+        ("60", "1H", 3600, 260),
+        ("240", "4H", 14400, 260),
+    ]
+    if hold_hours < 10.0:
+        start_tier = 0
+    elif hold_hours < 20.0:
+        start_tier = 1
+    elif hold_hours < 70.0:
+        start_tier = 2
+    elif hold_hours < 90.0:
+        start_tier = 3
     else:
-        tf_code, tf_label, step_sec, fetch_lim = "240", "4H", 14400, 260
+        start_tier = 4
 
-    df_raw = fetch_exact_bybit_klines(symbol, interval=tf_code, limit=fetch_lim, min_rows=10)
-    if df_raw.empty and tf_code != "15":
-        tf_code, tf_label, step_sec = "15", "15m", 900
-        df_raw = fetch_exact_bybit_klines(symbol, interval="15", limit=200, min_rows=10)
+    created_ms = created_at * 1000
+    closed_ms = closed_at * 1000
+
+    df_raw = pd.DataFrame()
+    tf_code, tf_label, step_sec = tf_ladder[start_tier][:3]
+    best_fallback = None
+
+    for idx_t in range(start_tier, len(tf_ladder)):
+        cand_code, cand_lbl, cand_step, cand_max_bars = tf_ladder[idx_t]
+        # MA20 워밍업(25봉) + 배경 캔들(26봉) 포함하여 진입 시각 이전부터 역방향 페이지네이션 조회
+        req_start_ms = created_ms - (55 * cand_step * 1000)
+        req_end_ms = closed_ms + (2 * cand_step * 1000)
+        cand_df = _fetch_replay_klines_window(
+            symbol,
+            interval=cand_code,
+            start_ms=req_start_ms,
+            end_ms=req_end_ms,
+            max_bars=cand_max_bars,
+        )
+        if cand_df.empty or len(cand_df) < 10:
+            continue
+        if best_fallback is None:
+            best_fallback = (cand_df, cand_code, cand_lbl, cand_step)
+        earliest_ts = int(to_float(cand_df["timestamp"].iloc[0], 0))
+        # 진입 시각(created_ms)이 정상 포함되었는지 검증 (오차 3봉 이내 허용)
+        if earliest_ts <= (created_ms + cand_step * 1000 * 3):
+            df_raw, tf_code, tf_label, step_sec = cand_df, cand_code, cand_lbl, cand_step
+            break
+
+    if df_raw.empty and best_fallback is not None:
+        df_raw, tf_code, tf_label, step_sec = best_fallback
+
     if df_raw.empty:
         LAST_VIDEO_ERROR = f"{symbol} {tf_label} 캔들 데이터 API 조회 실패"
         print(f"[리플레이 영상 실패] {LAST_VIDEO_ERROR}")
@@ -695,12 +737,9 @@ def generate_profit_replay_video_bytes(close_info):
     df["ma9"] = df["close"].rolling(9, min_periods=3).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=5).mean()
 
-    created_ms = created_at * 1000
-    closed_ms = closed_at * 1000
     ts_arr = df["timestamp"].astype("int64").values
-
     entry_matches = np.where(ts_arr <= created_ms)[0]
-    entry_abs = int(entry_matches[-1]) if len(entry_matches) > 0 else max(0, len(df) - 20)
+    entry_abs = int(entry_matches[-1]) if len(entry_matches) > 0 else 0
 
     exit_matches = np.where(ts_arr <= closed_ms)[0]
     exit_abs = int(exit_matches[-1]) if len(exit_matches) > 0 else (len(df) - 1)
@@ -708,7 +747,7 @@ def generate_profit_replay_video_bytes(close_info):
         exit_abs = min(len(df) - 1, entry_abs)
 
     post_count = (exit_abs - entry_abs) + 1
-    pre_bars = 26 if post_count <= 90 else 18
+    pre_bars = 26 if post_count <= 90 else (20 if post_count <= 220 else 15)
     slice_start = max(0, entry_abs - pre_bars)
     df_win = df.iloc[slice_start : exit_abs + 1].reset_index(drop=True)
     if len(df_win) < 4:
@@ -740,7 +779,6 @@ def generate_profit_replay_video_bytes(close_info):
     entry_dt_str = datetime.fromtimestamp(created_at, tz=KST).strftime("%Y-%m-%d %H:%M")
     exit_dt_str = datetime.fromtimestamp(closed_at, tz=KST).strftime("%Y-%m-%d %H:%M")
 
-    # 상단 대형 EXIT 박스 & 하단 대형 ENTRY 박스가 캔들과 겹치지 않도록 넉넉한 상·하단 여백 확보
     win_low = min(to_float(df_win["low"].min(), entry_p * 0.94), sl_p, entry_p)
     win_high = max(to_float(df_win["high"].max(), entry_p * 1.15), tp2_p, exit_p)
     if close_type == "TP3_TRAILING" or max_high_val >= tp3_p * 0.92:
@@ -768,7 +806,9 @@ def generate_profit_replay_video_bytes(close_info):
         ma20_js.append({"time": ts_sec, "value": to_float(row["ma20"])} if pd.notna(row.get("ma20")) else None)
         kst_strs.append(datetime.fromtimestamp(ts_ms / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST"))
 
-    ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 6)]
+    # 캔들 수에 비례한 우측 여백 확보 (1m 550봉~4H 40봉 모두 동일한 8% 곡선 화살표 공간 유지)
+    tail_bars = max(5, min(48, int(round(len(candles_js) * 0.08))))
+    ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, tail_bars + 1)]
     decimals = 6 if entry_p < 0.01 else (5 if entry_p < 1 else (4 if entry_p < 10 else (3 if entry_p < 1000 else 2)))
     min_move = 10 ** (-decimals)
     lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
@@ -779,14 +819,14 @@ def generate_profit_replay_video_bytes(close_info):
     price_diff_prefix = "+" if exit_p >= entry_p else "-"
     exit_headline = f"+{total_realized_pct:.2f}% ({price_diff_prefix}{fmt_price(price_diff_abs)}) · {hold_str}"
 
-    # 10fps 캡처 × 305프레임 = 30.5초 (X 알고리즘 30초+ 완벽 충족, ffmpeg가 표준 30fps로 인코딩)
+    # 10fps 캡처 × 305프레임 = 30.5초 (30fps 표준 H.264 출력)
     in_fps = 10
     out_fps = 30
     total_frames = 305
     thumb_end = 20           # 0.0s ~ 2.0s (2.0초 썸네일 고정)
     play_start = 30          # 2.0s ~ 3.0s (1.0초 진입 봉 리셋 준비)
     play_end = 259           # 3.0s ~ 26.0s (23.0초 본격 상승 리플레이)
-    outro_static_start = 270 # 26.0s ~ 27.0s 화살표 드로잉 / 27.0s ~ 30.5s 완성 고정 (3.5초)
+    outro_static_start = 270 # 26.0s ~ 27.0s 화살표 드로잉 / 27.0s ~ 30.5s 완성 고정
 
     html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <script src="{lw_script_url}"></script>
@@ -812,7 +852,6 @@ body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI'
 .pnl-val{{font-size:28px;font-weight:900;color:#00e676;line-height:1.15}}
 .stage-pill{{background:rgba(41,98,255,0.26);border:1.5px solid #4cc9f0;color:#e0f7fa;font-size:15px;font-weight:800;padding:10px 16px;border-radius:9px;display:none}}
 
-/* 모바일 가독성 극대화 대형 블루 콜아웃 스타일 */
 #result-overlay{{position:absolute;inset:0;pointer-events:none;z-index:30;opacity:0}}
 #arc-svg{{position:absolute;inset:0;width:1280px;height:650px;overflow:visible}}
 .tv-callout{{
@@ -942,7 +981,7 @@ const chart=LightweightCharts.createChart(document.getElementById('chart-box'),{
     fontStyle:'bold'
   }},
   rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.04,bottom:0.10}},entireTextOnly:true}},
-  timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:3}},
+  timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:2}},
   localization:{{priceFormatter:fmtP}}
 }});
 
@@ -1038,7 +1077,6 @@ function setupResultOverlayGeometry(){{
   arcTotalLen=Math.max(1, elArcPath.getTotalLength());
   elArcPath.style.strokeDasharray=arcTotalLen.toFixed(1);
 
-  // [1] 대형 EXIT 박스: 상단 빈 공간으로 위로 배치 + TP 라벨 겹침 회피
   const exitW=elCoExit.offsetWidth || 430;
   const exitH=elCoExit.offsetHeight || 86;
   let exitLeft=Math.max(20, Math.min(plotRight - exitW - 10, x2 - exitW * 0.52));
@@ -1086,7 +1124,6 @@ function setupResultOverlayGeometry(){{
     showExitGuide = false;
   }}
 
-  // [2] 대형 ENTRY 박스: 진입 봉 & SL 선보다 더 아래 하단 여유 공간 배치
   const entryW=elCoEntry.offsetWidth || 280;
   const entryH=elCoEntry.offsetHeight || 76;
   let entryLeft=Math.max(20, Math.min(plotRight - entryW - 10, x1 - entryW * 0.35));
@@ -1144,11 +1181,6 @@ function setResultOverlayVisual(overlayOpacity, arrowProgress, showCallouts){{
   elExitGuide.setAttribute('opacity', (showExitGuide && exitReady > 0.5) ? '0.80' : '0');
 }}
 
-// 30.5초 타임라인 (10fps 캡처 × 305프레임 → 30fps 표준 출력):
-// [0..19]    0.0s ~ 2.0s  : 썸네일 완성 이미지 고정 (2초)
-// [20..29]   2.0s ~ 3.0s  : 진입 봉 시점 리셋 및 출발 준비 (1초)
-// [30..259]  3.0s ~ 26.0s : 본격 캔들 상승 리플레이 재생 (23초)
-// [260..304] 26.0s ~ 30.5s: 마지막 완성 엔딩 (화살표 드로잉 1.0초 + 완성 고정 3.5초)
 const THUMB_END={thumb_end};
 const PLAY_START={play_start};
 const PLAY_END={play_end};
@@ -1335,7 +1367,10 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 print(f"[리플레이 영상 실패] {LAST_VIDEO_ERROR}")
                 return None
 
-            print(f"[리플레이 영상 완료] {symbol} ({tf_label}) | {total_frames}프레임 / {in_fps}fps → {out_fps}fps = {total_frames / in_fps:.1f}초 (v6-30s)")
+            print(
+                f"[리플레이 영상 완료] {symbol} ({tf_label}, {len(df_win)}봉) | "
+                f"{total_frames}프레임 / {in_fps}fps → {out_fps}fps = {total_frames / in_fps:.1f}초 (v7-5tier)"
+            )
             with open(out_mp4, "rb") as vf:
                 return vf.read()
     except Exception as e:
