@@ -298,7 +298,6 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     tp1_p, tp2_p, tp3_p = to_float(tps[0]) * ratio_adj, to_float(tps[1]) * ratio_adj, to_float(tps[2]) * ratio_adj
     p1, p2, p3 = round(to_float(tp_pcts[0], 8.0), 1), round(to_float(tp_pcts[1], 15.0), 1), round(to_float(tp_pcts[2], 22.0), 1)
 
-    # 96캔들 전체(최저~최고)와 피보나치(0~1) 구간 100% 정배율 유지
     candle_min_low = to_float(df["low"].min(), price * 0.97)
     candle_max_high = to_float(df["high"].max(), price * 1.02)
     low_piv = min(candle_min_low, price * 0.988)
@@ -632,15 +631,14 @@ def generate_signal_chart_bytes(res):
 
 def generate_profit_replay_video_bytes(close_info):
     """
-    [최종 전량 익절 10초 HD MP4 리플레이 영상 자동 제작 엔진 v3 (안정화)]
-    - 규격: X 최적화 1280×720 (16:9), 12fps × 120프레임 = 정확히 10.0초, H.264/yuv420p/+faststart
+    [최종 전량 익절 18초 HD MP4 리플레이 영상 자동 제작 엔진 v5]
+    - 규격: X 최적화 1280×720 (16:9), 12fps × 216프레임 = 정확히 18.0초, H.264/yuv420p/+faststart
     - 타임라인:
-      * 0.0초 ~ 1.0초 (0~11): 썸네일 완성 이미지 (파란 곡선 화살표 + 진입/익절 날짜·가격 + 최종 수익률%)
-      * 1.0초 ~ 2.0초 (12~23): 진입 봉 시점(ENTRY) 리셋 및 출발 준비
-      * 2.0초 ~ 8.0초 (24~95): 정확히 2초부터 진입봉→익절봉 실시간 캔들 상승 리플레이
-      * 8.0초 ~ 10.0초 (96~119): 마지막 완성 엔딩 (파란 곡선 화살표 드로잉 + 진입/익절 날짜·가격 + 최종 수익률%)
-    - 보유 기간별 캔들 자동 선택: 12시간 미만(15m) / 1~2일 이내(1H) / 3일 이상(4H)
-    - 이중 CDN 폴백 · 중복 타임스탬프 제거 · 상세 에러 진단(LAST_VIDEO_ERROR) 완비
+      * 0.0초 ~ 4.0초 (0~47): 썸네일 완성 이미지 4초 고정 (대형 진입/익절 블루 콜아웃 + 파란 곡선 화살표)
+      * 4.0초 ~ 5.0초 (48~59): 진입 봉 시점(ENTRY) 리셋 및 출발 준비 (1초)
+      * 5.0초 ~ 15.0초 (60~179): 진입봉→익절봉 실시간 캔들 상승 리플레이 (10초)
+      * 15.0초 ~ 18.0초 (180~215): 마지막 완성 엔딩 3초 (화살표 드로잉 0.8초 + 완성 고정 2.2초)
+    - 모바일 가독성 극대화: ENTRY(24px/18px)·EXIT(28px/19px) 대형 박스 + 상/하단 여유 배치 + 점선 가이드 연결
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -736,13 +734,14 @@ def generate_profit_replay_video_bytes(close_info):
     entry_dt_str = datetime.fromtimestamp(created_at, tz=KST).strftime("%Y-%m-%d %H:%M")
     exit_dt_str = datetime.fromtimestamp(closed_at, tz=KST).strftime("%Y-%m-%d %H:%M")
 
+    # 상단 대형 EXIT 박스 & 하단 대형 ENTRY 박스가 캔들과 겹치지 않도록 넉넉한 상·하단 여백 확보
     win_low = min(to_float(df_win["low"].min(), entry_p * 0.94), sl_p, entry_p)
     win_high = max(to_float(df_win["high"].max(), entry_p * 1.15), tp2_p, exit_p)
     if close_type == "TP3_TRAILING" or max_high_val >= tp3_p * 0.92:
         win_high = max(win_high, tp3_p)
     y_span = max(win_high - win_low, entry_p * 0.05)
-    y_min_anchor = win_low - (y_span * 0.16)
-    y_max_anchor = win_high + (y_span * 0.24)
+    y_min_anchor = win_low - (y_span * 0.28)
+    y_max_anchor = win_high + (y_span * 0.34)
 
     candles_js, vol_js, ma5_js, ma9_js, ma20_js, kst_strs = [], [], [], [], [], []
     last_ts_sec = -1
@@ -763,7 +762,8 @@ def generate_profit_replay_video_bytes(close_info):
         ma20_js.append({"time": ts_sec, "value": to_float(row["ma20"])} if pd.notna(row.get("ma20")) else None)
         kst_strs.append(datetime.fromtimestamp(ts_ms / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST"))
 
-    ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 8)]
+    # 차트 및 EXIT 지점을 조금 더 우측으로 배치
+    ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 6)]
     decimals = 6 if entry_p < 0.01 else (5 if entry_p < 1 else (4 if entry_p < 10 else (3 if entry_p < 1000 else 2)))
     min_move = 10 ** (-decimals)
     lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
@@ -772,11 +772,15 @@ def generate_profit_replay_video_bytes(close_info):
     pos_badge = "LONG-TERM REPLAY" if is_long else f"{track_type.replace('_', ' ')} REPLAY"
     price_diff_abs = abs(exit_p - entry_p)
     price_diff_prefix = "+" if exit_p >= entry_p else "-"
-    exit_headline = f"{price_diff_prefix}{fmt_price(price_diff_abs)} (+{total_realized_pct:.2f}%) in {hold_str}"
+    exit_headline = f"+{total_realized_pct:.2f}% ({price_diff_prefix}{fmt_price(price_diff_abs)}) · {hold_str}"
 
-    # 12fps × 120프레임 = 정확히 10.0초 (GitHub Actions 안정성 최적화)
+    # 12fps × 216프레임 = 정확히 18.0초
     fps = 12
-    total_frames = 120
+    total_frames = 216
+    thumb_end = 48           # 0.0s ~ 4.0s (4.0초 썸네일 고정)
+    play_start = 60          # 4.0s ~ 5.0s (1.0초 진입 시점 준비)
+    play_end = 179           # 5.0s ~ 15.0s (10.0초 본격 상승 리플레이)
+    outro_static_start = 190 # 15.0s ~ 15.8s 화살표 드로잉 / 15.8s ~ 18.0s 완성 고정
 
     html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <script src="{lw_script_url}"></script>
@@ -795,35 +799,37 @@ body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI'
 .tv-replay-pill{{background:#2962ff;color:#fff;font-size:12px;font-weight:800;padding:4px 11px;border-radius:5px}}
 .tv-handle-pill{{background:rgba(255,255,255,0.07);border:1px solid #363a45;color:#f0f3fa;font-size:12.5px;font-weight:800;padding:4px 11px;border-radius:5px;letter-spacing:0.3px}}
 #chart-box{{position:relative;flex:1;width:1280px;height:650px;overflow:hidden}}
-.tv-ma-legend{{position:absolute;top:12px;left:16px;z-index:20;display:flex;gap:14px;font-size:12.5px;font-weight:700;background:rgba(19,23,34,0.86);padding:5px 12px;border-radius:5px;border:1px solid #2a2e39}}
-.live-hud{{position:absolute;top:12px;right:110px;z-index:25;display:flex;align-items:center;gap:10px}}
-.pnl-pill{{background:rgba(19,23,34,0.90);border:1.5px solid #26a69a;border-radius:8px;padding:7px 14px;display:flex;flex-direction:column;align-items:flex-end;min-width:142px;box-shadow:0 6px 18px rgba(0,0,0,0.4)}}
-.pnl-label{{font-size:10.5px;font-weight:700;color:#9598a1;letter-spacing:0.5px}}
-.pnl-val{{font-size:22px;font-weight:900;color:#00e676;line-height:1.15}}
-.stage-pill{{background:rgba(41,98,255,0.22);border:1px solid #4cc9f0;color:#e0f7fa;font-size:12px;font-weight:800;padding:7px 12px;border-radius:7px;display:none}}
+.tv-ma-legend{{position:absolute;top:10px;left:14px;z-index:20;display:flex;gap:14px;font-size:12.5px;font-weight:700;background:rgba(19,23,34,0.86);padding:5px 12px;border-radius:5px;border:1px solid #2a2e39}}
+.live-hud{{position:absolute;top:12px;right:110px;z-index:25;display:flex;align-items:center;gap:12px}}
+.pnl-pill{{background:rgba(19,23,34,0.92);border:2px solid #26a69a;border-radius:10px;padding:8px 18px;display:flex;flex-direction:column;align-items:flex-end;min-width:168px;box-shadow:0 8px 22px rgba(0,0,0,0.48)}}
+.pnl-label{{font-size:11.5px;font-weight:800;color:#9598a1;letter-spacing:0.6px}}
+.pnl-val{{font-size:28px;font-weight:900;color:#00e676;line-height:1.15}}
+.stage-pill{{background:rgba(41,98,255,0.26);border:1.5px solid #4cc9f0;color:#e0f7fa;font-size:15px;font-weight:800;padding:10px 16px;border-radius:9px;display:none}}
 
+/* 모바일 가독성 극대화 대형 블루 콜아웃 스타일 */
 #result-overlay{{position:absolute;inset:0;pointer-events:none;z-index:30;opacity:0}}
 #arc-svg{{position:absolute;inset:0;width:1280px;height:650px;overflow:visible}}
 .tv-callout{{
   position:absolute;
-  background:linear-gradient(135deg,#2962ff 0%,#1e53e5 100%);
+  background:linear-gradient(135deg,#2962ff 0%,#1d4ed8 100%);
   color:#ffffff;
-  border-radius:8px;
-  padding:8px 13px;
-  box-shadow:0 8px 24px rgba(0,0,0,0.52), 0 0 0 1px rgba(255,255,255,0.14) inset;
+  border-radius:12px;
+  box-shadow:0 12px 30px rgba(0,0,0,0.62), 0 0 0 1.5px rgba(255,255,255,0.20) inset;
   white-space:nowrap;
 }}
-.tv-callout-exit .co-main{{font-size:16px;font-weight:900;letter-spacing:-0.2px;line-height:1.25;color:#ffffff}}
-.tv-callout-exit .co-sub{{font-size:12.5px;font-weight:700;color:#e3ecff;margin-top:3px;display:flex;align-items:center;gap:8px}}
-.tv-callout-entry .co-main{{font-size:14px;font-weight:900;line-height:1.2;color:#ffffff}}
-.tv-callout-entry .co-sub{{font-size:12px;font-weight:600;color:#dbeafe;margin-top:2px}}
+.tv-callout-exit{{padding:13px 22px}}
+.tv-callout-exit .co-main{{font-size:28px;font-weight:900;letter-spacing:-0.4px;line-height:1.2;color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,0.28)}}
+.tv-callout-exit .co-sub{{font-size:19px;font-weight:800;color:#e8f0ff;margin-top:5px;display:flex;align-items:center;gap:14px}}
+.tv-callout-entry{{padding:11px 20px}}
+.tv-callout-entry .co-main{{font-size:24px;font-weight:900;line-height:1.2;color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,0.25)}}
+.tv-callout-entry .co-sub{{font-size:18px;font-weight:700;color:#e0ecff;margin-top:4px}}
 .co-caret-down{{
-  position:absolute;bottom:-7px;width:0;height:0;
-  border-left:7px solid transparent;border-right:7px solid transparent;border-top:7px solid #2258ee;
+  position:absolute;bottom:-10px;width:0;height:0;
+  border-left:10px solid transparent;border-right:10px solid transparent;border-top:10px solid #1f52df;
 }}
 .co-caret-up{{
-  position:absolute;top:-7px;width:0;height:0;
-  border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:7px solid #2962ff;
+  position:absolute;top:-10px;width:0;height:0;
+  border-left:10px solid transparent;border-right:10px solid transparent;border-bottom:10px solid #2962ff;
 }}
 
 .tv-footer{{height:24px;background:#0e121b;border-top:1px solid #222632;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:10.5px;color:#787b86;font-weight:500}}
@@ -867,13 +873,15 @@ body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI'
       <svg id="arc-svg" viewBox="0 0 1280 650">
         <defs>
           <filter id="arc-glow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#2962ff" flood-opacity="0.55"/>
+            <feDropShadow dx="0" dy="2" stdDeviation="3.5" flood-color="#2962ff" flood-opacity="0.6"/>
           </filter>
         </defs>
-        <path id="arc-path" d="" fill="none" stroke="#2962ff" stroke-width="3.6" stroke-linecap="round" filter="url(#arc-glow)"/>
-        <circle id="dot-entry" cx="0" cy="0" r="5.5" fill="#2962ff" stroke="#ffffff" stroke-width="2"/>
-        <circle id="dot-exit" cx="0" cy="0" r="5.5" fill="#2962ff" stroke="#ffffff" stroke-width="2"/>
-        <polygon id="arc-head" points="0,0 -13,-6.5 -10,0 -13,6.5" fill="#3b82f6" stroke="#ffffff" stroke-width="0.6"/>
+        <line id="exit-guide" x1="0" y1="0" x2="0" y2="0" stroke="#60a5fa" stroke-width="2.2" stroke-dasharray="5,4" opacity="0"/>
+        <line id="entry-guide" x1="0" y1="0" x2="0" y2="0" stroke="#60a5fa" stroke-width="2.2" stroke-dasharray="5,4" opacity="0"/>
+        <path id="arc-path" d="" fill="none" stroke="#2962ff" stroke-width="4.4" stroke-linecap="round" filter="url(#arc-glow)"/>
+        <circle id="dot-entry" cx="0" cy="0" r="6.5" fill="#2962ff" stroke="#ffffff" stroke-width="2.2"/>
+        <circle id="dot-exit" cx="0" cy="0" r="6.5" fill="#2962ff" stroke="#ffffff" stroke-width="2.2"/>
+        <polygon id="arc-head" points="0,0 -16,-8 -12,0 -16,8" fill="#3b82f6" stroke="#ffffff" stroke-width="0.8"/>
       </svg>
 
       <div id="callout-exit" class="tv-callout tv-callout-exit">
@@ -927,8 +935,8 @@ const chart=LightweightCharts.createChart(document.getElementById('chart-box'),{
     fontFamily:'-apple-system,BlinkMacSystemFont,Roboto,sans-serif',
     fontStyle:'bold'
   }},
-  rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.05,bottom:0.12}},entireTextOnly:true}},
-  timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:5}},
+  rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.04,bottom:0.10}},entireTextOnly:true}},
+  timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:3}},
   localization:{{priceFormatter:fmtP}}
 }});
 
@@ -946,7 +954,7 @@ const ma5Series=chart.addLineSeries({{color:'#00e5ff',lineWidth:1.6,priceLineVis
 const ma9Series=chart.addLineSeries({{color:'#ffd166',lineWidth:1.6,priceLineVisible:false,lastValueVisible:false}});
 const ma20Series=chart.addLineSeries({{color:'#2962ff',lineWidth:2.0,priceLineVisible:false,lastValueVisible:false}});
 const volSeries=chart.addHistogramSeries({{priceFormat:{{type:'volume'}},priceScaleId:'vol_scale',priceLineVisible:false,lastValueVisible:false}});
-chart.priceScale('vol_scale').applyOptions({{scaleMargins:{{top:0.89,bottom:0.0}}}});
+chart.priceScale('vol_scale').applyOptions({{scaleMargins:{{top:0.90,bottom:0.0}}}});
 
 candleSeries.createPriceLine({{price:tp3P,color:'#ffd166',lineWidth:2,lineStyle:2,axisLabelVisible:true,title:'TP3 (+{p3:g}%)'}});
 candleSeries.createPriceLine({{price:tp2P,color:'#06d6a0',lineWidth:2,lineStyle:2,axisLabelVisible:true,title:'TP2 (+{p2:g}%)'}});
@@ -963,16 +971,19 @@ const elHud=document.getElementById('live-hud'), elPnl=document.getElementById('
 const elStage=document.getElementById('stage-pill'), elProg=document.getElementById('prog-fill');
 const elOverlay=document.getElementById('result-overlay');
 const elArcPath=document.getElementById('arc-path'), elArcHead=document.getElementById('arc-head');
+const elExitGuide=document.getElementById('exit-guide'), elEntryGuide=document.getElementById('entry-guide');
 const elDotEntry=document.getElementById('dot-entry'), elDotExit=document.getElementById('dot-exit');
 const elCoExit=document.getElementById('callout-exit'), elCoEntry=document.getElementById('callout-entry');
 const elCaretExit=document.getElementById('caret-exit'), elCaretEntry=document.getElementById('caret-entry');
 
 let arcTotalLen=1;
 let geometryReady=false;
+let showExitGuide=false;
+let showEntryGuide=false;
 
 function setupResultOverlayGeometry(){{
-  const psW=(chart.priceScale('right') && chart.priceScale('right').width) ? chart.priceScale('right').width() : 92;
-  const plotRight=Math.max(400, 1280 - (psW || 92) - 8);
+  const psW=(chart.priceScale('right') && chart.priceScale('right').width) ? chart.priceScale('right').width() : 88;
+  const plotRight=Math.max(400, 1280 - (psW || 88) - 8);
   const totalSlots=cAll.length + wsTail.length;
 
   let x1=chart.timeScale().timeToCoordinate(cAll[entryIdx].time);
@@ -984,25 +995,32 @@ function setupResultOverlayGeometry(){{
   let y1Low=candleSeries.priceToCoordinate(cAll[entryIdx].low);
   let y2=candleSeries.priceToCoordinate(exitP);
   let y2High=candleSeries.priceToCoordinate(cAll[exitIdx].high);
-  if(y1===null || !isFinite(y1)) y1=480;
+  if(y1===null || !isFinite(y1)) y1=440;
   if(y1Low===null || !isFinite(y1Low)) y1Low=y1;
-  if(y2===null || !isFinite(y2)) y2=160;
+  if(y2===null || !isFinite(y2)) y2=210;
   if(y2High===null || !isFinite(y2High)) y2High=y2;
 
-  y1=Math.max(60, Math.min(585, y1));
-  y1Low=Math.max(y1, Math.min(595, y1Low));
-  y2=Math.max(76, Math.min(560, y2));
-  y2High=Math.max(54, Math.min(y2, y2High));
+  y1=Math.max(90, Math.min(540, y1));
+  y1Low=Math.max(y1, Math.min(550, y1Low));
+  y2=Math.max(110, Math.min(500, y2));
+  y2High=Math.max(85, Math.min(y2, y2High));
+
+  // 진입~익절 구간의 최고 캔들 Y좌표 계산 (익절 박스가 캔들을 가리지 않고 위로 뜨도록 기준화)
+  let peakY=y2High;
+  for(let i=entryIdx;i<=exitIdx;i++){{
+    const hy=candleSeries.priceToCoordinate(cAll[i].high);
+    if(hy!==null && isFinite(hy) && hy < peakY) peakY=hy;
+  }}
 
   const dx=x2 - x1;
   const dy=y1 - y2;
   let cx, cy;
   if(dx >= 45){{
-    cx = Math.min(plotRight - 14, x1 + dx * 0.88 + 18);
-    cy = Math.min(592, y1 - dy * 0.04 + 12);
+    cx = Math.min(plotRight - 14, x1 + dx * 0.90 + 18);
+    cy = Math.min(570, y1 - dy * 0.04 + 14);
   }} else {{
-    cx = Math.min(plotRight - 14, Math.max(x1, x2) + 72);
-    cy = Math.min(592, y1 - dy * 0.25 + 14);
+    cx = Math.min(plotRight - 14, Math.max(x1, x2) + 76);
+    cy = Math.min(570, y1 - dy * 0.25 + 16);
   }}
 
   const dStr='M ' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' Q ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ' ' + x2.toFixed(1) + ' ' + y2.toFixed(1);
@@ -1015,28 +1033,86 @@ function setupResultOverlayGeometry(){{
   arcTotalLen=Math.max(1, elArcPath.getTotalLength());
   elArcPath.style.strokeDasharray=arcTotalLen.toFixed(1);
 
-  const exitW=elCoExit.offsetWidth || 275;
-  const exitH=elCoExit.offsetHeight || 56;
-  let exitLeft=Math.max(16, Math.min(plotRight - exitW - 10, x2 - exitW * 0.55));
-  let exitTop=Math.min(y2, y2High) - exitH - 18;
+  // [1] 대형 EXIT 박스: 상단 빈 공간으로 훨씬 더 위로 배치 + 우측 정렬 + TP 라벨 겹침 회피
+  const exitW=elCoExit.offsetWidth || 430;
+  const exitH=elCoExit.offsetHeight || 86;
+  let exitLeft=Math.max(20, Math.min(plotRight - exitW - 10, x2 - exitW * 0.52));
+  let exitTop=Math.min(y2, y2High, peakY + 12) - exitH - 54;
   if(exitTop < 48) exitTop = 48;
+
+  const badgeZoneLeft = plotRight - 165;
+  const tpYs = [tp3P, tp2P, tp1P, slP]
+    .map(p => candleSeries.priceToCoordinate(p))
+    .filter(v => v !== null && isFinite(v));
+
+  if(exitLeft + exitW > badgeZoneLeft){{
+    for(let pass=0; pass<3; pass++){{
+      let hit=false;
+      for(const ty of tpYs){{
+        if(exitTop < ty + 15 && (exitTop + exitH) > ty - 15){{
+          const candUp = ty - 15 - exitH - 8;
+          if(candUp >= 48){{
+            exitTop = candUp;
+            hit = true;
+          }} else {{
+            exitLeft = Math.max(20, badgeZoneLeft - exitW - 12);
+            hit = true;
+          }}
+        }}
+      }}
+      if(!hit) break;
+    }}
+  }}
+
   elCoExit.style.left=exitLeft.toFixed(1) + 'px';
   elCoExit.style.top=exitTop.toFixed(1) + 'px';
-  const exitCaretX=Math.max(14, Math.min(exitW - 24, x2 - exitLeft - 7));
+  const exitCaretX=Math.max(18, Math.min(exitW - 34, x2 - exitLeft - 10));
   elCaretExit.style.left=exitCaretX.toFixed(1) + 'px';
 
-  const entryW=elCoEntry.offsetWidth || 185;
-  const entryH=elCoEntry.offsetHeight || 50;
-  let entryLeft=Math.max(16, Math.min(plotRight - entryW - 10, x1 - entryW * 0.42));
-  let entryTop=y1Low + 14;
-  if(entryTop + entryH > 634) entryTop = 634 - entryH;
-  if(entryTop < exitTop + exitH + 12){{
-    entryTop = Math.min(634 - entryH, exitTop + exitH + 14);
+  const exitTipX = exitLeft + exitCaretX + 10;
+  const exitTipY = exitTop + exitH + 10;
+  if((y2 - exitTipY) > 14){{
+    elExitGuide.setAttribute('x1', exitTipX.toFixed(1));
+    elExitGuide.setAttribute('y1', exitTipY.toFixed(1));
+    elExitGuide.setAttribute('x2', x2.toFixed(1));
+    elExitGuide.setAttribute('y2', (y2 - 7).toFixed(1));
+    showExitGuide = true;
+  }} else {{
+    showExitGuide = false;
+  }}
+
+  // [2] 대형 ENTRY 박스: 진입 봉 & SL 선보다 훨씬 더 아래 하단 여유 공간에 깔끔하게 배치
+  const entryW=elCoEntry.offsetWidth || 280;
+  const entryH=elCoEntry.offsetHeight || 76;
+  let entryLeft=Math.max(20, Math.min(plotRight - entryW - 10, x1 - entryW * 0.35));
+  const slY = candleSeries.priceToCoordinate(slP);
+  let entryTop = y1Low + 52;
+  if(slY !== null && isFinite(slY)){{
+    // SL 선과 겹치거나 SL 선 위쪽에 걸리면 SL 선 바로 아래로 자연스럽게 내림
+    if(entryTop < slY + 14 && (slY + 14 + entryH) <= 616){{
+      entryTop = slY + 14;
+    }}
+  }}
+  if(entryTop + entryH > 616) entryTop = 616 - entryH;
+  if(entryTop < exitTop + exitH + 18){{
+    entryTop = Math.min(616 - entryH, exitTop + exitH + 18);
   }}
   elCoEntry.style.left=entryLeft.toFixed(1) + 'px';
   elCoEntry.style.top=entryTop.toFixed(1) + 'px';
-  const entryCaretX=Math.max(14, Math.min(entryW - 24, x1 - entryLeft - 7));
+  const entryCaretX=Math.max(18, Math.min(entryW - 34, x1 - entryLeft - 10));
   elCaretEntry.style.left=entryCaretX.toFixed(1) + 'px';
+
+  const entryTipX = entryLeft + entryCaretX + 10;
+  const entryTipY = entryTop - 10;
+  if((entryTipY - y1) > 16){{
+    elEntryGuide.setAttribute('x1', x1.toFixed(1));
+    elEntryGuide.setAttribute('y1', (y1 + 7).toFixed(1));
+    elEntryGuide.setAttribute('x2', entryTipX.toFixed(1));
+    elEntryGuide.setAttribute('y2', entryTipY.toFixed(1));
+    showEntryGuide = true;
+  }} else {{
+    showEntryGuide = false;
+  }}
 
   geometryReady=true;
 }}
@@ -1057,18 +1133,21 @@ function setResultOverlayVisual(overlayOpacity, arrowProgress, showCallouts){{
   elDotExit.style.opacity=(p >= 0.95 ? '1' : '0');
 
   const boxAlpha=showCallouts ? Math.min(1.0, overlayOpacity) : 0;
+  const exitReady=(p >= 0.85 ? boxAlpha : 0);
   elCoEntry.style.opacity=boxAlpha.toFixed(2);
-  elCoExit.style.opacity=(p >= 0.85 ? boxAlpha : 0).toFixed(2);
+  elCoExit.style.opacity=exitReady.toFixed(2);
+  elEntryGuide.setAttribute('opacity', (showEntryGuide && boxAlpha > 0.5) ? '0.80' : '0');
+  elExitGuide.setAttribute('opacity', (showExitGuide && exitReady > 0.5) ? '0.80' : '0');
 }}
 
-// 10초 타임라인 (12fps × 120프레임):
-// [0..11]  0.0s~1.0s : 처음 썸네일 완성 이미지 (1초 고정)
-// [12..23] 1.0s~2.0s : 진입 봉 시점 리셋 및 출발 준비 (1초)
-// [24..95] 2.0s~8.0s : 정확히 2초부터 본격 캔들 상승 리플레이 (6초)
-// [96..119] 8.0s~10.0s: 마지막 완성 장면 (파란 곡선 화살표 + 진입/익절 날짜·가격·최종 수익률) (2초)
-const THUMB_END=12;
-const PLAY_START=24;
-const PLAY_END=95;
+// 18초 타임라인 (12fps × 216프레임):
+// [0..47]    0.0s ~ 4.0s  : 썸네일 완성 이미지 고정 (4초)
+// [48..59]   4.0s ~ 5.0s  : 진입 봉 시점 리셋 및 출발 준비 (1초)
+// [60..179]  5.0s ~ 15.0s : 본격 캔들 상승 리플레이 재생 (10초)
+// [180..215] 15.0s ~ 18.0s: 마지막 완성 엔딩 (화살표 드로잉 0.8초 + 완성 고정 2.2초)
+const THUMB_END={thumb_end};
+const PLAY_START={play_start};
+const PLAY_END={play_end};
 const postSteps=Math.max(1, exitIdx - entryIdx);
 
 window.__renderFrame=function(f){{
@@ -1163,22 +1242,22 @@ window.__renderFrame=function(f){{
     if(isPrep){{
       elStage.style.display='block';
       elStage.style.borderColor='#00e676';
-      elStage.style.background='rgba(0,230,118,0.16)';
+      elStage.style.background='rgba(0,230,118,0.18)';
       elStage.textContent='🟢 ENTRY 포착 완료 · 리플레이 시작';
     }} else if(hitTp3){{
       elStage.style.display='block';
       elStage.style.borderColor='#ffd166';
-      elStage.style.background='rgba(255,209,102,0.18)';
+      elStage.style.background='rgba(255,209,102,0.20)';
       elStage.textContent='🚀 TP3 50% 익절 · 트레일링 가동';
     }} else if(hitTp2){{
       elStage.style.display='block';
       elStage.style.borderColor='#06d6a0';
-      elStage.style.background='rgba(6,214,160,0.18)';
+      elStage.style.background='rgba(6,214,160,0.20)';
       elStage.textContent='🛡️ TP2 안착 · TP1 방어선 고정';
     }} else if(hitTp1){{
       elStage.style.display='block';
       elStage.style.borderColor='#4cc9f0';
-      elStage.style.background='rgba(76,201,240,0.18)';
+      elStage.style.background='rgba(76,201,240,0.20)';
       elStage.textContent='✅ TP1 돌파 · 100% 홀딩';
     }} else {{
       elStage.style.display='none';
@@ -1186,7 +1265,7 @@ window.__renderFrame=function(f){{
   }} else {{
     elHud.style.opacity='0';
     const outroStep=f - PLAY_END;
-    const arrowP=Math.min(1.0, outroStep / 7.0);
+    const arrowP=Math.min(1.0, outroStep / 10.0);
     setResultOverlayVisual(1.0, arrowP, true);
   }}
 }};
@@ -1219,12 +1298,19 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 page.wait_for_timeout(120)
 
                 for fi in range(total_frames):
+                    dst_jpg = os.path.join(tmpdir, f"f_{fi:04d}.jpg")
+                    if 1 <= fi < thumb_end:
+                        shutil.copyfile(os.path.join(tmpdir, "f_0000.jpg"), dst_jpg)
+                        continue
+                    if (thumb_end + 1) <= fi < play_start:
+                        shutil.copyfile(os.path.join(tmpdir, f"f_{thumb_end:04d}.jpg"), dst_jpg)
+                        continue
+                    if fi > outro_static_start:
+                        shutil.copyfile(os.path.join(tmpdir, f"f_{outro_static_start:04d}.jpg"), dst_jpg)
+                        continue
+
                     page.evaluate(f"window.__renderFrame({fi})")
-                    page.screenshot(
-                        path=os.path.join(tmpdir, f"f_{fi:04d}.jpg"),
-                        type="jpeg",
-                        quality=88,
-                    )
+                    page.screenshot(path=dst_jpg, type="jpeg", quality=88)
                 browser.close()
 
             cmd = [
@@ -1235,6 +1321,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 "-pix_fmt", "yuv420p",
                 "-preset", "fast",
                 "-crf", "21",
+                "-r", str(fps),
                 "-movflags", "+faststart",
                 out_mp4,
             ]
@@ -1244,6 +1331,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 print(f"[리플레이 영상 실패] {LAST_VIDEO_ERROR}")
                 return None
 
+            print(f"[리플레이 영상 완료] {symbol} | {total_frames}프레임 / {fps}fps = {total_frames / fps:.1f}초 (v5-18s)")
             with open(out_mp4, "rb") as vf:
                 return vf.read()
     except Exception as e:
@@ -1293,7 +1381,7 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
 
 
 def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=None, filename="profit_replay.mp4"):
-    """10초 HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송 (실패 사유 기록 포함)"""
+    """18초 HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송"""
     global LAST_VIDEO_ERROR
     token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
@@ -1309,7 +1397,7 @@ def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=
                 "chat_id": chat_id,
                 "width": "1280",
                 "height": "720",
-                "duration": "10",
+                "duration": "18",
                 "supports_streaming": "true",
             }
             if caption_text:
