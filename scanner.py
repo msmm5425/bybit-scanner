@@ -263,6 +263,8 @@ def _merge_state_dicts(base_state, incoming_state):
             p["max_high_price"] = max(to_float(p.get("max_high_price")), to_float(ev.get("max_high_price")))
             p["max_favorable_pct"] = max(to_float(p.get("max_favorable_pct")), to_float(ev.get("max_favorable_pct")))
             p["stop_price"] = max(to_float(p.get("stop_price")), to_float(ev.get("stop_price")))
+            if to_float(ev.get("exit_price"), 0.0) > 0:
+                p["exit_price"] = to_float(ev.get("exit_price"))
             for tk_ts in ("tp2_armed_ts_ms", "tp3_armed_ts_ms", "tp3_at", "sl_at"):
                 p[tk_ts] = max(int(to_float(p.get(tk_ts), 0)), int(to_float(ev.get(tk_ts), 0)))
             for fg in ALL_LOCK_FLAGS:
@@ -283,6 +285,8 @@ def _merge_state_dicts(base_state, incoming_state):
             pt["max_high_price"] = max(to_float(pt.get("max_high_price")), to_float(tv.get("max_high_price")))
             pt["max_favorable_pct"] = max(to_float(pt.get("max_favorable_pct")), to_float(tv.get("max_favorable_pct")))
             pt["stop_price"] = max(to_float(pt.get("stop_price")), to_float(tv.get("stop_price")))
+            if to_float(tv.get("exit_price"), 0.0) > 0:
+                pt["exit_price"] = to_float(tv.get("exit_price"))
             for tk_ts in ("tp2_armed_ts_ms", "tp3_armed_ts_ms", "tp3_at", "sl_at"):
                 pt[tk_ts] = max(int(to_float(pt.get(tk_ts), 0)), int(to_float(tv.get(tk_ts), 0)))
             for fg in ALL_LOCK_FLAGS:
@@ -351,6 +355,7 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
         "score": int(t_item.get("score", 90)), "entry_price": to_float(t_item.get("entry_price")),
         "initial_stop_price": to_float(t_item.get("initial_stop_price") or t_item.get("stop_price")),
         "stop_price": to_float(t_item.get("stop_price")), "sl_pct": to_float(t_item.get("sl_pct", DEFAULT_FIXED_SL_PCT)),
+        "exit_price": to_float(t_item.get("exit_price") or prev.get("exit_price"), 0.0),
         "tps": t_item.get("tps", []), "tp_pcts": t_item.get("tp_pcts", []),
         "max_high_price": t_item["max_high_price"], "max_favorable_pct": t_item["max_favorable_pct"],
         "realized_weighted_pct": to_float(t_item.get("realized_weighted_pct", 0.0)),
@@ -390,7 +395,7 @@ def _record_pm_win(symbol, t_item, now_ts, max_fav):
 
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
-    """[방어선 캔들 마감 확정 + 전량 수익 마감 시 10초 리플레이 영상 트리거 반환]"""
+    """[방어선 캔들 마감 확정 + 전량 수익 마감 시 18초 리플레이 영상 트리거 반환]"""
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("closed_alerted"):
         return None
     entry_ref = to_float(t_item.get("entry_price"))
@@ -548,6 +553,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             t_item["trailing_closed"] = True
             t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
+            t_item["exit_price"] = last_closed_c
             exit_g = round(max(g2, (stop_p - entry_ref) / entry_ref * 100.0), 1)
             w3, w_rem = round(g3 * 0.50, 2), round(exit_g * 0.50, 2)
             total_cum = round(w3 + w_rem, 2)
@@ -603,6 +609,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             t_item["trailing_closed"] = True
             t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
+            t_item["exit_price"] = last_closed_c
             exit_g = round(max(g1, (stop_p - entry_ref) / entry_ref * 100.0), 1)
             t_item["realized_weighted_pct"] = exit_g
             msgs.append(
@@ -677,7 +684,7 @@ def _send_signal_notifications(res, now_str):
 
 
 def _send_profit_replay_video(vp, notify_error=True):
-    """전량 수익 마감 완료 시 10초 HD MP4 리플레이 영상 전송 (버튼 없음 · 실패 시 정확한 사유 진단 출력)"""
+    """전량 수익 마감 완료 시 18초 HD MP4 리플레이 영상 전송 (버튼 없음 · 실패 시 정확한 사유 진단 출력)"""
     if not vp:
         return False
     sym = str(vp.get("symbol", "")).upper()
@@ -698,7 +705,7 @@ def _send_profit_replay_video(vp, notify_error=True):
             return False
         tot_pct = to_float(vp.get("realized_weighted_pct"))
         max_fav = to_float(vp.get("max_favorable_pct"))
-        caption = f"🎬 ${base} 최종 익절 10초 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+        caption = f"🎬 ${base} 최종 익절 18초 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
         fname = f"{base.lower()}_profit_replay.mp4"
         ok = send_telegram_video_with_caption(video_bytes, caption_text=caption, reply_markup=None, filename=fname)
         if not ok:
@@ -715,7 +722,7 @@ def _send_profit_replay_video(vp, notify_error=True):
 
 
 def run_latest_profit_video_test():
-    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목(예: $BTW)을 찾아 10초 리플레이 영상을 즉시 테스트 발송"""
+    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목을 찾아 18초 리플레이 영상을 즉시 테스트 발송"""
     state = load_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
@@ -759,7 +766,8 @@ def run_latest_profit_video_test():
         closed_at = min(now_ts, created_at + max(1800, int(to_float(target.get("hold_minutes"), 120)) * 60))
 
     close_type = "TP3_TRAILING" if target.get("tp3_hit") else "TP1_DEFENSE"
-    exit_p = to_float(target.get("stop_price"), to_float(tps[0], entry_p * 1.08))
+    saved_exit_p = to_float(target.get("exit_price"), 0.0)
+    exit_p = saved_exit_p if saved_exit_p > 0 else to_float(target.get("stop_price"), to_float(tps[0], entry_p * 1.08))
     realized_pct = to_float(target.get("realized_weighted_pct"), round((exit_p - entry_p) / entry_p * 100.0, 2))
     vp = {
         "symbol": sym,
@@ -923,7 +931,7 @@ def main():
                 for m in pending_msgs:
                     send_telegram_reliable(m)
                     sent_count += 1
-                # 최종 전량 익절 마감 종목이 있으면 10초 리플레이 영상 제작 및 발송 (버튼 없음)
+                # 최종 전량 익절 마감 종목이 있으면 18초 리플레이 영상 제작 및 발송 (버튼 없음)
                 for vp in pending_videos:
                     if _send_profit_replay_video(vp, notify_error=True):
                         sent_count += 1
