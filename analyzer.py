@@ -157,7 +157,6 @@ def _calc_ppo(series, fast=12, slow=26, signal=9):
     """
     [트레이딩뷰 공식 Price Oscillator (PPO, 12/26/9 EMA)]
     - 선형 MACD의 가격 압축 착시를 제거한 비율(%) 오실레이터
-    - PPO = ((EMA12 - EMA26) / EMA26) * 100
     """
     s = series.astype(float)
     ema_fast = s.ewm(span=fast, adjust=False, min_periods=min(fast, 4)).mean()
@@ -169,8 +168,28 @@ def _calc_ppo(series, fast=12, slow=26, signal=9):
     return ppo, sig, hist
 
 
+def _calc_shifted_vol_ratios(vols, window=20):
+    """직전 N봉 평균(shift 1) 대비 거래량 배수 산출 (현재 폭발 봉의 자기 평균 왜곡 제거)"""
+    raw_ma = vols.rolling(window, min_periods=5).mean()
+    prev_ma = raw_ma.shift(1).fillna(raw_ma).replace(0, np.nan)
+    return (vols / prev_ma).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
+
+def _max_bull_vol_ratio(opens, closes, vol_ratios, lookback=2, strict_gt=True):
+    """최근 lookback 봉 중 양봉만의 거래량 배수 최대값 (2안: 순수 투매 음봉 100% 배제)"""
+    if len(vol_ratios) == 0:
+        return 0.0
+    o_s = opens.iloc[-lookback:]
+    c_s = closes.iloc[-lookback:]
+    vr_s = vol_ratios.iloc[-lookback:]
+    mask = (c_s > o_s) if strict_gt else (c_s >= o_s)
+    bull_vals = vr_s[mask]
+    if bull_vals.empty:
+        return 0.0
+    return round(float(bull_vals.max()), 2)
+
+
 def _resample_1d_to_1w(df_1d):
-    """주봉 API 일시 누락 시 일봉(1D) 데이터를 월요일 00:00 UTC 기준 주봉(1W)으로 정확히 리샘플링"""
     if df_1d is None or df_1d.empty or len(df_1d) < 14:
         return pd.DataFrame()
     try:
@@ -191,7 +210,6 @@ def _resample_1d_to_1w(df_1d):
 
 
 def _fetch_1d_and_1w(symbol, limit_1d=180, limit_1w=60):
-    """후보 종목의 일봉(1D) + 주봉(1W) 데이터를 안전하게 조회 (주봉 누락 시 1D 리샘플링 백업)"""
     df_1d = fetch_klines(symbol, interval="D", limit=limit_1d)
     df_1w = fetch_klines(symbol, interval="W", limit=limit_1w)
     if (df_1w is None or df_1w.empty or len(df_1w) < 4) and (df_1d is not None and len(df_1d) >= 21):
@@ -208,13 +226,9 @@ def _evaluate_weekly_daily_pro_filter(
     sub_strategy="",
     funding_pct=0.0,
 ):
-    """
-    [전문 트레이더 기준 주봉(1W) · 일봉(1D) 탑다운 + PPO(12,26,9) 검증 엔진]
-    """
     out = {"allow": True, "score_adj": 0, "htf_tag": "", "reasons": [], "block_reason": ""}
     is_spring_d6 = "D6" in str(sub_strategy or "").upper()
 
-    # 1) 일봉(1D) 구조 및 1D PPO 진단
     has_1d = df_1d is not None and not df_1d.empty and len(df_1d) >= 14
     dist_1d_ma20 = 0.0
     dd_30d_pct = 0.0
@@ -270,7 +284,6 @@ def _evaluate_weekly_daily_pro_filter(
             ppo1d_turn_up = (h1d_now > h1d_prev) and (p1d_now >= to_float(p1d.iloc[-2]))
             ppo1d_bear_accel = (p1d_now < 0.0) and (p1d_now < s1d_now) and (h1d_now < h1d_prev)
 
-    # 2) 주봉(1W) 구조 및 1W PPO 진단
     has_1w = df_1w is not None and not df_1w.empty and len(df_1w) >= 4
     dist_1w_ma10 = 0.0
     dd_3w_pct = 0.0
@@ -342,7 +355,6 @@ def _evaluate_weekly_daily_pro_filter(
             ppo1w_turn_up = (h1w_now > h1w_prev) and (p1w_now >= to_float(p1w.iloc[-2]))
             ppo1w_bear_accel = (p1w_now < 0.0) and (p1w_now < s1w_now) and (h1w_now < h1w_prev)
 
-    # 3) 장기 포지션 (Track D1~D6) 전용 판정
     if mode == "LONG":
         if has_1d:
             if (not is_spring_d6) and made_new_30d_low_recently and dd_30d_pct >= 45.0:
@@ -419,7 +431,6 @@ def _evaluate_weekly_daily_pro_filter(
 
         return out
 
-    # 4) 단기·스윙 포지션 (Track A~H) 전용 판정
     tk = str(track_type or "TRACK_A").upper()
     if has_1w:
         crash_cut = 65.0 if tk == "TRACK_E" else 50.0
@@ -580,7 +591,6 @@ def _calculate_resistance_based_tps(price, df_15m, df_1h, conservative_scale=1.0
 
 
 def _calculate_macro_longterm_tps(price, turnover_m, df_4h, df_1d, df_1w=None):
-    """장기 포지션(Track D) 전용 4H · 1D · 1W(주봉) 매물대 기반 종목별 개별 TP 산출"""
     h4 = df_4h["high"].astype(float)
     l4 = df_4h["low"].astype(float)
     box_h_30d = to_float(h4.max(), price * 1.15)
@@ -644,7 +654,7 @@ def _calculate_macro_longterm_tps(price, turnover_m, df_4h, df_1d, df_1w=None):
 
 def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, funding_pct, df_4h):
     """
-    [장기 포지션 Track D 6대 전략 판별 — 전 트랙 4H PPO(12,26,9) 통합 + 기급등/초저변동성 페깅 차단]
+    [장기 포지션 Track D 6대 전략 판별 — D1~D6 전 전략 4H 양봉/매집 거래량 개별 보완]
     """
     if df_4h is None or df_4h.empty or len(df_4h) < 55:
         return None
@@ -657,7 +667,7 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
     o4 = df_4h["open"].astype(float)
     v4 = df_4h["volume"].astype(float).fillna(0.0)
 
-    # [2차 수학적 안전장치] 최근 4H 전체(최대 30일) 고저 변동폭이 5.0% 미만인 스테이블/페깅 토큰 영구 차단
+    # 최근 4H 전체(최대 30일) 고저 변동폭 5.0% 미만 페깅/스테이블 토큰 차단
     hi_all_4h = to_float(h4.max(), price)
     lo_all_4h = to_float(l4.min(), price)
     if lo_all_4h <= 0 or ((hi_all_4h - lo_all_4h) / lo_all_4h * 100.0) < 5.0:
@@ -672,8 +682,11 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
     ppo4_bull = (ppo4_now > ppo4_sig_now) and (ppo4_hist_now >= 0.0)
     ppo4_zero_up = (ppo4_now > 0.0) and (ppo4_now > ppo4_sig_now)
 
-    v4_ma20 = v4.rolling(20, min_periods=5).mean().replace(0, np.nan)
-    v4_ratio = (v4 / v4_ma20).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    # 직전 20봉 평균 대비 4H 거래량 배수 (자기 평균 왜곡 방지)
+    v4_ratio = _calc_shifted_vol_ratios(v4, window=20)
+    bull_v4_2 = _max_bull_vol_ratio(o4, c4, v4_ratio, lookback=2, strict_gt=True)
+    bull_v4_3 = _max_bull_vol_ratio(o4, c4, v4_ratio, lookback=3, strict_gt=False)
+
     ma20_4h_s = c4.rolling(20, min_periods=5).mean()
     ma50_4h_s = c4.rolling(50, min_periods=10).mean()
     ma20_4h = to_float(ma20_4h_s.iloc[-1], price)
@@ -682,73 +695,88 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
 
     candidates_d = []
 
-    # D1: 스텔스 OI · OBV 선행 매집 + 4H PPO 상방 정렬
+    # D1: 스텔스 OI · OBV 선행 매집 + 최근 2일(12봉) 4H 매수 거래량 우위 확인
     hi_10d = to_float(h4.iloc[-60:-1].max(), price * 1.05)
     obv_hi_10d = to_float(obv4.iloc[-60:-1].max(), 0.0)
-    if -3.0 <= change_24h <= 11.0 and oi_ratio >= 28.0 and funding_pct <= 0.008:
+    v4_win12 = v4.iloc[-12:]
+    buy_v4_12 = float(v4_win12[c4.iloc[-12:] >= o4.iloc[-12:]].sum())
+    sell_v4_12 = float(v4_win12[c4.iloc[-12:] < o4.iloc[-12:]].sum())
+    if -3.0 <= change_24h <= 11.0 and oi_ratio >= 28.0 and funding_pct <= 0.008 and buy_v4_12 >= sell_v4_12:
         if price < hi_10d * 0.995 and to_float(obv4.iloc[-1]) > obv_hi_10d and price >= ma20_4h * 0.985 and (ppo4_bull or ppo4_turn_up):
             score_d1 = int(np.clip(87 + min(7, int((oi_ratio - 26) / 3)) + (4 if funding_pct < 0 else 1) + (2 if ppo4_zero_up else 1), 88, 99))
             candidates_d.append({
                 "sub_strategy": "D1 · 스텔스 OI·OBV 선행 매집",
                 "score": score_d1,
+                "vol_metric": max(bull_v4_2, 1.0),
                 "reasons": [
                     f"가격 횡보 중 4H OBV 10일 최고치 선행 돌파 + PPO({ppo4_now:+.2f}%) 상방 전환",
-                    f"스텔스 미결제약정(OI) 집중도 {oi_ratio:.0f}% 축적",
+                    f"스텔스 미결제약정(OI) 집중도 {oi_ratio:.0f}% · 최근 2일 매수 거래량 우위",
                     f"펀딩비 {funding_pct:+.4f}% 저과열 바닥 매집 구조",
                 ],
             })
 
-    # D2: 매집봉 출현 후 거래량 건조 눌림 + 4H PPO 반전 확인
+    # D2: 양봉/긴아래꼬리 매집봉 출현 후 거래량 건조 눌림 (투매 음봉 오인 원천 차단)
     recent_30 = df_4h.iloc[-30:-2]
     vr_30 = v4_ratio.iloc[-30:-2]
-    if not vr_30.empty and float(vr_30.max()) >= 3.8:
-        pump_pos = int(np.argmax(vr_30.values))
-        pump_row = recent_30.iloc[pump_pos]
-        pump_vol = to_float(pump_row["volume"], 1.0)
-        pump_open = to_float(pump_row["open"], price)
-        pump_high = to_float(pump_row["high"], price)
-        pump_mid = (pump_open + pump_high) * 0.5
-        pump_span_pct = ((pump_high - pump_open) / max(pump_open, 1e-8)) * 100.0
-        curr_vol_4h = to_float(v4.iloc[-2], pump_vol)
-        is_dry_up = pump_vol > 0 and (curr_vol_4h / pump_vol) <= 0.30
-        is_turn_up = c4.iloc[-1] >= o4.iloc[-1] and price >= max(pump_open * 0.99, ma20_4h * 0.985) and price <= pump_high * 1.02
-        if pump_span_pct >= 2.0 and is_dry_up and is_turn_up and (ppo4_turn_up or ppo4_zero_up):
-            score_d2 = int(np.clip(87 + (5 if price >= pump_mid else 2) + (5 if oi_ratio >= 15.0 else 1) + (2 if ppo4_zero_up else 1), 88, 99))
-            candidates_d.append({
-                "sub_strategy": "D2 · 매집봉 출현 후 거래량 건조 눌림",
-                "score": score_d2,
-                "reasons": [
-                    f"최근 5일 내 4H 매집봉(거래량 {float(vr_30.max()):.1f}배) 출현",
-                    "조정 구간 거래량 70% 이상 건조(세력 이탈 없음)",
-                    f"매집봉 지지선 & 4H 20MA 위 양봉 반등 + PPO({ppo4_now:+.2f}%) 상방 턴",
-                ],
-            })
+    if not vr_30.empty:
+        r30_o = recent_30["open"].astype(float)
+        r30_h = recent_30["high"].astype(float)
+        r30_l = recent_30["low"].astype(float)
+        r30_c = recent_30["close"].astype(float)
+        r30_lwick = (np.minimum(r30_o, r30_c) - r30_l) / (r30_h - r30_l).replace(0, np.nan)
+        valid_pump_mask = ((r30_c >= r30_o) | (r30_lwick.fillna(0.0) >= 0.45)) & (vr_30 >= 3.8)
+        if valid_pump_mask.any():
+            valid_vr = vr_30[valid_pump_mask]
+            pump_idx_label = valid_vr.idxmax()
+            pump_vr_val = float(valid_vr.loc[pump_idx_label])
+            pump_row = df_4h.loc[pump_idx_label]
+            pump_vol = to_float(pump_row["volume"], 1.0)
+            pump_open = to_float(pump_row["open"], price)
+            pump_high = to_float(pump_row["high"], price)
+            pump_mid = (pump_open + pump_high) * 0.5
+            pump_span_pct = ((pump_high - pump_open) / max(pump_open, 1e-8)) * 100.0
+            dry_vol_4h = to_float(v4.iloc[-3:-1].mean(), pump_vol)
+            is_dry_up = pump_vol > 0 and (dry_vol_4h / pump_vol) <= 0.32
+            is_turn_up = c4.iloc[-1] > o4.iloc[-1] and price >= max(pump_open * 0.99, ma20_4h * 0.985) and price <= pump_high * 1.02
+            if pump_span_pct >= 2.0 and is_dry_up and is_turn_up and (ppo4_turn_up or ppo4_zero_up):
+                score_d2 = int(np.clip(87 + (5 if price >= pump_mid else 2) + (5 if oi_ratio >= 15.0 else 1) + (2 if ppo4_zero_up else 1), 88, 99))
+                candidates_d.append({
+                    "sub_strategy": "D2 · 매집봉 출현 후 거래량 건조 눌림",
+                    "score": score_d2,
+                    "vol_metric": round(pump_vr_val, 2),
+                    "reasons": [
+                        f"최근 5일 내 4H 양봉 매집봉(거래량 {pump_vr_val:.1f}배) 출현",
+                        "조정 구간 거래량 68% 이상 건조(세력 이탈 없음)",
+                        f"매집봉 지지선 & 4H 20MA 위 양봉 반등 + PPO({ppo4_now:+.2f}%) 상방 턴",
+                    ],
+                })
 
-    # D3: 4H 30일 장기 박스권 첫 돌파 + 4H 20MA 이격(+15% 이내) 초입 검증
+    # D3: 4H 30일 장기 박스권 첫 돌파 — 최근 2개 4H 양봉 거래량 >= 2.4배 필수
     if len(df_4h) >= 120:
         hi_30d = to_float(h4.iloc[:-1].max(), price)
         lo_30d = to_float(l4.iloc[:-1].min(), price * 0.8)
         range_30d_pct = (hi_30d - lo_30d) / max(lo_30d, 1e-8) * 100.0
-        curr_vr_4h = to_float(v4_ratio.iloc[-1], 1.0)
         if (
             hi_30d * 0.996 <= price <= hi_30d * 1.045
             and price <= ma20_4h * 1.15
-            and curr_vr_4h >= 2.4
+            and c4.iloc[-1] > o4.iloc[-1]
+            and bull_v4_2 >= 2.4
             and 5.0 <= range_30d_pct <= 55.0
             and ppo4_bull
         ):
-            score_d3 = int(np.clip(88 + min(7, int(curr_vr_4h * 1.5)) + (2 if price >= ma50_4h else 0) + (2 if ppo4_zero_up else 1), 89, 99))
+            score_d3 = int(np.clip(88 + min(7, int(bull_v4_2 * 1.5)) + (2 if price >= ma50_4h else 0) + (2 if ppo4_zero_up else 1), 89, 99))
             candidates_d.append({
                 "sub_strategy": "D3 · 4H 30일 장기 박스권 첫 돌파",
                 "score": score_d3,
+                "vol_metric": bull_v4_2,
                 "reasons": [
                     f"4H 30일 장기 박스권 첫 돌파 + PPO({ppo4_now:+.2f}%) {'0선 돌파' if ppo4_zero_up else '강세확장'}",
-                    f"4H 돌파 거래량 평균 대비 {curr_vr_4h:.1f}배 폭발",
+                    f"4H 돌파 양봉 거래량 평균 대비 {bull_v4_2:.1f}배 폭발",
                     f"장기 박스권 응축폭 {range_30d_pct:.1f}% 소화 후 1파동 개시",
                 ],
             })
 
-    # D4: 4H 장기 하락추세 탈출 & 50MA 돌파 + 4H PPO 골든크로스/0선 돌파
+    # D4: 4H 장기 하락추세 탈출 & 50MA 돌파 — 최근 2개 4H 양봉 거래량 >= 2.2배 필수
     if len(df_4h) >= 85:
         hi_30d_d4 = to_float(h4.iloc[:-1].max(), price)
         lo_recent_30 = to_float(l4.iloc[-30:].min(), price)
@@ -761,24 +789,24 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
             and to_float(c4.iloc[-5:-1].min(), price) <= ma50_4h * 1.015
             and c4.iloc[-1] > o4.iloc[-1]
         )
-        vol_break_4h = float(v4_ratio.iloc[-2:].max())
         ma20_turning = ma20_4h > ma20_4h_prev3 and ma20_4h >= ma50_4h * 0.94
         obv_14d_hi = to_float(obv4.iloc[-84:-1].max(), -1e18)
         obv_14d_break = to_float(obv4.iloc[-1]) >= obv_14d_hi
 
-        if dd_30d_pct >= 25.0 and higher_low_4h and fresh_ma50_break and vol_break_4h >= 2.2 and ma20_turning and obv_14d_break and ppo4_bull:
-            score_d4 = int(np.clip(88 + min(6, int(vol_break_4h * 1.5)) + (3 if ma20_4h >= ma50_4h else 1) + (2 if ppo4_zero_up else 1), 89, 99))
+        if dd_30d_pct >= 25.0 and higher_low_4h and fresh_ma50_break and bull_v4_2 >= 2.2 and ma20_turning and obv_14d_break and ppo4_bull:
+            score_d4 = int(np.clip(88 + min(6, int(bull_v4_2 * 1.5)) + (3 if ma20_4h >= ma50_4h else 1) + (2 if ppo4_zero_up else 1), 89, 99))
             candidates_d.append({
                 "sub_strategy": "D4 · 4H 장기 하락추세 탈출 & 50MA 돌파",
                 "score": score_d4,
+                "vol_metric": bull_v4_2,
                 "reasons": [
                     f"30일 고점 대비 -{dd_30d_pct:.0f}% 심층 조정 후 4H 이중바닥 완성",
-                    f"4H 50MA 거래량 {vol_break_4h:.1f}배 돌파 + PPO({ppo4_now:+.2f}%) {'0선 안착' if ppo4_zero_up else '골든크로스'}",
+                    f"4H 50MA 양봉 거래량 {bull_v4_2:.1f}배 돌파 + PPO({ppo4_now:+.2f}%) {'0선 안착' if ppo4_zero_up else '골든크로스'}",
                     "4H OBV 14일 최고치 선행 돌파(장기 추세 1파동 초입)",
                 ],
             })
 
-    # D5: 4H 매크로 PPO·RSI14·OBV 3중 강세 다이버전스 바닥 매집
+    # D5: 4H 매크로 PPO·RSI14·OBV 3중 강세 다이버전스 + 반전 4H 장대양봉 거래량 >= 1.2배
     if len(df_4h) >= 65:
         lo_14d = to_float(l4.iloc[-min(len(l4), 84):].min(), price)
         in_bottom_zone = price <= lo_14d * 1.12
@@ -801,21 +829,23 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
         ppo_bull_div_4h = (ppo_rec_v >= ppo_prev_v + 0.35) and ppo4_turn_up
         bull_div_4h = (l_rec_v <= l_prev_v * 1.03) and (rsi_rec_v >= rsi_prev_v + 4.0) and ppo_bull_div_4h and (obv_curr_v > obv_prev_v)
         body_4h_pct = ((to_float(c4.iloc[-1]) - to_float(o4.iloc[-1])) / max(to_float(o4.iloc[-1]), 1e-8)) * 100.0
-        strong_bull_4h = body_4h_pct >= 1.5 and to_float(c4.iloc[-1]) >= to_float(h4.iloc[-1]) * 0.985
+        curr_v4_r = to_float(v4_ratio.iloc[-1], 0.0)
+        strong_bull_4h = body_4h_pct >= 1.5 and to_float(c4.iloc[-1]) >= to_float(h4.iloc[-1]) * 0.985 and curr_v4_r >= 1.2
 
         if in_bottom_zone and bull_div_4h and strong_bull_4h and oi_ratio >= 20.0 and funding_pct <= 0.005:
             score_d5 = int(np.clip(89 + min(5, int((rsi_rec_v - rsi_prev_v) / 2.5)) + (4 if funding_pct < 0 else 2), 89, 99))
             candidates_d.append({
                 "sub_strategy": "D5 · 4H 매크로 PPO·RSI 강세 다이버전스 바닥 매집",
                 "score": score_d5,
+                "vol_metric": round(curr_v4_r, 2),
                 "reasons": [
                     f"14일 바닥권 4H PPO({ppo_prev_v:+.1f}%→{ppo_rec_v:+.1f}%)·RSI14·OBV 3중 강세 다이버전스",
                     f"고OI 집중도({oi_ratio:.0f}%) + 저과열 펀딩({funding_pct:+.4f}%) 세력 바닥 흡수",
-                    f"4H 장대양봉(+{body_4h_pct:.1f}%) 출현으로 장기 턴어라운드 개시",
+                    f"4H 장대양봉(+{body_4h_pct:.1f}% · 거래량 {curr_v4_r:.1f}배) 출현으로 턴어라운드 개시",
                 ],
             })
 
-    # D6: 와이코프 스프링(신저가 개미털기 후 다개월 바닥선 거래량 동반 재탈환 + 4H PPO 상방 턴)
+    # D6: 와이코프 스프링 — 신저가 투매 음봉 제외, 최근 3개 4H 재탈환 양봉 거래량 >= 2.2배 필수
     if len(df_4h) >= 100 and turnover_m >= 3.0 and oi_m >= 0.8 and oi_ratio >= 15.0 and funding_pct <= 0.006:
         prior_floor = to_float(l4.iloc[:-48].min(), price)
         prior_high_30 = to_float(h4.iloc[:-12].max(), price)
@@ -825,14 +855,13 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
         had_spring_sweep = (2.5 <= sweep_depth_pct <= 35.0) and (prior_high_30 >= prior_floor * 1.15)
         reclaimed_floor = (prior_floor * 1.003 <= price <= prior_floor * 1.18) and (price >= ma20_4h * 0.98)
         bull_reclaim_4h = (c4.iloc[-1] > o4.iloc[-1]) or (to_float(c4.iloc[-1]) >= to_float(c4.iloc[-3]) * 1.02)
-        reclaim_vol_4h = float(v4_ratio.iloc[-4:].max())
         obv4_reclaim = to_float(obv4.iloc[-1]) > to_float(obv4.iloc[-12:-2].mean())
 
-        if had_spring_sweep and reclaimed_floor and bull_reclaim_4h and reclaim_vol_4h >= 2.2 and obv4_reclaim and (ppo4_turn_up or ppo4_bull):
+        if had_spring_sweep and reclaimed_floor and bull_reclaim_4h and bull_v4_3 >= 2.2 and obv4_reclaim and (ppo4_turn_up or ppo4_bull):
             score_d6 = int(np.clip(
                 88
                 + (4 if funding_pct <= -0.002 else 1)
-                + (4 if reclaim_vol_4h >= 3.0 else 2)
+                + (4 if bull_v4_3 >= 3.0 else 2)
                 + (3 if oi_ratio >= 25.0 else (1 if oi_ratio >= 18.0 else 0))
                 + (2 if ppo4_bull else 0),
                 88, 99,
@@ -840,8 +869,9 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
             candidates_d.append({
                 "sub_strategy": "D6 · 와이코프 스프링(신저가 개미털기 후 바닥 재탈환)",
                 "score": score_d6,
+                "vol_metric": bull_v4_3,
                 "reasons": [
-                    f"직전 바닥({prior_floor:.5g}) -{sweep_depth_pct:.1f}% 이탈 개미털기 후 거래량 {reclaim_vol_4h:.1f}배 재탈환",
+                    f"직전 바닥({prior_floor:.5g}) -{sweep_depth_pct:.1f}% 개미털기 후 양봉 거래량 {bull_v4_3:.1f}배 재탈환",
                     f"OI 집중도 {oi_ratio:.0f}% + 펀딩 {funding_pct:+.4f}% 숏함정 역발상 대시세 초입",
                     f"4H 20MA·OBV 반전 + 4H PPO({ppo4_now:+.2f}%) 상방 턴 확인",
                 ],
@@ -889,7 +919,7 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
 
     price = to_float(closes.iloc[-1], price)
 
-    # [2차 수학적 안전장치] 최근 24시간(15m 96봉) 고저 변동폭이 0.8% 미만인 스테이블/페깅 토큰 영구 차단
+    # 최근 24시간(15m 96봉) 고저 변동폭이 0.8% 미만인 스테이블/페깅 토큰 차단
     hi_24_chk = to_float(highs.iloc[-96:].max(), price)
     lo_24_chk = to_float(lows.iloc[-96:].min(), price)
     if lo_24_chk <= 0 or ((hi_24_chk - lo_24_chk) / lo_24_chk * 100.0) < 0.8:
@@ -935,11 +965,17 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
     ppo15_turn_up = ppo15_hist_now > ppo15_hist_prev
     ppo15_bull = (ppo15_now > ppo15_sig_now) and (ppo15_hist_now > 0.0)
 
-    vol_ma20 = vols.rolling(20, min_periods=5).mean().replace(0, np.nan)
-    vol_ratios = (vols / vol_ma20).replace([np.inf, -np.inf], np.nan).fillna(0.0)
-    recent_vr = vol_ratios.iloc[-6:]
-    vol_mult = round(float(recent_vr.max()), 2) if (not recent_vr.empty and float(recent_vr.max()) > 0.0) else 1.0
-    curr_vol_ratio = round(to_float(vol_ratios.iloc[-1], 1.0), 2)
+    # [2안 핵심 거래량 지표] 직전 20봉 평균 대비 '최근 2봉(30분) 내 양봉(close > open)' 거래량 배수만 인정!
+    vol_ratios = _calc_shifted_vol_ratios(vols, window=20)
+    bull_vol_2 = _max_bull_vol_ratio(opens, closes, vol_ratios, lookback=2, strict_gt=True)
+    bull_vol_5 = _max_bull_vol_ratio(opens, closes, vol_ratios, lookback=5, strict_gt=True)
+    curr_bull_vol = round(to_float(vol_ratios.iloc[-1], 0.0), 2) if to_float(closes.iloc[-1]) > to_float(opens.iloc[-1]) else 0.0
+
+    # 최근 4시간(16봉) 누적 양봉 vs 음봉 매수 거래량 우위 비율 (Track F 전용)
+    v16 = vols.iloc[-16:]
+    buy_v16 = float(v16[closes.iloc[-16:] >= opens.iloc[-16:]].sum())
+    sell_v16 = float(v16[closes.iloc[-16:] < opens.iloc[-16:]].sum())
+    buy_dom_4h = buy_v16 / max(sell_v16, 1e-8)
 
     c_1h = df_1h["close"].astype(float)
     ppo1h_s, ppo1h_sig_s, ppo1h_hist_s = _calc_ppo(c_1h, 12, 26, 9)
@@ -965,13 +1001,13 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
         "kst_block": kst_blk,
     }
 
-    def _get_pm_penalty(tk_name):
+    def _get_pm_penalty(tk_name, vol_val):
         if postmortem is not None and hasattr(postmortem, "get_setup_penalty"):
             try:
-                return int(postmortem.get_setup_penalty(symbol, tk_name, rsi6_15m, vol_mult, extra_meta=extra_meta))
+                return int(postmortem.get_setup_penalty(symbol, tk_name, rsi6_15m, vol_val, extra_meta=extra_meta))
             except TypeError:
                 try:
-                    return int(postmortem.get_setup_penalty(symbol, tk_name, rsi6_15m, vol_mult))
+                    return int(postmortem.get_setup_penalty(symbol, tk_name, rsi6_15m, vol_val))
                 except Exception:
                     return 0
             except Exception:
@@ -986,7 +1022,7 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
             cached_1d_1w.update({"fetched": True, "df_1d": d1, "df_1w": w1})
         return cached_1d_1w["df_1d"], cached_1d_1w["df_1w"]
 
-    # [1순위] 장기 포지션 (Track D1~D6) — 24h +22% 기급등 추격 차단 + 4H/1D/1W PPO 검증
+    # [1순위] 장기 포지션 (Track D1~D6) — 4H 개별 양봉/매집 거래량 + 1D·1W PPO 검증
     if (
         (not counter_trend_only)
         and oi_m >= 0.4
@@ -1009,11 +1045,12 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                 funding_pct=funding_pct,
             )
             if mtf_long["allow"]:
+                d_vol_m = to_float(macro_d.get("vol_metric"), max(bull_vol_2, 1.0))
                 d_score = int(np.clip(
                     macro_d["score"] + mtf_long["score_adj"] + (5 if oi_q["quadrant"] == "Q1" else 0) + max(0, sess_adj // 2),
                     0, 99,
                 ))
-                d_score = max(0, d_score - _get_pm_penalty("TRACK_D"))
+                d_score = max(0, d_score - _get_pm_penalty("TRACK_D", d_vol_m))
                 if d_score >= ELITE_SCORE_THRESHOLD:
                     tps, tp_pcts, tp_labels = _calculate_macro_longterm_tps(price, turnover_m, df_4h, df_1d, df_1w=df_1w)
                     stop_price = round(price * (1.0 - LONGTERM_SL_PCT / 100.0), 6)
@@ -1047,7 +1084,7 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                         "rsi6_15m": rsi6_15m,
                         "kdj_j_15m": kdj_j_15m,
                         "ppo_15m": ppo15_now,
-                        "vol_mult": vol_mult,
+                        "vol_mult": d_vol_m,
                         "swing_high_line": to_float(df_4h["high"].max(), price * 1.1),
                         "entry_low": round(price * 0.9920, 6),
                         "entry_high": round(price * 1.0050, 6),
@@ -1096,9 +1133,9 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
 
     short_candidates = []
 
-    def _register_candidate(tk, title, tech_sc, tk_reasons):
+    def _register_candidate(tk, title, tech_sc, tk_reasons, vol_metric):
         tot_sc = int(np.clip(tech_sc + supply_score + oi_q["bonus"] + sess_adj + wave_bonus, 0, 99))
-        tot_sc = max(0, tot_sc - _get_pm_penalty(tk))
+        tot_sc = max(0, tot_sc - _get_pm_penalty(tk, vol_metric))
         if tot_sc >= (ELITE_SCORE_THRESHOLD - 3):
             r_list = list(tk_reasons) + list(base_supply_reasons)
             if oi_q["note"]:
@@ -1107,9 +1144,17 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                 r_list.append(sess_note)
             if wave_note:
                 r_list.append(wave_note)
-            short_candidates.append({"track_type": tk, "track_title": title, "score": tot_sc, "reasons": r_list})
+            short_candidates.append({
+                "track_type": tk,
+                "track_title": title,
+                "score": tot_sc,
+                "reasons": r_list,
+                "vol_metric": round(to_float(vol_metric, bull_vol_2), 2),
+            })
 
-    # [Track E] 🧲 유동성 스윕 바닥 반전 (SFP) + 15m PPO 강세 다이버전스 통합
+    # =========================================================================
+    # [Track E] 🧲 유동성 스윕(SFP) 바닥 반전 — [2안] 최근 2봉(30m) 양봉 거래량 >= 2.0배 필수
+    # =========================================================================
     if len(lows) >= 40:
         span_sfp = min(len(lows) - 3, 96)
         prior_low_24h = to_float(lows.iloc[-span_sfp - 3 : -3].min(), price)
@@ -1123,7 +1168,7 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                 max_wick_3 = w_ratio
 
         swept_support = sweep_min_l < prior_low_24h * 0.9985
-        reclaimed_support = curr_c > prior_low_24h * 1.001 and curr_c >= curr_o
+        reclaimed_support = curr_c > prior_low_24h * 1.001 and curr_c > curr_o
         prior_low_idx = int(np.argmin(lows.iloc[-span_sfp - 3 : -3].values))
         prior_abs_idx = len(lows) - span_sfp - 3 + prior_low_idx
         prior_low_rsi6 = to_float(rsi6_s.iloc[prior_abs_idx], 50.0)
@@ -1132,11 +1177,11 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
         ppo_bull_div = (min_ppo15_6 >= prior_low_ppo15 + 0.15) and ppo15_turn_up
         kdj_sharp_turn = min_kdj_j_6 <= 20.0 and kdj_j_15m > kdj_j_prev and rsi6_15m > rsi6_prev
 
-        if swept_support and reclaimed_support and max_wick_3 >= 0.40 and vol_mult >= 2.0 and (ppo_bull_div or rsi_bull_div or kdj_sharp_turn):
+        if swept_support and reclaimed_support and max_wick_3 >= 0.40 and bull_vol_2 >= 2.0 and (ppo_bull_div or rsi_bull_div or kdj_sharp_turn):
             sc_e = (
                 35
                 + (18 if max_wick_3 >= 0.50 else 13)
-                + (15 if vol_mult >= 2.6 else 11)
+                + (15 if bull_vol_2 >= 2.6 else 11)
                 + (15 if (ppo_bull_div and (rsi_bull_div or kdj_sharp_turn)) else 10)
                 + (10 if (recent_delta_sum > 0 or obv_strong) else 5)
                 + (4 if counter_trend_only else 0)
@@ -1148,11 +1193,14 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                 sc_e,
                 [
                     f"24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 {max_wick_3 * 100:.0f}%)",
-                    f"바닥 반전 거래량 {vol_mult:.1f}배 폭발 + {div_lbl}",
+                    f"최근 2봉(30m) 반전 양봉 거래량 {bull_vol_2:.1f}배 폭발 + {div_lbl}",
                 ],
+                vol_metric=bull_vol_2,
             )
 
-    # [Track F] ⚡ BTC 역행 상대강도 대장주 (RS Leader) + 1H PPO 강세 필수
+    # =========================================================================
+    # [Track F] ⚡ BTC 역행 상대강도 대장주 — 4H 매수 거래량 우위(>=1.15x) + 최근 2봉 양봉 거래량 >= 1.5x
+    # =========================================================================
     if len(closes) >= 20 and (-2.4 <= btc_4h_pct <= 0.4) and ppo1h_bull:
         p_4h_ago = to_float(closes.iloc[-17], price)
         coin_4h_pct = ((price - p_4h_ago) / max(p_4h_ago, 1e-8)) * 100.0
@@ -1160,12 +1208,23 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
         obv_24h_hi = to_float(obv.iloc[-min(len(obv) - 1, 48):-1].max(), -1e18)
         obv_break_f = to_float(obv.iloc[-1]) >= obv_24h_hi * 0.995 and obv_strong
 
-        if rs_vs_btc >= 4.5 and coin_4h_pct >= 3.0 and htf_aligned and obv_break_f and oi_ratio >= 10.0 and rsi6_15m < 74.0 and ma20_disp_pct < 5.5 and curr_c >= curr_o:
+        if (
+            rs_vs_btc >= 4.5
+            and coin_4h_pct >= 3.0
+            and htf_aligned
+            and obv_break_f
+            and oi_ratio >= 10.0
+            and rsi6_15m < 74.0
+            and ma20_disp_pct < 5.5
+            and curr_c > curr_o
+            and buy_dom_4h >= 1.15
+            and bull_vol_2 >= 1.5
+        ):
             sc_f = (
                 (36 if rs_vs_btc >= 7.0 else 31)
                 + 18
                 + (15 if obv_break_f else 8)
-                + (14 if vol_mult >= 1.8 else 9)
+                + (14 if bull_vol_2 >= 2.0 else 10)
                 + (10 if recent_delta_sum > 0 else 5)
                 + (4 if counter_trend_only else 0)
             )
@@ -1174,24 +1233,27 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                 "⚡ [Track F · BTC 역행 상대강도(RS) 대장주 타점]",
                 sc_f,
                 [
-                    f"BTC 4H({btc_4h_pct:+.1f}%) 대비 상대강도 +{rs_vs_btc:.1f}% 독주 강세",
-                    f"1H 정배열·PPO({ppo1h_now:+.2f}%) 강세 + OBV 신고가 + OI {oi_ratio:.0f}%",
+                    f"BTC 4H({btc_4h_pct:+.1f}%) 대비 상대강도 +{rs_vs_btc:.1f}% 독주 · 4H 매수우위 {buy_dom_4h:.1f}배",
+                    f"1H 정배열·PPO({ppo1h_now:+.2f}%) + 최근 양봉 거래량 {bull_vol_2:.1f}배 · OI {oi_ratio:.0f}%",
                 ],
+                vol_metric=bull_vol_2,
             )
 
     # [Track A·B·C·G + Track H] — BTC 정상 구간(OPEN)에서만 탐색
     if not counter_trend_only:
-        # [Track G] 💥 숏스퀴즈 강제청산 초입 + 15m PPO 상방 턴 필수
+        # =====================================================================
+        # [Track G] 💥 숏스퀴즈 강제청산 초입 — [2안] 최근 2봉 양봉 거래량 >= 1.6배 필수
+        # =====================================================================
         if funding_pct <= -0.020 and oi_ratio >= 18.0 and (ppo15_turn_up or ppo15_bull):
             higher_low_g = to_float(lows.iloc[-6:].min(), price) >= to_float(lows.iloc[-18:-6].min(), price) * 0.998
             short_res_g = to_float(highs.iloc[-13:-1].max(), price)
             break_res_g = curr_c > curr_o and curr_c > ma20_15m_val and curr_c >= short_res_g * 0.996
-            if higher_low_g and break_res_g and recent_delta_sum > 0 and curr_bar_delta > 0 and vol_mult >= 1.5:
+            if higher_low_g and break_res_g and recent_delta_sum > 0 and curr_bar_delta > 0 and bull_vol_2 >= 1.6:
                 sc_g = (
                     (36 if funding_pct <= -0.040 else 32)
                     + (16 if oi_ratio >= 25.0 else 12)
                     + (16 if htf_bull else 8)
-                    + (14 if vol_mult >= 2.0 else 10)
+                    + (14 if bull_vol_2 >= 2.2 else 10)
                     + (10 if obv_strong else 5)
                 )
                 _register_candidate(
@@ -1200,28 +1262,44 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                     sc_g,
                     [
                         f"깊은 음수 펀딩({funding_pct:+.4f}%) + 고OI({oi_ratio:.0f}%) 숏 쏠림 임계",
-                        f"저점 상향 후 20MA·저항 돌파 + PPO({ppo15_now:+.2f}%)·CVD 매수 폭발",
+                        f"20MA·저항 돌파 양봉 거래량 {bull_vol_2:.1f}배 + PPO({ppo15_now:+.2f}%)·CVD 매수 폭발",
                     ],
+                    vol_metric=bull_vol_2,
                 )
 
-        # [Track B] 24시간 스윙 구조 돌파 + 종가 안착 / S-R Flip + 15m PPO 강세 필수
+        # =====================================================================
+        # [Track B] 🔥 24시간 스윙 구조 돌파 — 종가안착(최근 2봉 양봉 >=2.0x) vs S-R Flip(돌파양봉 >=2.0x + 눌림건조 + 반등양봉)
+        # =====================================================================
         span_24h = min(len(highs) - 2, 96)
         high_24h = to_float(highs.iloc[-span_24h - 2 : -2].max(), price * 1.05)
-        close_confirmed_b = (prev_c >= high_24h * 0.998) and (curr_c >= high_24h * 0.996) and (curr_c >= curr_o)
+
+        close_confirmed_b = (
+            (prev_c >= high_24h * 0.998)
+            and (curr_c >= high_24h * 0.996)
+            and (curr_c > curr_o)
+            and (bull_vol_2 >= 2.0)
+        )
+
         had_break_recent = to_float(highs.iloc[-5:-1].max(), 0.0) >= high_24h * 1.001
+        retest_red_vr = to_float(vol_ratios.iloc[-2], 0.0) if (prev_c < prev_o) else 0.0
+        retest_dry_ok = (retest_red_vr <= bull_vol_5 * 0.85) or (curr_bull_vol >= 1.2)
         sr_flip_retest_b = (
             had_break_recent
             and (min(curr_l, prev_l) <= high_24h * 1.008)
             and (min(curr_l, prev_l) >= high_24h * 0.985)
             and (curr_c >= high_24h * 0.998)
-            and (curr_c >= curr_o)
+            and (curr_c > curr_o)
+            and (bull_vol_5 >= 2.0)
+            and retest_dry_ok
+            and (bull_vol_2 >= 1.2)
         )
-        is_breakout_b = (close_confirmed_b or sr_flip_retest_b) and vol_mult >= 2.0 and change_24h >= 3.0 and (ppo15_bull or ppo15_turn_up)
+        is_breakout_b = (close_confirmed_b or sr_flip_retest_b) and change_24h >= 3.0 and (ppo15_bull or ppo15_turn_up)
 
         if is_breakout_b:
-            flip_lbl = "S-R Flip 리테스트 지지" if sr_flip_retest_b else "24H 전고점 종가 안착 돌파"
+            b_vol_show = bull_vol_2 if close_confirmed_b else max(bull_vol_2, bull_vol_5)
+            flip_lbl = "S-R Flip 리테스트 지지(눌림건조·반등양봉)" if sr_flip_retest_b else "24H 전고점 종가 안착 돌파"
             sc_b = (
-                (35 if vol_mult >= 2.8 else 30)
+                (35 if b_vol_show >= 2.8 else 30)
                 + (18 if htf_bull else 0)
                 + (14 if obv_strong else 0)
                 + (13 if (curr_c > ma20_15m_val and to_float(ma7.iloc[-1]) >= ma20_15m_val) else 0)
@@ -1232,10 +1310,13 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                 "TRACK_B",
                 f"🔥 [Track B · 24H 구조 돌파 ({'S-R Flip' if sr_flip_retest_b else '종가 안착'})]",
                 sc_b,
-                [f"{flip_lbl} + 거래량 {vol_mult:.1f}배 · 15m PPO({ppo15_now:+.2f}%) 확장"],
+                [f"{flip_lbl} + 돌파 양봉 거래량 {b_vol_show:.1f}배 · 15m PPO({ppo15_now:+.2f}%) 확장"],
+                vol_metric=b_vol_show,
             )
 
-        # [Track C] 급등 대장주 심층 눌림목 + 거래량 건조(<= 35%) + 5m MSS + 15m PPO 바닥 턴
+        # =====================================================================
+        # [Track C] 🚀 대장주 심층 눌림목 — 2파 거래량 건조(<=35%) + 반등 양봉 거래량 회복(>=1.15x)
+        # =====================================================================
         if change_24h >= 12.0 and not is_breakout_b:
             if 0.48 <= fib_retracement <= 0.78 and pullback_from_high_pct >= 6.5 and price >= swing_low * 1.015:
                 touched_ma20_flush = to_float(lows.iloc[-6:].min(), price) <= ma20_15m_val * 0.995
@@ -1250,7 +1331,11 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                     avg_v_wave2 = to_float(wave2_vols.mean(), avg_v_wave1)
                     vol_dry_ratio = avg_v_wave2 / max(avg_v_wave1, 1e-8)
 
-                    if vol_dry_ratio <= 0.35:
+                    # 반등 양봉 거래량이 조정 구간 평균보다 살아나는지 확인 (거래량 실종 데드캣 방지)
+                    curr_vol_v = to_float(vols.iloc[-1], 0.0)
+                    rebound_vol_wake = (curr_c > curr_o) and (curr_vol_v >= avg_v_wave2 * 1.15 or bull_vol_2 >= 1.0)
+
+                    if vol_dry_ratio <= 0.35 and rebound_vol_wake:
                         curr_lwick = (min(curr_o, curr_c) - curr_l) / max(curr_h - curr_l, 1e-10)
                         prev_lwick = (min(prev_o, prev_c) - prev_l) / max(prev_h - prev_l, 1e-10)
                         max_lwick = max(curr_lwick, prev_lwick)
@@ -1275,36 +1360,42 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                                     sc_c,
                                     [
                                         f"대장주(+{change_24h:.1f}%) 고점대비 -{pullback_from_high_pct:.1f}% · Fib {fib_retracement:.2f} 심층 눌림",
-                                        f"5m MSS 반등 + 거래량 건조({vol_dry_ratio * 100:.0f}%) + 15m PPO 상방 턴",
+                                        f"5m MSS 반등 + 거래량 건조({vol_dry_ratio * 100:.0f}%) 후 양봉 매수 회복 + 15m PPO 턴",
                                     ],
+                                    vol_metric=max(bull_vol_2, 1.0),
                                 )
 
-        # [Track A] TTM Squeeze Fired + 델타(CVD) 흡수 + 15m PPO 상방 확장
-        if change_24h < 12.0 and not is_breakout_b and (ppo15_turn_up or ppo15_bull):
+        # =====================================================================
+        # [Track A] 💎 TTM 스퀴즈 발사 & 델타 흡수 — [2안] 최근 2봉 양봉 거래량 >= 1.8배 필수
+        # =====================================================================
+        if change_24h < 12.0 and not is_breakout_b and (ppo15_turn_up or ppo15_bull) and bull_vol_2 >= 1.8:
             min_bw = to_float(bb_width_pct.iloc[-10:-1].min(), 5.0)
             if ttm_fired or (was_squeezed and cvd_absorption) or (min_bw <= 4.5 and cvd_absorption):
                 sc_a = (
                     (35 if ttm_fired else (28 if was_squeezed else 22))
-                    + (18 if (vol_mult >= 1.9 and curr_c > curr_o) else (12 if curr_vol_ratio >= 1.3 else 0))
+                    + (18 if (bull_vol_2 >= 2.3 and curr_c > curr_o) else 14)
                     + (15 if htf_bull else 0)
                     + (15 if (cvd_absorption and obv_strong) else (10 if obv_strong else 0))
                     + (10 if (kdj_j_15m > kdj_j_prev and 35.0 <= rsi6_15m <= 70.0) else 0)
                 )
                 r_a = [
-                    f"TTM Squeeze(BB<KC) 발사(응축폭 {min_bw:.1f}%) + 15m PPO({ppo15_now:+.2f}%) 상방"
+                    f"TTM Squeeze(BB<KC) 발사(응축폭 {min_bw:.1f}%) + 최근 양봉 거래량 {bull_vol_2:.1f}배"
                     if ttm_fired
-                    else f"볼린저/켈트너 초응축({min_bw:.1f}%) + 15m PPO({ppo15_now:+.2f}%) 전환"
+                    else f"볼린저/켈트너 초응축({min_bw:.1f}%) + 최근 양봉 거래량 {bull_vol_2:.1f}배 전환"
                 ]
                 if cvd_absorption:
-                    r_a.append("15m 매수 델타(CVD)·OBV 바닥 흡수 확인")
+                    r_a.append(f"15m 매수 델타(CVD)·OBV 흡수 + PPO({ppo15_now:+.2f}%) 상방")
                 _register_candidate(
                     "TRACK_A",
                     "💎 [Track A · TTM 스퀴즈 발사 & 델타 흡수 초입]" if ttm_fired else "💎 [Track A · 박스권 초응축 & 델타 매집 초입]",
                     sc_a,
                     r_a,
+                    vol_metric=bull_vol_2,
                 )
 
-        # [Track H] 🧬 Top 5 급등 DNA 자동 적응 트랙 + 15m PPO 상방 모멘텀 검증
+        # =====================================================================
+        # [Track H] 🧬 Top 5 급등 DNA 자동 적응 트랙 — [2안] 최근 2봉 양봉 거래량 >= 학습 기준 필수
+        # =====================================================================
         if (
             not short_candidates
             and htf_bull
@@ -1323,7 +1414,7 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                 pre_dry_h = v_pre_rec / max(v_pre_old, 1e-8)
 
                 req_lvol = max(1.6, to_float(dna_f.get("launch_vol_min"), 2.0))
-                has_launch_trigger = (curr_c > curr_o) and (curr_c > prev_c) and (vol_mult >= req_lvol) and (recent_delta_sum > 0)
+                has_launch_trigger = (curr_c > curr_o) and (curr_c > prev_c) and (bull_vol_2 >= req_lvol) and (recent_delta_sum > 0)
 
                 if has_launch_trigger:
                     checks = [
@@ -1340,7 +1431,7 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                     if match_cnt >= 5:
                         sc_h = (
                             (38 if match_cnt == 6 else 33)
-                            + (18 if vol_mult >= req_lvol * 1.25 else 13)
+                            + (18 if bull_vol_2 >= req_lvol * 1.25 else 13)
                             + (14 if obv_strong else 8)
                             + (13 if htf_aligned else 10)
                             + (10 if (kdj_j_15m > kdj_j_prev and rsi6_15m > rsi6_prev) else 5)
@@ -1352,8 +1443,9 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
                             sc_h,
                             [
                                 f"최근 14일 Top 5 발사직전 DNA {match_cnt}/6 일치 ({', '.join(matched_names[:4])})",
-                                f"1H·15m 20MA 안착 + 발사 거래량({vol_mult:.1f}x) + PPO({ppo15_now:+.2f}%) 상방",
+                                f"1H·15m 20MA 안착 + 최근 양봉 거래량({bull_vol_2:.1f}x) + PPO({ppo15_now:+.2f}%) 상방",
                             ],
+                            vol_metric=bull_vol_2,
                         )
 
     if not short_candidates:
@@ -1412,7 +1504,7 @@ def analyze_symbol(coin, oi_snapshot_prev=None, market_regime=None):
         "rsi6_15m": rsi6_15m,
         "kdj_j_15m": kdj_j_15m,
         "ppo_15m": ppo15_now,
-        "vol_mult": vol_mult,
+        "vol_mult": best.get("vol_metric", bull_vol_2),
         "swing_high_line": swing_high,
         "entry_low": round(price * 0.9970, 6),
         "entry_high": round(price * 1.0015, 6),
