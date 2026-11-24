@@ -395,7 +395,7 @@ def _record_pm_win(symbol, t_item, now_ts, max_fav):
 
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
-    """[방어선 캔들 마감 확정 + 전량 수익 마감 시 18초 리플레이 영상 트리거 반환]"""
+    """[방어선 캔들 마감 확정 + 전량 수익 마감 시 30초 리플레이 영상 트리거 반환]"""
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("closed_alerted"):
         return None
     entry_ref = to_float(t_item.get("entry_price"))
@@ -684,7 +684,7 @@ def _send_signal_notifications(res, now_str):
 
 
 def _send_profit_replay_video(vp, notify_error=True):
-    """전량 수익 마감 완료 시 18초 HD MP4 리플레이 영상 전송 (버튼 없음 · 실패 시 정확한 사유 진단 출력)"""
+    """전량 수익 마감 완료 시 30초 HD MP4 리플레이 영상 전송 (버튼 없음 · 실패 시 정확한 사유 진단 출력)"""
     if not vp:
         return False
     sym = str(vp.get("symbol", "")).upper()
@@ -705,7 +705,7 @@ def _send_profit_replay_video(vp, notify_error=True):
             return False
         tot_pct = to_float(vp.get("realized_weighted_pct"))
         max_fav = to_float(vp.get("max_favorable_pct"))
-        caption = f"🎬 ${base} 최종 익절 18초 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+        caption = f"🎬 ${base} 최종 익절 30초 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
         fname = f"{base.lower()}_profit_replay.mp4"
         ok = send_telegram_video_with_caption(video_bytes, caption_text=caption, reply_markup=None, filename=fname)
         if not ok:
@@ -722,7 +722,7 @@ def _send_profit_replay_video(vp, notify_error=True):
 
 
 def run_latest_profit_video_test():
-    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목을 찾아 18초 리플레이 영상을 즉시 테스트 발송"""
+    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목을 찾아 30초 리플레이 영상을 즉시 테스트 발송"""
     state = load_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
@@ -931,7 +931,7 @@ def main():
                 for m in pending_msgs:
                     send_telegram_reliable(m)
                     sent_count += 1
-                # 최종 전량 익절 마감 종목이 있으면 18초 리플레이 영상 제작 및 발송 (버튼 없음)
+                # 최종 전량 익절 마감 종목이 있으면 30초 리플레이 영상 제작 및 발송 (버튼 없음)
                 for vp in pending_videos:
                     if _send_profit_replay_video(vp, notify_error=True):
                         sent_count += 1
