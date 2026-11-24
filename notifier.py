@@ -631,14 +631,18 @@ def generate_signal_chart_bytes(res):
 
 def generate_profit_replay_video_bytes(close_info):
     """
-    [최종 전량 익절 18초 HD MP4 리플레이 영상 자동 제작 엔진 v5]
-    - 규격: X 최적화 1280×720 (16:9), 12fps × 216프레임 = 정확히 18.0초, H.264/yuv420p/+faststart
-    - 타임라인:
-      * 0.0초 ~ 4.0초 (0~47): 썸네일 완성 이미지 4초 고정 (대형 진입/익절 블루 콜아웃 + 파란 곡선 화살표)
-      * 4.0초 ~ 5.0초 (48~59): 진입 봉 시점(ENTRY) 리셋 및 출발 준비 (1초)
-      * 5.0초 ~ 15.0초 (60~179): 진입봉→익절봉 실시간 캔들 상승 리플레이 (10초)
-      * 15.0초 ~ 18.0초 (180~215): 마지막 완성 엔딩 3초 (화살표 드로잉 0.8초 + 완성 고정 2.2초)
-    - 모바일 가독성 극대화: ENTRY(24px/18px)·EXIT(28px/19px) 대형 박스 + 상/하단 여유 배치 + 점선 가이드 연결
+    [최종 전량 익절 30초 HD MP4 리플레이 영상 자동 제작 엔진 v6 (X 알고리즘 최적화)]
+    - 규격: X 최적화 1280×720 (16:9), 10fps 캡처 → 30fps 표준 H.264 출력, 정확히 30.5초 (30초+ 보장)
+    - 타임라인 (305프레임 @ 10fps):
+      * 0.0초 ~ 2.0초 (0~19): 썸네일 완성 이미지 2초 고정 (대형 진입/익절 블루 콜아웃 + 파란 곡선 화살표)
+      * 2.0초 ~ 3.0초 (20~29): 진입 봉 시점(ENTRY) 리셋 및 출발 준비 (1초)
+      * 3.0초 ~ 26.0초 (30~259): 진입봉→익절봉 실시간 캔들 상승 리플레이 (23초)
+      * 26.0초 ~ 30.5초 (260~304): 마지막 완성 엔딩 4.5초 (화살표 드로잉 1.0초 + 완성 고정 3.5초)
+    - 보유 기간별 차트 타임프레임 자동 선택:
+      * 5시간 미만 (초단기 빠른 익절): 5분봉 (5m)
+      * 5시간 ~ 18시간 미만 (당일 익절): 15분봉 (15m)
+      * 18시간 ~ 72시간 미만 (1~2일 이내): 1시간봉 (1H)
+      * 72시간 이상 (3일 이상): 4시간봉 (4H)
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -667,8 +671,10 @@ def generate_profit_replay_video_bytes(close_info):
     hold_minutes = max(1, int(to_float(close_info.get("hold_minutes"), (closed_at - created_at) // 60)))
     hold_hours = (closed_at - created_at) / 3600.0
 
-    # 보유 기간별 타임프레임 규칙 엄격 적용
-    if hold_hours < 12.0:
+    # 보유 기간별 타임프레임 규칙 적용 (초단기 5시간 미만 → 5분봉)
+    if hold_hours < 5.0:
+        tf_code, tf_label, step_sec, fetch_lim = "5", "5m", 300, 180
+    elif hold_hours < 18.0:
         tf_code, tf_label, step_sec, fetch_lim = "15", "15m", 900, 180
     elif hold_hours < 72.0:
         tf_code, tf_label, step_sec, fetch_lim = "60", "1H", 3600, 180
@@ -762,7 +768,6 @@ def generate_profit_replay_video_bytes(close_info):
         ma20_js.append({"time": ts_sec, "value": to_float(row["ma20"])} if pd.notna(row.get("ma20")) else None)
         kst_strs.append(datetime.fromtimestamp(ts_ms / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST"))
 
-    # 차트 및 EXIT 지점을 조금 더 우측으로 배치
     ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 6)]
     decimals = 6 if entry_p < 0.01 else (5 if entry_p < 1 else (4 if entry_p < 10 else (3 if entry_p < 1000 else 2)))
     min_move = 10 ** (-decimals)
@@ -774,13 +779,14 @@ def generate_profit_replay_video_bytes(close_info):
     price_diff_prefix = "+" if exit_p >= entry_p else "-"
     exit_headline = f"+{total_realized_pct:.2f}% ({price_diff_prefix}{fmt_price(price_diff_abs)}) · {hold_str}"
 
-    # 12fps × 216프레임 = 정확히 18.0초
-    fps = 12
-    total_frames = 216
-    thumb_end = 48           # 0.0s ~ 4.0s (4.0초 썸네일 고정)
-    play_start = 60          # 4.0s ~ 5.0s (1.0초 진입 시점 준비)
-    play_end = 179           # 5.0s ~ 15.0s (10.0초 본격 상승 리플레이)
-    outro_static_start = 190 # 15.0s ~ 15.8s 화살표 드로잉 / 15.8s ~ 18.0s 완성 고정
+    # 10fps 캡처 × 305프레임 = 30.5초 (X 알고리즘 30초+ 완벽 충족, ffmpeg가 표준 30fps로 인코딩)
+    in_fps = 10
+    out_fps = 30
+    total_frames = 305
+    thumb_end = 20           # 0.0s ~ 2.0s (2.0초 썸네일 고정)
+    play_start = 30          # 2.0s ~ 3.0s (1.0초 진입 봉 리셋 준비)
+    play_end = 259           # 3.0s ~ 26.0s (23.0초 본격 상승 리플레이)
+    outro_static_start = 270 # 26.0s ~ 27.0s 화살표 드로잉 / 27.0s ~ 30.5s 완성 고정 (3.5초)
 
     html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <script src="{lw_script_url}"></script>
@@ -1005,7 +1011,6 @@ function setupResultOverlayGeometry(){{
   y2=Math.max(110, Math.min(500, y2));
   y2High=Math.max(85, Math.min(y2, y2High));
 
-  // 진입~익절 구간의 최고 캔들 Y좌표 계산 (익절 박스가 캔들을 가리지 않고 위로 뜨도록 기준화)
   let peakY=y2High;
   for(let i=entryIdx;i<=exitIdx;i++){{
     const hy=candleSeries.priceToCoordinate(cAll[i].high);
@@ -1033,7 +1038,7 @@ function setupResultOverlayGeometry(){{
   arcTotalLen=Math.max(1, elArcPath.getTotalLength());
   elArcPath.style.strokeDasharray=arcTotalLen.toFixed(1);
 
-  // [1] 대형 EXIT 박스: 상단 빈 공간으로 훨씬 더 위로 배치 + 우측 정렬 + TP 라벨 겹침 회피
+  // [1] 대형 EXIT 박스: 상단 빈 공간으로 위로 배치 + TP 라벨 겹침 회피
   const exitW=elCoExit.offsetWidth || 430;
   const exitH=elCoExit.offsetHeight || 86;
   let exitLeft=Math.max(20, Math.min(plotRight - exitW - 10, x2 - exitW * 0.52));
@@ -1081,14 +1086,13 @@ function setupResultOverlayGeometry(){{
     showExitGuide = false;
   }}
 
-  // [2] 대형 ENTRY 박스: 진입 봉 & SL 선보다 훨씬 더 아래 하단 여유 공간에 깔끔하게 배치
+  // [2] 대형 ENTRY 박스: 진입 봉 & SL 선보다 더 아래 하단 여유 공간 배치
   const entryW=elCoEntry.offsetWidth || 280;
   const entryH=elCoEntry.offsetHeight || 76;
   let entryLeft=Math.max(20, Math.min(plotRight - entryW - 10, x1 - entryW * 0.35));
   const slY = candleSeries.priceToCoordinate(slP);
   let entryTop = y1Low + 52;
   if(slY !== null && isFinite(slY)){{
-    // SL 선과 겹치거나 SL 선 위쪽에 걸리면 SL 선 바로 아래로 자연스럽게 내림
     if(entryTop < slY + 14 && (slY + 14 + entryH) <= 616){{
       entryTop = slY + 14;
     }}
@@ -1140,11 +1144,11 @@ function setResultOverlayVisual(overlayOpacity, arrowProgress, showCallouts){{
   elExitGuide.setAttribute('opacity', (showExitGuide && exitReady > 0.5) ? '0.80' : '0');
 }}
 
-// 18초 타임라인 (12fps × 216프레임):
-// [0..47]    0.0s ~ 4.0s  : 썸네일 완성 이미지 고정 (4초)
-// [48..59]   4.0s ~ 5.0s  : 진입 봉 시점 리셋 및 출발 준비 (1초)
-// [60..179]  5.0s ~ 15.0s : 본격 캔들 상승 리플레이 재생 (10초)
-// [180..215] 15.0s ~ 18.0s: 마지막 완성 엔딩 (화살표 드로잉 0.8초 + 완성 고정 2.2초)
+// 30.5초 타임라인 (10fps 캡처 × 305프레임 → 30fps 표준 출력):
+// [0..19]    0.0s ~ 2.0s  : 썸네일 완성 이미지 고정 (2초)
+// [20..29]   2.0s ~ 3.0s  : 진입 봉 시점 리셋 및 출발 준비 (1초)
+// [30..259]  3.0s ~ 26.0s : 본격 캔들 상승 리플레이 재생 (23초)
+// [260..304] 26.0s ~ 30.5s: 마지막 완성 엔딩 (화살표 드로잉 1.0초 + 완성 고정 3.5초)
 const THUMB_END={thumb_end};
 const PLAY_START={play_start};
 const PLAY_END={play_end};
@@ -1315,23 +1319,23 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
 
             cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
-                "-framerate", str(fps),
+                "-framerate", str(in_fps),
                 "-i", os.path.join(tmpdir, "f_%04d.jpg"),
                 "-c:v", "libx264",
                 "-pix_fmt", "yuv420p",
                 "-preset", "fast",
                 "-crf", "21",
-                "-r", str(fps),
+                "-r", str(out_fps),
                 "-movflags", "+faststart",
                 out_mp4,
             ]
-            res_ff = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            res_ff = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
             if res_ff.returncode != 0 or not os.path.exists(out_mp4):
                 LAST_VIDEO_ERROR = f"ffmpeg 인코딩 오류: {(res_ff.stderr or '')[:180]}"
                 print(f"[리플레이 영상 실패] {LAST_VIDEO_ERROR}")
                 return None
 
-            print(f"[리플레이 영상 완료] {symbol} | {total_frames}프레임 / {fps}fps = {total_frames / fps:.1f}초 (v5-18s)")
+            print(f"[리플레이 영상 완료] {symbol} ({tf_label}) | {total_frames}프레임 / {in_fps}fps → {out_fps}fps = {total_frames / in_fps:.1f}초 (v6-30s)")
             with open(out_mp4, "rb") as vf:
                 return vf.read()
     except Exception as e:
@@ -1381,7 +1385,7 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
 
 
 def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=None, filename="profit_replay.mp4"):
-    """18초 HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송"""
+    """30초 HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송"""
     global LAST_VIDEO_ERROR
     token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
@@ -1397,14 +1401,14 @@ def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=
                 "chat_id": chat_id,
                 "width": "1280",
                 "height": "720",
-                "duration": "18",
+                "duration": "30",
                 "supports_streaming": "true",
             }
             if caption_text:
                 data["caption"] = caption_text
             if reply_markup:
                 data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False) if isinstance(reply_markup, dict) else str(reply_markup)
-            resp = requests.post(url, data=data, files=files, timeout=45)
+            resp = requests.post(url, data=data, files=files, timeout=50)
             if resp.status_code == 200:
                 time.sleep(0.8)
                 return True
