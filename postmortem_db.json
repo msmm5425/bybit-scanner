@@ -88,7 +88,25 @@
       "autopsy_post_low_pct": -2.2
     }
   ],
-  "wins": [],
-  "updated_at": 1795556771,
+  "wins": [
+    {
+      "id": "OPGUSDT_1795152267",
+      "engine_ver": "v3",
+      "symbol": "OPGUSDT",
+      "track_type": "TRACK_A",
+      "score": 94,
+      "created_at": 1795152267,
+      "win_at": 1795556772,
+      "max_favorable_pct": 22.26,
+      "vol_mult": 3.84,
+      "rsi6_15m": 48.0,
+      "oi_ratio": 0.0,
+      "funding_pct": 0.005,
+      "change_24h": 0.0,
+      "btc_1h_pct": 0.0,
+      "kst_block": "12-15"
+    }
+  ],
+  "updated_at": 1795556803,
   "engine_ver": "v3"
 }
