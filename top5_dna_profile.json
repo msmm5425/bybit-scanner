@@ -1,6 +1,66 @@
 {
   "samples": [
     {
+      "symbol": "INXUSDT",
+      "timestamp": 1795480137,
+      "change_24h": 23.1,
+      "caught_by_scanner": false,
+      "caught_track": "MISSED",
+      "pre_bb_width": 2.87,
+      "pre_vol_dry_ratio": 2.5,
+      "launch_vol_mult": 25.0,
+      "pre_rsi6": 69.1,
+      "pre_1h_ma20_dist": 2.91,
+      "oi_ratio": 8.7,
+      "funding_pct": 0.005,
+      "pattern_tag": "초응축 돌파 폭발"
+    },
+    {
+      "symbol": "EVAAUSDT",
+      "timestamp": 1795480137,
+      "change_24h": 24.28,
+      "caught_by_scanner": true,
+      "caught_track": "TRACK_E",
+      "pre_bb_width": 6.46,
+      "pre_vol_dry_ratio": 2.17,
+      "launch_vol_mult": 13.16,
+      "pre_rsi6": 43.6,
+      "pre_1h_ma20_dist": -16.66,
+      "oi_ratio": 11.6,
+      "funding_pct": 0.005,
+      "pattern_tag": "과매도 바닥 급반전"
+    },
+    {
+      "symbol": "MUBARAKUSDT",
+      "timestamp": 1795480137,
+      "change_24h": 27.15,
+      "caught_by_scanner": false,
+      "caught_track": "MISSED",
+      "pre_bb_width": 3.24,
+      "pre_vol_dry_ratio": 1.52,
+      "launch_vol_mult": 7.3,
+      "pre_rsi6": 92.5,
+      "pre_1h_ma20_dist": 2.07,
+      "oi_ratio": 11.3,
+      "funding_pct": 0.005,
+      "pattern_tag": "초응축 돌파 폭발"
+    },
+    {
+      "symbol": "CYSUSDT",
+      "timestamp": 1795480137,
+      "change_24h": 43.77,
+      "caught_by_scanner": false,
+      "caught_track": "MISSED",
+      "pre_bb_width": 5.49,
+      "pre_vol_dry_ratio": 1.73,
+      "launch_vol_mult": 3.77,
+      "pre_rsi6": 80.1,
+      "pre_1h_ma20_dist": 3.57,
+      "oi_ratio": 9.6,
+      "funding_pct": 0.005,
+      "pattern_tag": "초응축 돌파 폭발"
+    },
+    {
       "symbol": "CPUSDT",
       "timestamp": 1795393405,
       "change_24h": 14.37,
@@ -153,19 +213,19 @@
   ],
   "active_dna_formula": {
     "enabled": true,
-    "sample_count": 10,
-    "missed_count": 5,
+    "sample_count": 14,
+    "missed_count": 8,
     "dominant_tag": "초응축 돌파 폭발",
-    "bb_width_max": 9.63,
+    "bb_width_max": 7.38,
     "vol_dry_max": 1.35,
     "launch_vol_min": 3.8,
     "pre_rsi_min": 46.3,
     "pre_rsi_max": 72.0,
     "ma20_1h_dist_min": 0.01,
-    "ma20_1h_dist_max": 8.44,
-    "oi_ratio_min": 7.5,
+    "ma20_1h_dist_max": 7.77,
+    "oi_ratio_min": 8.7,
     "funding_max": 0.005,
-    "updated_at": 1795393391
+    "updated_at": 1795480118
   },
-  "updated_at": 1795393391
+  "updated_at": 1795480118
 }
