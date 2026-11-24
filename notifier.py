@@ -298,7 +298,6 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     tp1_p, tp2_p, tp3_p = to_float(tps[0]) * ratio_adj, to_float(tps[1]) * ratio_adj, to_float(tps[2]) * ratio_adj
     p1, p2, p3 = round(to_float(tp_pcts[0], 8.0), 1), round(to_float(tp_pcts[1], 15.0), 1), round(to_float(tp_pcts[2], 22.0), 1)
 
-    # 96캔들 전체(최저~최고)와 피보나치(0~1) 구간 100% 정배율 유지
     candle_min_low = to_float(df["low"].min(), price * 0.97)
     candle_max_high = to_float(df["high"].max(), price * 1.02)
     low_piv = min(candle_min_low, price * 0.988)
@@ -632,15 +631,15 @@ def generate_signal_chart_bytes(res):
 
 def generate_profit_replay_video_bytes(close_info):
     """
-    [최종 전량 익절 10초 HD MP4 리플레이 영상 자동 제작 엔진 v3 (안정화)]
-    - 규격: X 최적화 1280×720 (16:9), 12fps × 120프레임 = 정확히 10.0초, H.264/yuv420p/+faststart
+    [최종 전량 익절 18초 HD MP4 리플레이 영상 자동 제작 엔진 v4]
+    - 규격: X 최적화 1280×720 (16:9), 12fps × 216프레임 = 정확히 18.0초, H.264/yuv420p/+faststart
     - 타임라인:
-      * 0.0초 ~ 1.0초 (0~11): 썸네일 완성 이미지 (파란 곡선 화살표 + 진입/익절 날짜·가격 + 최종 수익률%)
-      * 1.0초 ~ 2.0초 (12~23): 진입 봉 시점(ENTRY) 리셋 및 출발 준비
-      * 2.0초 ~ 8.0초 (24~95): 정확히 2초부터 진입봉→익절봉 실시간 캔들 상승 리플레이
-      * 8.0초 ~ 10.0초 (96~119): 마지막 완성 엔딩 (파란 곡선 화살표 드로잉 + 진입/익절 날짜·가격 + 최종 수익률%)
-    - 보유 기간별 캔들 자동 선택: 12시간 미만(15m) / 1~2일 이내(1H) / 3일 이상(4H)
-    - 이중 CDN 폴백 · 중복 타임스탬프 제거 · 상세 에러 진단(LAST_VIDEO_ERROR) 완비
+      * 0.0초 ~ 4.0초 (0~47): 썸네일 완성 이미지 4초 고정 (진입봉→익절봉 파란 곡선 화살표 + 진입/익절 날짜·가격 + 최종 수익률%)
+      * 4.0초 ~ 5.0초 (48~59): 진입 봉 시점(ENTRY) 리셋 및 출발 준비 (1초)
+      * 5.0초 ~ 15.0초 (60~179): 진입봉→익절봉 실시간 캔들 상승 리플레이 (10초)
+      * 15.0초 ~ 18.0초 (180~215): 마지막 완성 엔딩 3초 (화살표 드로잉 0.8초 + 완성 고정 2.2초)
+    - 정지 구간(썸네일/대기/엔딩) 고속 복사 최적화 → 18초 영상도 기존 10초와 동일한 속도로 렌더링
+    - 차트 및 EXIT 블루 콜아웃 우측 정렬 보정 + TP/SL 라벨 수직 자동 회피
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -763,7 +762,8 @@ def generate_profit_replay_video_bytes(close_info):
         ma20_js.append({"time": ts_sec, "value": to_float(row["ma20"])} if pd.notna(row.get("ma20")) else None)
         kst_strs.append(datetime.fromtimestamp(ts_ms / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST"))
 
-    ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 8)]
+    # 우측 여백을 5캔들로 압축해 캔들과 EXIT 지점을 조금 더 우측으로 배치
+    ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 6)]
     decimals = 6 if entry_p < 0.01 else (5 if entry_p < 1 else (4 if entry_p < 10 else (3 if entry_p < 1000 else 2)))
     min_move = 10 ** (-decimals)
     lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
@@ -774,9 +774,13 @@ def generate_profit_replay_video_bytes(close_info):
     price_diff_prefix = "+" if exit_p >= entry_p else "-"
     exit_headline = f"{price_diff_prefix}{fmt_price(price_diff_abs)} (+{total_realized_pct:.2f}%) in {hold_str}"
 
-    # 12fps × 120프레임 = 정확히 10.0초 (GitHub Actions 안정성 최적화)
+    # 12fps × 216프레임 = 정확히 18.0초
     fps = 12
-    total_frames = 120
+    total_frames = 216
+    thumb_end = 48    # 0.0s ~ 4.0s (4.0초 썸네일 고정)
+    play_start = 60   # 4.0s ~ 5.0s (1.0초 진입 시점 준비)
+    play_end = 179    # 5.0s ~ 15.0s (10.0초 본격 상승 리플레이)
+    outro_static_start = 190  # 15.0s ~ 15.8s 화살표 드로잉 / 15.8s ~ 18.0s 완성 고정
 
     html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <script src="{lw_script_url}"></script>
@@ -870,6 +874,7 @@ body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI'
             <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#2962ff" flood-opacity="0.55"/>
           </filter>
         </defs>
+        <line id="exit-guide" x1="0" y1="0" x2="0" y2="0" stroke="#3b82f6" stroke-width="1.6" stroke-dasharray="4,3" opacity="0"/>
         <path id="arc-path" d="" fill="none" stroke="#2962ff" stroke-width="3.6" stroke-linecap="round" filter="url(#arc-glow)"/>
         <circle id="dot-entry" cx="0" cy="0" r="5.5" fill="#2962ff" stroke="#ffffff" stroke-width="2"/>
         <circle id="dot-exit" cx="0" cy="0" r="5.5" fill="#2962ff" stroke="#ffffff" stroke-width="2"/>
@@ -928,7 +933,7 @@ const chart=LightweightCharts.createChart(document.getElementById('chart-box'),{
     fontStyle:'bold'
   }},
   rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.05,bottom:0.12}},entireTextOnly:true}},
-  timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:5}},
+  timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:3}},
   localization:{{priceFormatter:fmtP}}
 }});
 
@@ -963,16 +968,18 @@ const elHud=document.getElementById('live-hud'), elPnl=document.getElementById('
 const elStage=document.getElementById('stage-pill'), elProg=document.getElementById('prog-fill');
 const elOverlay=document.getElementById('result-overlay');
 const elArcPath=document.getElementById('arc-path'), elArcHead=document.getElementById('arc-head');
+const elExitGuide=document.getElementById('exit-guide');
 const elDotEntry=document.getElementById('dot-entry'), elDotExit=document.getElementById('dot-exit');
 const elCoExit=document.getElementById('callout-exit'), elCoEntry=document.getElementById('callout-entry');
 const elCaretExit=document.getElementById('caret-exit'), elCaretEntry=document.getElementById('caret-entry');
 
 let arcTotalLen=1;
 let geometryReady=false;
+let showExitGuide=false;
 
 function setupResultOverlayGeometry(){{
-  const psW=(chart.priceScale('right') && chart.priceScale('right').width) ? chart.priceScale('right').width() : 92;
-  const plotRight=Math.max(400, 1280 - (psW || 92) - 8);
+  const psW=(chart.priceScale('right') && chart.priceScale('right').width) ? chart.priceScale('right').width() : 88;
+  const plotRight=Math.max(400, 1280 - (psW || 88) - 8);
   const totalSlots=cAll.length + wsTail.length;
 
   let x1=chart.timeScale().timeToCoordinate(cAll[entryIdx].time);
@@ -998,7 +1005,7 @@ function setupResultOverlayGeometry(){{
   const dy=y1 - y2;
   let cx, cy;
   if(dx >= 45){{
-    cx = Math.min(plotRight - 14, x1 + dx * 0.88 + 18);
+    cx = Math.min(plotRight - 14, x1 + dx * 0.90 + 18);
     cy = Math.min(592, y1 - dy * 0.04 + 12);
   }} else {{
     cx = Math.min(plotRight - 14, Math.max(x1, x2) + 72);
@@ -1015,19 +1022,55 @@ function setupResultOverlayGeometry(){{
   arcTotalLen=Math.max(1, elArcPath.getTotalLength());
   elArcPath.style.strokeDasharray=arcTotalLen.toFixed(1);
 
+  // [우측 정렬 보정] EXIT 콜아웃을 우측으로 더 자연스럽게 배치 + 우측 TP/SL 라벨 수직 겹침 자동 회피
   const exitW=elCoExit.offsetWidth || 275;
   const exitH=elCoExit.offsetHeight || 56;
-  let exitLeft=Math.max(16, Math.min(plotRight - exitW - 10, x2 - exitW * 0.55));
+  let exitLeft=Math.max(16, Math.min(plotRight - exitW - 6, x2 - exitW * 0.28));
   let exitTop=Math.min(y2, y2High) - exitH - 18;
   if(exitTop < 48) exitTop = 48;
+
+  const badgeZoneLeft = plotRight - 145;
+  const tpYs = [tp3P, tp2P, tp1P, slP]
+    .map(p => candleSeries.priceToCoordinate(p))
+    .filter(v => v !== null && isFinite(v));
+
+  if(exitLeft + exitW > badgeZoneLeft){{
+    for(let pass=0; pass<3; pass++){{
+      let hit=false;
+      for(const ty of tpYs){{
+        if(exitTop < ty + 16 && (exitTop + exitH) > ty - 16){{
+          const candUp = ty - 16 - exitH - 6;
+          if(candUp >= 48){{
+            exitTop = candUp;
+            hit = true;
+          }}
+        }}
+      }}
+      if(!hit) break;
+    }}
+  }}
+
   elCoExit.style.left=exitLeft.toFixed(1) + 'px';
   elCoExit.style.top=exitTop.toFixed(1) + 'px';
   const exitCaretX=Math.max(14, Math.min(exitW - 24, x2 - exitLeft - 7));
   elCaretExit.style.left=exitCaretX.toFixed(1) + 'px';
 
+  // EXIT 박스가 TP 라벨을 피해 위로 올라간 경우 점선 가이드로 EXIT 지점과 깔끔하게 연결
+  const caretTipX = exitLeft + exitCaretX + 7;
+  const caretTipY = exitTop + exitH + 7;
+  if((y2 - caretTipY) > 18){{
+    elExitGuide.setAttribute('x1', caretTipX.toFixed(1));
+    elExitGuide.setAttribute('y1', caretTipY.toFixed(1));
+    elExitGuide.setAttribute('x2', x2.toFixed(1));
+    elExitGuide.setAttribute('y2', (y2 - 6).toFixed(1));
+    showExitGuide = true;
+  }} else {{
+    showExitGuide = false;
+  }}
+
   const entryW=elCoEntry.offsetWidth || 185;
   const entryH=elCoEntry.offsetHeight || 50;
-  let entryLeft=Math.max(16, Math.min(plotRight - entryW - 10, x1 - entryW * 0.42));
+  let entryLeft=Math.max(16, Math.min(plotRight - entryW - 6, x1 - entryW * 0.35));
   let entryTop=y1Low + 14;
   if(entryTop + entryH > 634) entryTop = 634 - entryH;
   if(entryTop < exitTop + exitH + 12){{
@@ -1057,18 +1100,20 @@ function setResultOverlayVisual(overlayOpacity, arrowProgress, showCallouts){{
   elDotExit.style.opacity=(p >= 0.95 ? '1' : '0');
 
   const boxAlpha=showCallouts ? Math.min(1.0, overlayOpacity) : 0;
+  const exitReady=(p >= 0.85 ? boxAlpha : 0);
   elCoEntry.style.opacity=boxAlpha.toFixed(2);
-  elCoExit.style.opacity=(p >= 0.85 ? boxAlpha : 0).toFixed(2);
+  elCoExit.style.opacity=exitReady.toFixed(2);
+  elExitGuide.setAttribute('opacity', (showExitGuide && exitReady > 0.5) ? '0.72' : '0');
 }}
 
-// 10초 타임라인 (12fps × 120프레임):
-// [0..11]  0.0s~1.0s : 처음 썸네일 완성 이미지 (1초 고정)
-// [12..23] 1.0s~2.0s : 진입 봉 시점 리셋 및 출발 준비 (1초)
-// [24..95] 2.0s~8.0s : 정확히 2초부터 본격 캔들 상승 리플레이 (6초)
-// [96..119] 8.0s~10.0s: 마지막 완성 장면 (파란 곡선 화살표 + 진입/익절 날짜·가격·최종 수익률) (2초)
-const THUMB_END=12;
-const PLAY_START=24;
-const PLAY_END=95;
+// 18초 타임라인 (12fps × 216프레임):
+// [0..47]    0.0s ~ 4.0s  : 썸네일 완성 이미지 고정 (4초)
+// [48..59]   4.0s ~ 5.0s  : 진입 봉 시점 리셋 및 출발 준비 (1초)
+// [60..179]  5.0s ~ 15.0s : 본격 캔들 상승 리플레이 재생 (10초)
+// [180..215] 15.0s ~ 18.0s: 마지막 완성 엔딩 (화살표 드로잉 0.8초 + 완성 고정 2.2초)
+const THUMB_END={thumb_end};
+const PLAY_START={play_start};
+const PLAY_END={play_end};
 const postSteps=Math.max(1, exitIdx - entryIdx);
 
 window.__renderFrame=function(f){{
@@ -1186,7 +1231,7 @@ window.__renderFrame=function(f){{
   }} else {{
     elHud.style.opacity='0';
     const outroStep=f - PLAY_END;
-    const arrowP=Math.min(1.0, outroStep / 7.0);
+    const arrowP=Math.min(1.0, outroStep / 10.0);
     setResultOverlayVisual(1.0, arrowP, true);
   }}
 }};
@@ -1218,13 +1263,21 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 page.wait_for_function("window.__REPLAY_READY === true", timeout=15000)
                 page.wait_for_timeout(120)
 
+                # 정지 구간(썸네일 4초 · 대기 1초 · 엔딩 고정)은 1장 촬영 후 고속 복사로 렌더링 시간 단축
                 for fi in range(total_frames):
+                    dst_jpg = os.path.join(tmpdir, f"f_{fi:04d}.jpg")
+                    if 1 <= fi < thumb_end:
+                        shutil.copyfile(os.path.join(tmpdir, "f_0000.jpg"), dst_jpg)
+                        continue
+                    if (thumb_end + 1) <= fi < play_start:
+                        shutil.copyfile(os.path.join(tmpdir, f"f_{thumb_end:04d}.jpg"), dst_jpg)
+                        continue
+                    if fi > outro_static_start:
+                        shutil.copyfile(os.path.join(tmpdir, f"f_{outro_static_start:04d}.jpg"), dst_jpg)
+                        continue
+
                     page.evaluate(f"window.__renderFrame({fi})")
-                    page.screenshot(
-                        path=os.path.join(tmpdir, f"f_{fi:04d}.jpg"),
-                        type="jpeg",
-                        quality=88,
-                    )
+                    page.screenshot(path=dst_jpg, type="jpeg", quality=88)
                 browser.close()
 
             cmd = [
@@ -1293,7 +1346,7 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
 
 
 def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=None, filename="profit_replay.mp4"):
-    """10초 HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송 (실패 사유 기록 포함)"""
+    """18초 HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송"""
     global LAST_VIDEO_ERROR
     token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
@@ -1309,7 +1362,7 @@ def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=
                 "chat_id": chat_id,
                 "width": "1280",
                 "height": "720",
-                "duration": "10",
+                "duration": "18",
                 "supports_streaming": "true",
             }
             if caption_text:
