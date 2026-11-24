@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       test_video:
-        description: '최근 익절 종목($BTW 등) 10초 리플레이 영상 즉시 테스트 발송'
+        description: '최근 익절 종목 30초 리플레이 영상 즉시 테스트 발송'
         required: false
         default: false
         type: boolean
@@ -21,7 +21,7 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 58
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
