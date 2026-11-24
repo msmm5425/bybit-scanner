@@ -24,10 +24,10 @@
       "btc_1h_pct": 0.0,
       "kst_block": "09-12",
       "cause": "비트 연동 급락 및 지지선 이탈",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -3.0,
+      "autopsy_post_low_pct": -2.6
     },
     {
       "id": "CHIPUSDT_1795496792",
@@ -53,10 +53,10 @@
       "btc_1h_pct": 0.0,
       "kst_block": "12-15",
       "cause": "비트 연동 급락 및 지지선 이탈",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -4.7,
+      "autopsy_post_low_pct": -1.4
     },
     {
       "id": "MEGAUSDT_1795237138",
@@ -82,13 +82,13 @@
       "btc_1h_pct": 0.0,
       "kst_block": "12-15",
       "cause": "+7.1% 반등 후 차익 매물 출회",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -4.9,
+      "autopsy_post_low_pct": -2.2
     }
   ],
   "wins": [],
-  "updated_at": 1795555465,
+  "updated_at": 1795555533,
   "engine_ver": "v3"
 }
