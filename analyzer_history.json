@@ -74,59 +74,19 @@
     }
   ],
   "dynamic_tp_tuning": {
-    "tp1_min_pct": 10.5,
-    "tp2_min_pct": 19.7,
-    "tp3_min_pct": 29.7,
-    "updated_at": 1795566507
+    "tp1_min_pct": 11.0,
+    "tp2_min_pct": 20.0,
+    "tp3_min_pct": 32.0,
+    "updated_at": 1795480118
   },
   "updated_at": "2026-11-16 14:23 KST",
   "records": [
     {
-      "symbol": "SAHARAUSDT",
-      "price": 0.005373,
-      "change_24h": 8.52,
-      "max_high_48h": 0.005373,
-      "max_gain_pct": 0.0,
-      "timestamp": 1795566507
-    },
-    {
-      "symbol": "IDOLUSDT",
-      "price": 0.017271,
-      "change_24h": 9.77,
-      "max_high_48h": 0.017271,
-      "max_gain_pct": 0.0,
-      "timestamp": 1795566507
-    },
-    {
-      "symbol": "BTWUSDT",
-      "price": 0.80795,
-      "change_24h": 13.02,
-      "max_high_48h": 0.80795,
-      "max_gain_pct": 0.0,
-      "timestamp": 1795566507
-    },
-    {
-      "symbol": "OPGUSDT",
-      "price": 0.1694,
-      "change_24h": 21.75,
-      "max_high_48h": 0.1694,
-      "max_gain_pct": 0.0,
-      "timestamp": 1795566507
-    },
-    {
-      "symbol": "BLESSUSDT",
-      "price": 0.017675,
-      "change_24h": 28.18,
-      "max_high_48h": 0.017675,
-      "max_gain_pct": 0.0,
-      "timestamp": 1795566507
-    },
-    {
       "symbol": "INXUSDT",
       "price": 0.003864,
       "change_24h": 23.1,
-      "max_high_48h": 0.004227,
-      "max_gain_pct": 9.4,
+      "max_high_48h": 0.003864,
+      "max_gain_pct": 0.0,
       "timestamp": 1795480118
     },
     {
@@ -141,8 +101,8 @@
       "symbol": "MUBARAKUSDT",
       "price": 0.02644,
       "change_24h": 27.15,
-      "max_high_48h": 0.02719,
-      "max_gain_pct": 2.8,
+      "max_high_48h": 0.02644,
+      "max_gain_pct": 0.0,
       "timestamp": 1795480118
     },
     {
@@ -157,8 +117,8 @@
       "symbol": "CYSUSDT",
       "price": 0.05727,
       "change_24h": 43.77,
-      "max_high_48h": 0.06269,
-      "max_gain_pct": 9.5,
+      "max_high_48h": 0.05727,
+      "max_gain_pct": 0.0,
       "timestamp": 1795480118
     },
     {
@@ -200,12 +160,132 @@
       "max_high_48h": 0.020348,
       "max_gain_pct": 24.7,
       "timestamp": 1795393391
+    },
+    {
+      "symbol": "IDOLUSDT",
+      "price": 0.024228,
+      "change_24h": 12.22,
+      "max_high_48h": 0.047917,
+      "max_gain_pct": 97.8,
+      "timestamp": 1795220810
+    },
+    {
+      "symbol": "BLESSUSDT",
+      "price": 0.013914,
+      "change_24h": 12.4,
+      "max_high_48h": 0.021775,
+      "max_gain_pct": 56.5,
+      "timestamp": 1795220810
+    },
+    {
+      "symbol": "KERNELUSDT",
+      "price": 0.04469,
+      "change_24h": 14.49,
+      "max_high_48h": 0.04999,
+      "max_gain_pct": 11.9,
+      "timestamp": 1795220810
+    },
+    {
+      "symbol": "ELSAUSDT",
+      "price": 0.06634,
+      "change_24h": 16.94,
+      "max_high_48h": 0.1,
+      "max_gain_pct": 50.7,
+      "timestamp": 1795220810
+    },
+    {
+      "symbol": "EVAAUSDT",
+      "price": 6.27,
+      "change_24h": 17.84,
+      "max_high_48h": 6.6495,
+      "max_gain_pct": 6.1,
+      "timestamp": 1795220810
+    },
+    {
+      "symbol": "BARDUSDT",
+      "price": 0.0976,
+      "change_24h": 16.65,
+      "max_high_48h": 0.1056,
+      "max_gain_pct": 8.2,
+      "timestamp": 1795149715
+    },
+    {
+      "symbol": "CTRUSDT",
+      "price": 0.0176,
+      "change_24h": 17.04,
+      "max_high_48h": 0.01778,
+      "max_gain_pct": 1.0,
+      "timestamp": 1795149715
+    },
+    {
+      "symbol": "NAORISUSDT",
+      "price": 0.02962,
+      "change_24h": 24.18,
+      "max_high_48h": 0.037,
+      "max_gain_pct": 24.9,
+      "timestamp": 1795149715
+    },
+    {
+      "symbol": "ICNTUSDT",
+      "price": 0.428,
+      "change_24h": 26.64,
+      "max_high_48h": 0.4741,
+      "max_gain_pct": 10.8,
+      "timestamp": 1795149715
+    },
+    {
+      "symbol": "EVAAUSDT",
+      "price": 5.5218,
+      "change_24h": 35.22,
+      "max_high_48h": 6.4332,
+      "max_gain_pct": 16.5,
+      "timestamp": 1795149715
+    },
+    {
+      "symbol": "BTWUSDT",
+      "price": 0.58896,
+      "change_24h": 13.47,
+      "max_high_48h": 0.718,
+      "max_gain_pct": 21.9,
+      "timestamp": 1795144692
+    },
+    {
+      "symbol": "YBUSDT",
+      "price": 0.05292,
+      "change_24h": 15.45,
+      "max_high_48h": 0.05292,
+      "max_gain_pct": 0.0,
+      "timestamp": 1795144692
+    },
+    {
+      "symbol": "NAORISUSDT",
+      "price": 0.02823,
+      "change_24h": 22.24,
+      "max_high_48h": 0.037,
+      "max_gain_pct": 31.1,
+      "timestamp": 1795144692
+    },
+    {
+      "symbol": "ICNTUSDT",
+      "price": 0.4286,
+      "change_24h": 30.4,
+      "max_high_48h": 0.4305,
+      "max_gain_pct": 0.4,
+      "timestamp": 1795144692
+    },
+    {
+      "symbol": "EVAAUSDT",
+      "price": 5.3797,
+      "change_24h": 35.92,
+      "max_high_48h": 6.195,
+      "max_gain_pct": 15.2,
+      "timestamp": 1795144692
     }
   ],
   "learned_tp_params": {
-    "tp1_min_pct": 10.5,
-    "tp2_min_pct": 19.7,
-    "tp3_min_pct": 29.7,
-    "updated_at": 1795566507
+    "tp1_min_pct": 11.0,
+    "tp2_min_pct": 20.0,
+    "tp3_min_pct": 32.0,
+    "updated_at": 1795480118
   }
 }
