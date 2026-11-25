@@ -1,6 +1,35 @@
 {
   "records": [
     {
+      "id": "HUSDT_1795381472",
+      "engine_ver": "v3",
+      "symbol": "HUSDT",
+      "track_type": "TRACK_A",
+      "score": 99,
+      "entry_price": 0.01199,
+      "stop_price": 0.011271,
+      "sl_trigger_price": 0.01127,
+      "sl_pct": 6,
+      "created_at": 1795381472,
+      "sl_at": 1795592282,
+      "hold_minutes": 3513,
+      "max_high_price": 0.0141,
+      "max_favorable_pct": 17.6,
+      "vol_mult": 2.51,
+      "rsi6_15m": 67.7,
+      "oi_m": 1.4,
+      "oi_ratio": 23.3,
+      "funding_pct": 0.005,
+      "change_24h": 7.87,
+      "btc_1h_pct": 0.0,
+      "kst_block": "06-09",
+      "cause": "+17.6% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "JCTUSDT_1795487061",
       "engine_ver": "v3",
       "symbol": "JCTUSDT",
@@ -107,6 +136,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795592281,
+  "updated_at": 1795592306,
   "engine_ver": "v3"
 }
