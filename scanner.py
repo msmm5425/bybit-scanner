@@ -69,6 +69,7 @@ HISTORY_RETENTION_SEC = 259200
 EPISODE_RETENTION_SEC = 604800
 MAX_NEW_ALERTS_PER_SCAN = 2
 ELITE_SCORE_THRESHOLD = max(90, int(getattr(cfg, "SCORE_THRESHOLD", 90)))
+# [2단계] 포트폴리오 동시 노출 소프트 캡 (단기 10종목+ / 장기 6종목+ → 커트라인 +2점 상향)
 SHORT_SOFT_CAP_COUNT = 10
 LONG_SOFT_CAP_COUNT = 6
 SOFT_CAP_SCORE_BUMP = 2
@@ -175,6 +176,10 @@ def check_btc_market_regime():
 
 
 def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
+    """
+    [2단계] 종목별 OI 스냅샷을 최대 8개(2시간) 보관하고,
+    15~45분 전(목표 30분)에 가장 가까운 기준 스냅샷을 우선 매칭
+    """
     ref_map = {}
     for sym in list(oi_snapshot.keys()):
         if is_stock_or_tradfi_symbol(sym):
@@ -198,6 +203,7 @@ def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
             continue
 
         hist = oi_snapshot.get(sym, [])
+        # 1순위: 15~45분(900~2700초) 내 30분(1800초)에 가장 가까운 기록 / 2순위: 10~90분(600~5400초)
         ideal_pool = []
         fallback_pool = []
         for h in hist:
@@ -411,7 +417,7 @@ def _record_pm_win(symbol, t_item, now_ts, max_fav):
 
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
-    """[방어선 캔들 마감 확정 + 요청된 돌파·익절 문구 5종 + 전량 수익 마감 시 30초 리플레이 영상]"""
+    """[방어선 캔들 마감 확정 + 전량 수익 마감 시 30초 리플레이 영상 트리거 반환]"""
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("closed_alerted"):
         return None
     entry_ref = to_float(t_item.get("entry_price"))
@@ -532,7 +538,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             "hold_minutes": hold_min,
         }
 
-    # [3차 달성]: 50% 익절 확정 + 잔여 50% 트레일링 최종 익절 완료 시에만 영상 제작
+    # [3차 돌파]: 50% 익절 확정 + 잔여 50% 트레일링 최종 익절 완료 시에만 영상 제작
     if max_high >= tp3_p or t_item.get("tp3_hit"):
         for fg in ("tp1_hit", "tp2_hit", "tp3_hit", "tp1_alerted", "tp2_alerted"):
             t_item[fg] = True
@@ -549,7 +555,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             w3 = round(g3 * 0.50, 2)
             tr_pct = round((stop_p - entry_ref) / entry_ref * 100.0, 1)
             msgs.append(
-                f"🚀 {horizon_tag}[3차 목표가(TP3) 달성!] ${base} ({symbol})\n"
+                f"🚀 {horizon_tag}[3차 목표가(TP3) 돌파! 50% 익절 & 방어선 TP2 상향 + 고점 -{trail_drop_pct}% 트레일링 가동] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
                 f"• 📊 [3차 분할 익절(비중 50%)]: +{g3:.1f}% 확정 (기여 +{w3:.2f}%)\n"
                 f"• 🎯 남은 50% 물량은 바닥 방어선 TP2({fmt_price(tp2_p)}, +{g2:.1f}%) + 고점 대비 -{trail_drop_pct}% 자동 트레일링({fmt_price(stop_p)}, +{tr_pct:.1f}% · {confirm_tf_lbl} 종가 이탈 시 마감)으로 추적합니다!"
@@ -575,7 +581,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             total_cum = round(w3 + w_rem, 2)
             t_item["realized_weighted_pct"] = total_cum
             msgs.append(
-                f"🎯 {horizon_tag}[3차 달성 후 잔여 50% 트레일링 스탑({confirm_tf_lbl} 종가) 최종 익절 완료] ${base} ({symbol})\n"
+                f"🎯 {horizon_tag}[3차 돌파 후 잔여 50% 트레일링 스탑({confirm_tf_lbl} 종가) 최종 익절 완료] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 최고가 {fmt_price(max_high)} (+{max_fav:.1f}%) → {confirm_tf_lbl} 종가 마감 {fmt_price(last_closed_c)} (트레일링선 {fmt_price(stop_p)})\n"
                 f"• 📊 [최종 익절 내역]: 3차(50%) +{g3:.1f}%(+{w3:.2f}%) + 잔여(50%) +{exit_g:.1f}%(+{w_rem:.2f}%)\n"
                 f"• 💰 [최종 합산 확정 수익률]: +{total_cum:.2f}% 달성 (비중 100% 합산)"
@@ -583,7 +589,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             video_payload = _make_video_payload("TP3_TRAILING", last_closed_c, total_cum)
         return {"messages": msgs, "sl_record": None, "video_payload": video_payload}
 
-    # [2차 달성]: TP1 방어선 100% 전량 수익 익절 완료 시에만 영상 제작
+    # [2차 돌파]: TP1 방어선 100% 전량 수익 마감 완료 시에만 영상 제작
     tp2_confirmed = bool(t_item.get("tp2_hit") or t_item.get("tp2_alerted"))
     tp2_confirm_close_ts = int(to_float(t_item.get("tp2_armed_ts_ms"), 0))
 
@@ -606,10 +612,9 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             just_armed_tp2 = True
             _record_pm_win(symbol, t_item, now_ts, max_fav)
             msgs.append(
-                f"✅ {horizon_tag}[2차 목표가(TP2) 달성!] \n"
-                f"${base} ({symbol})\n"
+                f"✅ {horizon_tag}[2차 구간(TP2) {confirm_tf_lbl} 종가 안착 돌파! 100% 홀딩 & 방어선 TP1 상향 고정] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
-                f"• 🛡️ [방어선 상향 ]: {confirm_tf_lbl} 종가 돌파 확인 완료! 100% 전량 홀딩하며 방어선을 TP1({fmt_price(tp1_p)}, +{g1:.1f}%)로 상향 합니다. (이탈 판정: 이후 {confirm_tf_lbl} 종가 기준)"
+                f"• 🛡️ [방어선 상향 고정]: {confirm_tf_lbl} 종가 돌파 확인 완료! 추가 익절 없이 100% 전량 홀딩하며 방어선을 TP1({fmt_price(tp1_p)}, +{g1:.1f}%)로 상향 고정합니다. (이탈 판정: 이후 {confirm_tf_lbl} 종가 기준)"
             )
 
         video_payload = None
@@ -630,22 +635,22 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             exit_g = round(max(g1, (stop_p - entry_ref) / entry_ref * 100.0), 1)
             t_item["realized_weighted_pct"] = exit_g
             msgs.append(
-                f"🔒 {horizon_tag}[ 100% 전량 수익 익절 완료] ${base} ({symbol})\n"
-                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 TP1({fmt_price(stop_p)})을 {confirm_tf_lbl} 종가({fmt_price(last_closed_c)})로 이탈하여 익절 마감합니다.\n"
+                f"🔒 {horizon_tag}[TP1 방어선 {confirm_tf_lbl} 종가 이탈 · 100% 전량 수익 마감 완료] ${base} ({symbol})\n"
+                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 TP1({fmt_price(stop_p)})을 {confirm_tf_lbl} 종가({fmt_price(last_closed_c)})로 이탈하여 전량(100%) 익절 마감합니다.\n"
                 f"• 💰 [최종 합산 확정 수익률]: +{exit_g:.2f}% 달성 (100% 전량 익절)"
             )
             video_payload = _make_video_payload("TP1_DEFENSE", last_closed_c, exit_g)
         return {"messages": msgs, "sl_record": None, "video_payload": video_payload}
 
-    # [1차 달성]: 익절·방어선 이동 없이 100% 홀딩 유지 (영상 제작 안 함)
+    # [1차 돌파]: 익절·방어선 이동 없이 100% 홀딩 유지 (영상 제작 안 함)
     if max_high >= tp1_p or t_item.get("tp1_hit"):
         t_item["tp1_hit"] = True
         if not t_item.get("tp1_alerted"):
             t_item["tp1_alerted"] = True
             msgs.append(
-                f"✅ {horizon_tag}[1차 목표가(TP1) 달성! ] ${base} ({symbol})\n"
+                f"✅ {horizon_tag}[1차 목표가(TP1) 돌파! 익절 없이 100% 홀딩 유지] ${base} ({symbol})\n"
                 f"• 진입가 {fmt_price(entry_ref)} → 현재 최고 {fmt_price(max_high)} (+{max_fav:.1f}%)\n"
-                f"• 📈  100% 전량 홀딩하며 2차 목표가({fmt_price(tp2_p)}) 돌파를 기대합니다."
+                f"• 📈 분할 익절 없이 100% 전량 홀딩하며 2차 목표가({fmt_price(tp2_p)}, +{g2:.1f}% · {confirm_tf_lbl} 종가 안착 시 방어선 상향) 돌파를 추적합니다."
             )
 
     # [2차 확정 전]: 고정 손절선 이탈 감시 (영상 제작 안 함)
@@ -810,6 +815,10 @@ def run_latest_profit_video_test():
 
 
 def _git_sync_state():
+    """
+    [2단계 보강] bot_state.json·scanner_state.json뿐만 아니라
+    postmortem_db.json도 origin/main과 ID 기준 합집합 병합 후 영구 동기화
+    """
     is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
     try:
         subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
@@ -830,6 +839,7 @@ def _git_sync_state():
                         pass
             save_state(loc_dict)
 
+            # postmortem_db.json 원격+로컬 합집합 병합 (덮어쓰기 유실 방지)
             pm_merged = None
             local_pm = _read_json(POSTMORTEM_DB_FILE)
             remote_pm = {}
@@ -994,6 +1004,7 @@ def main(scan_long_term=True):
     if market_regime["gate_mode"] == "COUNTER_TREND_ONLY":
         print(f"[{now_str}] ⚠️ {market_regime['reason']}")
 
+    # [2단계] 동시 노출 소프트 캡 집계 (단기 10종목+ / 장기 6종목+ 시 커트라인 +2점 상향)
     active_short_cnt = 0
     active_long_cnt = 0
     for s_k, t_v in tracked.items():
@@ -1087,6 +1098,7 @@ def main(scan_long_term=True):
         if _closed_profit_recently(sym):
             continue
 
+        # 회차 중 신규 편입에 따른 동적 소프트 캡 재검증
         is_res_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
         dyn_cut = (
             ELITE_SCORE_THRESHOLD + (SOFT_CAP_SCORE_BUMP if active_long_cnt >= LONG_SOFT_CAP_COUNT else 0)
@@ -1151,6 +1163,10 @@ def main(scan_long_term=True):
 
 
 def run_loop_mode(iterations=11, sleep_sec=290):
+    """
+    [2단계] 11회 × ~290초 (매시 :53~:55까지 연속 감시하여 18분 사각지대 해소)
+    - 장기 포지션(Track D)은 1 · 4 · 7 · 10회차(약 15분 주기)에만 탐색해 4H API 부하 65% 절감
+    """
     for i in range(1, iterations + 1):
         scan_lt = (i % 3 == 1)
         print(f"=== [회차 {i}/{iterations}] 5분 주기 스캔 시작 ({'단기+장기' if scan_lt else '단기전용'}) ===")
