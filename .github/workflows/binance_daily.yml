@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: pip install --upgrade pip requests pandas numpy
 
-      - name: Run Daily Top 5 DNA Learner (Background)
+      - name: Run Daily Top 5 DNA & Market Cap Learner (Background)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -39,13 +39,13 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python binance_analyzer.py
 
-      - name: Commit & Push Learned DNA Profile & History
+      - name: Commit & Push Learned DNA Profile, Market Cap Cache & History
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
-          git add analyzer_history.json top5_dna_profile.json || true
+          git add analyzer_history.json top5_dna_profile.json market_cap_cache.json || true
           if ! git diff --staged --quiet; then
-            git commit -m "chore: update top5 dna profile & daily history [skip ci]"
+            git commit -m "chore: update top5 dna profile, market cap cache & history [skip ci]"
             for i in 1 2 3; do
               git fetch origin main && git rebase origin/main || true
               if git push origin HEAD:main; then
