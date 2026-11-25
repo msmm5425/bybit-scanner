@@ -1,6 +1,35 @@
 {
   "records": [
     {
+      "id": "PLUMEUSDT_1795264778",
+      "engine_ver": "v3",
+      "symbol": "PLUMEUSDT",
+      "track_type": "TRACK_H",
+      "score": 93,
+      "entry_price": 0.01063,
+      "stop_price": 0.009992,
+      "sl_trigger_price": 0.00995,
+      "sl_pct": 6,
+      "created_at": 1795264778,
+      "sl_at": 1795614344,
+      "hold_minutes": 5826,
+      "max_high_price": 0.01167,
+      "max_favorable_pct": 9.78,
+      "vol_mult": 2.77,
+      "rsi6_15m": 61.2,
+      "oi_m": 1.6,
+      "oi_ratio": 58.8,
+      "funding_pct": -0.0022,
+      "change_24h": -2.94,
+      "btc_1h_pct": 0.0,
+      "kst_block": "21-24",
+      "cause": "+9.8% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "CCUSDT_1795476498",
       "engine_ver": "v3",
       "symbol": "CCUSDT",
@@ -223,6 +252,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795614343,
+  "updated_at": 1795614360,
   "engine_ver": "v3"
 }
