@@ -213,19 +213,18 @@
   ],
   "active_dna_formula": {
     "enabled": true,
+    "dna_version": "v3_pure_chart",
     "sample_count": 14,
     "missed_count": 8,
     "dominant_tag": "초응축 돌파 폭발",
-    "bb_width_max": 7.38,
-    "vol_dry_max": 1.35,
+    "bb_width_max": 5.61,
+    "vol_dry_max": 0.95,
     "launch_vol_min": 3.8,
     "pre_rsi_min": 46.3,
-    "pre_rsi_max": 72.0,
+    "pre_rsi_max": 68.0,
     "ma20_1h_dist_min": 0.01,
-    "ma20_1h_dist_max": 7.77,
-    "oi_ratio_min": 8.7,
-    "funding_max": 0.005,
-    "updated_at": 1795480118
+    "ma20_1h_dist_max": 6.44,
+    "updated_at": 1795579662
   },
-  "updated_at": 1795480118
+  "updated_at": 1795579662
 }
