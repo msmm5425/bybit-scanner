@@ -1,6 +1,35 @@
 {
   "records": [
     {
+      "id": "CCUSDT_1795476498",
+      "engine_ver": "v3",
+      "symbol": "CCUSDT",
+      "track_type": "TRACK_A",
+      "score": 95,
+      "entry_price": 0.07793,
+      "stop_price": 0.073254,
+      "sl_trigger_price": 0.07321,
+      "sl_pct": 6,
+      "created_at": 1795476498,
+      "sl_at": 1795609923,
+      "hold_minutes": 2223,
+      "max_high_price": 0.07994,
+      "max_favorable_pct": 2.58,
+      "vol_mult": 2.07,
+      "rsi6_15m": 68.1,
+      "oi_m": 5.3,
+      "oi_ratio": 191.1,
+      "funding_pct": -0.0218,
+      "change_24h": 7.1,
+      "btc_1h_pct": 0.0,
+      "kst_block": "06-09",
+      "cause": "비트 연동 급락 및 지지선 이탈",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "HYPEUSDT_1795292781",
       "engine_ver": "v3",
       "symbol": "HYPEUSDT",
@@ -194,6 +223,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795609921,
+  "updated_at": 1795609938,
   "engine_ver": "v3"
 }
