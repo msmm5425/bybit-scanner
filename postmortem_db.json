@@ -1,6 +1,35 @@
 {
   "records": [
     {
+      "id": "ICNTUSDT_1795570843",
+      "engine_ver": "v3",
+      "symbol": "ICNTUSDT",
+      "track_type": "TRACK_E",
+      "score": 93,
+      "entry_price": 0.3073,
+      "stop_price": 0.288862,
+      "sl_trigger_price": 0.2888,
+      "sl_pct": 6,
+      "created_at": 1795570843,
+      "sl_at": 1795596298,
+      "hold_minutes": 424,
+      "max_high_price": 0.3107,
+      "max_favorable_pct": 1.11,
+      "vol_mult": 2.75,
+      "rsi6_15m": 55.7,
+      "oi_m": 2.2,
+      "oi_ratio": 28.3,
+      "funding_pct": 0.0013,
+      "change_24h": -0.62,
+      "btc_1h_pct": 0.0,
+      "kst_block": "09-12",
+      "cause": "비트 연동 급락 및 지지선 이탈",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "HUSDT_1795381472",
       "engine_ver": "v3",
       "symbol": "HUSDT",
@@ -136,6 +165,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795596297,
+  "updated_at": 1795596318,
   "engine_ver": "v3"
 }
