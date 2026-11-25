@@ -14,6 +14,7 @@ from config import (
 )
 
 SCHEME = "ht" + "tps://"
+MARKET_CAP_CACHE_FILE = "market_cap_cache.json"
 
 BYBIT_HOST_NAMES = (
     "api.bytick.com",
@@ -94,7 +95,10 @@ TRADFI_SYMBOL_TYPE_KEYWORDS = (
 
 _VALID_BYBIT_SYMBOLS_CACHE = {"ts": 0, "symbols": set(), "bases": set()}
 _DYNAMIC_TRADFI_CACHE = {"ts": 0, "symbols": set(), "bases": set()}
+_MARKET_CAP_MEM_CACHE = {"ts": 0, "caps": {}}
+_LS_RATIO_MEM_CACHE = {}
 _BYBIT_DIRECT_BLOCKED = False
+_BINANCE_FAPI_DIRECT_BLOCKED = False
 
 
 def clean_url(raw_url):
@@ -234,9 +238,8 @@ def is_stock_or_tradfi_symbol(sym_or_base):
     return False
 
 
-def _fetch_bybit_json_via_proxy(path_and_query, timeout=4.5):
-    target_url = clean_url(f"{SCHEME}api.bybit.com{path_and_query}")
-    encoded = urllib.parse.quote(target_url, safe="")
+def _fetch_json_via_proxy(target_url, timeout=4.5):
+    encoded = urllib.parse.quote(clean_url(target_url), safe="")
     proxy_urls = (
         clean_url(f"{SCHEME}api.codetabs.com/v1/proxy?quest={encoded}"),
         clean_url(f"{SCHEME}api.allorigins.win/raw?url={encoded}"),
@@ -245,12 +248,185 @@ def _fetch_bybit_json_via_proxy(path_and_query, timeout=4.5):
         try:
             resp = requests.get(purl, headers=BROWSER_HEADERS, timeout=timeout)
             if resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, dict) and data.get("retCode") == 0:
-                    return data
+                return resp.json()
         except Exception:
             continue
     return None
+
+
+def _fetch_bybit_json_via_proxy(path_and_query, timeout=4.5):
+    data = _fetch_json_via_proxy(f"{SCHEME}api.bybit.com{path_and_query}", timeout=timeout)
+    if isinstance(data, dict) and data.get("retCode") == 0:
+        return data
+    return None
+
+
+def _fetch_binance_fapi_json(path_and_query, timeout=3.5):
+    """바이낸스 선물 공개 통계 API 조회 (미국 IP 451 차단 시 프록시 자동 우회)"""
+    global _BINANCE_FAPI_DIRECT_BLOCKED
+    full_url = clean_url(f"{SCHEME}fapi.binance.com{path_and_query}")
+    if not _BINANCE_FAPI_DIRECT_BLOCKED:
+        try:
+            resp = requests.get(full_url, headers=BROWSER_HEADERS, timeout=timeout)
+            if resp.status_code == 200:
+                return resp.json()
+            if resp.status_code in (403, 451):
+                _BINANCE_FAPI_DIRECT_BLOCKED = True
+        except Exception:
+            _BINANCE_FAPI_DIRECT_BLOCKED = True
+
+    return _fetch_json_via_proxy(full_url, timeout=max(4.0, timeout))
+
+
+def get_market_cap_m(symbol_or_base):
+    """
+    [방안 1 · 로컬 시총 캐시 조회 (5분 스캔 API 호출 0회)]
+    - market_cap_cache.json에서 시가총액(백만 달러, $M) 반환
+    - 1000PEPEUSDT 같은 배수 심볼도 자동으로 본진 티커(PEPE)에 매핑
+    """
+    now = time.time()
+    if (now - _MARKET_CAP_MEM_CACHE["ts"]) >= 600:
+        _MARKET_CAP_MEM_CACHE["ts"] = now
+        if os.path.exists(MARKET_CAP_CACHE_FILE):
+            try:
+                with open(MARKET_CAP_CACHE_FILE, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                caps = raw.get("caps") if isinstance(raw, dict) else {}
+                if isinstance(caps, dict):
+                    _MARKET_CAP_MEM_CACHE["caps"] = caps
+            except Exception:
+                pass
+
+    caps = _MARKET_CAP_MEM_CACHE.get("caps") or {}
+    if not caps:
+        return 0.0
+
+    s = str(symbol_or_base or "").upper().strip()
+    base = s[:-4] if s.endswith("USDT") else s
+    if base in caps:
+        return round(to_float(caps.get(base), 0.0), 3)
+
+    base_clean = re.sub(r"^(1000000|100000|10000|1000|100|10)", "", base)
+    if base_clean and base_clean in caps:
+        return round(to_float(caps.get(base_clean), 0.0), 3)
+
+    return 0.0
+
+
+def fetch_smart_money_ls_ratio(symbol):
+    """
+    [방안 1 · 스마트머니(고래) vs 개미 롱숏비율 3중 자동 폴백 조회]
+    - 최종 정예 후보(스캔당 0~3종목)에만 호출 + 10분 메모리 캐시
+    - 1순위: 바이낸스 선물 topLongShortPositionRatio(S) + globalLongShortAccountRatio(T)
+    - 2순위: 바이비트 공식 account-ratio (전체 리테일 계정 T)
+    - 3순위: OKX 공식 long-short-account-ratio (전체 리테일 계정 T, 미국 IP 무차단)
+    """
+    sym = str(symbol or "").upper().strip()
+    if not sym.endswith("USDT") or is_stock_or_tradfi_symbol(sym):
+        return {"source": "NONE", "top_ls": 0.0, "retail_ls": 0.0, "divergence": 0.0}
+
+    now = time.time()
+    cached = _LS_RATIO_MEM_CACHE.get(sym)
+    if cached and (now - cached["ts"]) < 600:
+        return dict(cached["data"])
+
+    result = {"source": "NONE", "top_ls": 0.0, "retail_ls": 0.0, "divergence": 0.0}
+    base = sym[:-4]
+    base_clean = re.sub(r"^(1000000|100000|10000|1000|100|10)", "", base)
+
+    # 1순위: 바이낸스 선물 탑트레이더 포지션(S) + 일반투자자 계정(T)
+    bn_syms = [sym]
+    if base_clean and f"{base_clean}USDT" != sym:
+        bn_syms.append(f"{base_clean}USDT")
+
+    for b_sym in bn_syms:
+        try:
+            top_data = _fetch_binance_fapi_json(
+                f"/futures/data/topLongShortPositionRatio?symbol={b_sym}&period=1h&limit=1",
+                timeout=3.2,
+            )
+            ret_data = _fetch_binance_fapi_json(
+                f"/futures/data/globalLongShortAccountRatio?symbol={b_sym}&period=1h&limit=1",
+                timeout=3.2,
+            )
+            if isinstance(top_data, list) and top_data and isinstance(ret_data, list) and ret_data:
+                s_val = round(to_float(top_data[-1].get("longShortRatio"), 0.0), 2)
+                t_val = round(to_float(ret_data[-1].get("longShortRatio"), 0.0), 2)
+                if s_val > 0 and t_val > 0:
+                    result = {
+                        "source": "BINANCE",
+                        "top_ls": s_val,
+                        "retail_ls": t_val,
+                        "divergence": round(s_val / max(t_val, 0.05), 2),
+                    }
+                    break
+        except Exception:
+            continue
+
+    # 2순위: 바이비트 공식 account-ratio (전체 계정 롱숏비율 T)
+    if result["source"] == "NONE":
+        try:
+            bybit_items = None
+            if not _BYBIT_DIRECT_BLOCKED:
+                for host in BYBIT_HOST_NAMES:
+                    try:
+                        u = clean_url(f"{SCHEME}{host}/v5/market/account-ratio")
+                        r = requests.get(
+                            u,
+                            params={"category": "linear", "symbol": sym, "period": "1h", "limit": 1},
+                            headers=BROWSER_HEADERS,
+                            timeout=2.5,
+                        )
+                        if r.status_code == 200:
+                            bybit_items = (r.json().get("result") or {}).get("list")
+                            if bybit_items:
+                                break
+                    except Exception:
+                        continue
+            if not bybit_items:
+                pdata = _fetch_bybit_json_via_proxy(
+                    f"/v5/market/account-ratio?category=linear&symbol={sym}&period=1h&limit=1",
+                    timeout=3.8,
+                )
+                if pdata:
+                    bybit_items = (pdata.get("result") or {}).get("list")
+
+            if isinstance(bybit_items, list) and bybit_items:
+                buy_r = to_float(bybit_items[0].get("buyRatio"), 0.0)
+                sell_r = to_float(bybit_items[0].get("sellRatio"), 0.0)
+                if buy_r > 0 and sell_r > 0:
+                    result = {
+                        "source": "BYBIT",
+                        "top_ls": 0.0,
+                        "retail_ls": round(buy_r / sell_r, 2),
+                        "divergence": 0.0,
+                    }
+        except Exception:
+            pass
+
+    # 3순위: OKX 공식 long-short-account-ratio (미국 IP 무차단 백업)
+    if result["source"] == "NONE" and base_clean:
+        try:
+            u_okx = clean_url(
+                f"{SCHEME}www.okx.com/api/v5/rubik/stat/contracts/long-short-account-ratio?ccy={base_clean}&period=1H"
+            )
+            r_okx = requests.get(u_okx, headers=BROWSER_HEADERS, timeout=3.0)
+            if r_okx.status_code == 200:
+                rows = r_okx.json().get("data") or []
+                if isinstance(rows, list) and rows and isinstance(rows[0], list) and len(rows[0]) >= 2:
+                    t_okx = round(to_float(rows[0][1], 0.0), 2)
+                    if t_okx > 0:
+                        result = {
+                            "source": "OKX",
+                            "top_ls": 0.0,
+                            "retail_ls": t_okx,
+                            "divergence": 0.0,
+                        }
+        except Exception:
+            pass
+
+    _LS_RATIO_MEM_CACHE[sym] = {"ts": now, "data": dict(result)}
+    return result
 
 
 def _fetch_24h_change_and_funding_backup_map():
@@ -541,9 +717,6 @@ def get_scanner_candidates():
 
 
 def fetch_klines(symbol, interval="5", limit=150, end_ms=None, allow_historical=False):
-    """
-    [보강] 최대 1000봉 조회 + 과거 구간(end_ms) 조회 지원 (기존 호출부 100% 하위 호환)
-    """
     sym = str(symbol).upper().strip()
     if not sym.endswith("USDT") or is_stock_or_tradfi_symbol(sym):
         return pd.DataFrame()
@@ -628,11 +801,7 @@ def fetch_klines(symbol, interval="5", limit=150, end_ms=None, allow_historical=
 
 
 def fetch_klines_window(symbol, interval="5", start_ms=0, end_ms=None, max_bars=850):
-    """
-    [리플레이 영상 전용 역방향 페이지네이션 캔들 로더]
-    - 10시간 미만 1m(최대 650봉), 20~70시간 15m(최대 330봉) 등 단일 API 한도를 넘는 구간도
-      end_ms부터 start_ms까지 역방향 자동 페이지네이션으로 누락 없이 수집
-    """
+    """리플레이 영상 전용 역방향 페이지네이션 캔들 로더"""
     iv_str = str(interval).upper().strip()
     iv_min = {
         "1": 1, "3": 3, "5": 5, "15": 15, "30": 30,
