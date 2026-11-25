@@ -1,6 +1,76 @@
 {
   "samples": [
     {
+      "dna_version": "v3_pure_chart",
+      "symbol": "SAHARAUSDT",
+      "timestamp": 1795566539,
+      "change_24h": 8.52,
+      "caught_by_scanner": false,
+      "caught_track": "MISSED",
+      "pre_bb_width": 4.09,
+      "pre_vol_dry_ratio": 3.0,
+      "launch_vol_mult": 11.4,
+      "pre_rsi6": 86.4,
+      "pre_1h_ma20_dist": 1.15,
+      "pattern_tag": "초응축 돌파 폭발"
+    },
+    {
+      "dna_version": "v3_pure_chart",
+      "symbol": "IDOLUSDT",
+      "timestamp": 1795566539,
+      "change_24h": 9.77,
+      "caught_by_scanner": false,
+      "caught_track": "MISSED",
+      "pre_bb_width": 3.7,
+      "pre_vol_dry_ratio": 1.98,
+      "launch_vol_mult": 2.1,
+      "pre_rsi6": 33.3,
+      "pre_1h_ma20_dist": 0.33,
+      "pattern_tag": "과매도 바닥 급반전"
+    },
+    {
+      "dna_version": "v3_pure_chart",
+      "symbol": "BTWUSDT",
+      "timestamp": 1795566539,
+      "change_24h": 13.02,
+      "caught_by_scanner": true,
+      "caught_track": "TRACK_E",
+      "pre_bb_width": 4.76,
+      "pre_vol_dry_ratio": 3.0,
+      "launch_vol_mult": 1.88,
+      "pre_rsi6": 41.3,
+      "pre_1h_ma20_dist": 3.07,
+      "pattern_tag": "1H 지지 추세가속"
+    },
+    {
+      "dna_version": "v3_pure_chart",
+      "symbol": "OPGUSDT",
+      "timestamp": 1795566539,
+      "change_24h": 21.75,
+      "caught_by_scanner": false,
+      "caught_track": "MISSED",
+      "pre_bb_width": 2.1,
+      "pre_vol_dry_ratio": 2.7,
+      "launch_vol_mult": 5.48,
+      "pre_rsi6": 64.9,
+      "pre_1h_ma20_dist": 0.32,
+      "pattern_tag": "초응축 돌파 폭발"
+    },
+    {
+      "dna_version": "v3_pure_chart",
+      "symbol": "BLESSUSDT",
+      "timestamp": 1795566539,
+      "change_24h": 28.18,
+      "caught_by_scanner": false,
+      "caught_track": "MISSED",
+      "pre_bb_width": 17.06,
+      "pre_vol_dry_ratio": 1.21,
+      "launch_vol_mult": 2.36,
+      "pre_rsi6": 61.4,
+      "pre_1h_ma20_dist": -17.92,
+      "pattern_tag": "과매도 바닥 급반전"
+    },
+    {
       "symbol": "INXUSDT",
       "timestamp": 1795480137,
       "change_24h": 23.1,
@@ -213,19 +283,18 @@
   ],
   "active_dna_formula": {
     "enabled": true,
-    "sample_count": 14,
-    "missed_count": 8,
+    "dna_version": "v3_pure_chart",
+    "sample_count": 19,
+    "missed_count": 12,
     "dominant_tag": "초응축 돌파 폭발",
-    "bb_width_max": 7.38,
-    "vol_dry_max": 1.35,
+    "bb_width_max": 5.49,
+    "vol_dry_max": 0.95,
     "launch_vol_min": 3.8,
-    "pre_rsi_min": 46.3,
-    "pre_rsi_max": 72.0,
-    "ma20_1h_dist_min": 0.01,
-    "ma20_1h_dist_max": 7.77,
-    "oi_ratio_min": 8.7,
-    "funding_max": 0.005,
-    "updated_at": 1795480118
+    "pre_rsi_min": 42.5,
+    "pre_rsi_max": 68.0,
+    "ma20_1h_dist_min": -3.62,
+    "ma20_1h_dist_max": 5.91,
+    "updated_at": 1795566507
   },
-  "updated_at": 1795480118
+  "updated_at": 1795566507
 }
