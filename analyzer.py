@@ -25,6 +25,15 @@ except ImportError:
         return any(k in base for k in ("SAMSUNG", "HYNIX", "HYUNDAI", "KOSPI", "TSLA", "NVDA", "AAPL"))
 
 try:
+    from api import get_market_cap_m, fetch_smart_money_ls_ratio
+except ImportError:
+    def get_market_cap_m(symbol_or_base):
+        return 0.0
+
+    def fetch_smart_money_ls_ratio(symbol):
+        return {"source": "NONE", "top_ls": 0.0, "retail_ls": 0.0, "divergence": 0.0}
+
+try:
     import wave_engine
 except Exception:
     wave_engine = None
@@ -141,6 +150,86 @@ def _evaluate_oi_quadrant(price, oi_m, oi_snapshot_prev):
         return res
 
     return res
+
+
+def _evaluate_supply_overlay(symbol, oi_m, turnover_m, market_cap_m, ls_info=None):
+    """
+    [방안 1 · 전 전략 공통 수급 오버레이 (-6 ~ +5점 캡)]
+    1) Bybit 단일 스케일 보정 OI/시총(화약고 압축도) & 거래대금/시총(회전율) 가산
+    2) 고래 포지션(S) vs 개미 계정(T) 롱숏비율 괴리 가감점 ($BIGTIME형 개미 롱 함정 자동 필터링)
+    """
+    out = {
+        "score_adj": 0,
+        "market_cap_m": round(to_float(market_cap_m, 0.0), 2),
+        "oi_mc_pct": 0.0,
+        "turn_mc_pct": 0.0,
+        "ls_source": "NONE",
+        "top_ls": 0.0,
+        "retail_ls": 0.0,
+        "ls_divergence": 0.0,
+        "reasons": [],
+    }
+
+    adj = 0
+    mc_m = to_float(market_cap_m, 0.0)
+
+    # 1) 시총 대비 Bybit OI 압축도 & 회전율 (시총 1M 이상 유효 캐시만 적용)
+    if mc_m >= 1.0:
+        oi_mc_pct = round((to_float(oi_m, 0.0) / mc_m) * 100.0, 1)
+        turn_mc_pct = round((to_float(turnover_m, 0.0) / mc_m) * 100.0, 1)
+        out["oi_mc_pct"] = oi_mc_pct
+        out["turn_mc_pct"] = turn_mc_pct
+
+        if oi_mc_pct >= 15.0:
+            adj += 3
+            out["reasons"].append(f"Bybit OI/시총 {oi_mc_pct:.1f}% 고압 화약고 압축(+3점)")
+        elif oi_mc_pct >= 8.0:
+            adj += 2
+            out["reasons"].append(f"Bybit OI/시총 {oi_mc_pct:.1f}% 레버리지 축적(+2점)")
+
+        if turn_mc_pct >= 25.0 and oi_mc_pct >= 6.0:
+            adj += 1
+
+    # 2) 스마트머니(고래 포지션 S) vs 개미(계정 T) 롱숏 괴리 평가
+    ls = ls_info if isinstance(ls_info, dict) else {}
+    src = str(ls.get("source") or "NONE").upper()
+    s_val = to_float(ls.get("top_ls"), 0.0)
+    t_val = to_float(ls.get("retail_ls"), 0.0)
+    div = to_float(ls.get("divergence"), 0.0)
+    if div <= 0 and s_val > 0 and t_val > 0:
+        div = round(s_val / max(t_val, 0.05), 2)
+
+    out["ls_source"] = src
+    out["top_ls"] = round(s_val, 2)
+    out["retail_ls"] = round(t_val, 2)
+    out["ls_divergence"] = round(div, 2)
+
+    if src == "BINANCE" and s_val > 0 and t_val > 0:
+        if s_val >= 1.50 and t_val <= 1.05 and div >= 1.60:
+            adj += 3
+            out["reasons"].append(f"스마트머니 롱({s_val:.2f}) vs 개미 숏({t_val:.2f}) 괴리 {div:.2f}배(+3점)")
+        elif s_val >= 1.30 and div >= 1.35:
+            adj += 2
+            out["reasons"].append(f"스마트머니 롱 우위(고래 {s_val:.2f} / 개미 {t_val:.2f}, +2점)")
+        elif (s_val <= 1.05 and t_val >= 2.20) or (s_val < 0.90 and t_val >= 1.80) or (t_val >= 3.00 and div <= 0.65):
+            adj -= 5
+            out["reasons"].append(f"⚠️ 개미 롱 쏠림 함정 경계(고래 {s_val:.2f} vs 개미 {t_val:.2f}, -5점)")
+        elif s_val <= 1.15 and t_val >= 1.80 and div <= 0.65:
+            adj -= 3
+            out["reasons"].append(f"⚠️ 고래 관망·개미 롱 편중(고래 {s_val:.2f} vs 개미 {t_val:.2f}, -3점)")
+    elif src in ("BYBIT", "OKX") and t_val > 0:
+        if t_val <= 0.75:
+            adj += 2
+            out["reasons"].append(f"{src} 리테일 숏 쏠림(L/S {t_val:.2f}, +2점)")
+        elif t_val >= 2.80:
+            adj -= 4
+            out["reasons"].append(f"⚠️ {src} 리테일 극단 롱 쏠림(L/S {t_val:.2f}, -4점)")
+        elif t_val >= 2.10:
+            adj -= 2
+            out["reasons"].append(f"⚠️ {src} 리테일 롱 과밀 경계(L/S {t_val:.2f}, -2점)")
+
+    out["score_adj"] = int(np.clip(adj, -6, 5))
+    return out
 
 
 def _calc_rsi(series, period=6):
@@ -505,8 +594,6 @@ def _evaluate_weekly_daily_pro_filter(
     elif has_1d:
         out["htf_tag"] = "1D PPO강세" if ppo1d_zero_up else ("1D강세" if daily_bull else "1D조정")
 
-    # [신규 보완] 상단 일봉 20MA 하향 저항벽(Overhead Clean Air) 경계 감점 (-3점)
-    # 단기 트랙이 진입가 바로 위 +2% ~ +10% 구간에 하향 1D 20MA 저항벽을 두고 있으면 TP2 돌파 저해 → 감점
     if has_1d and tk in ("TRACK_A", "TRACK_B", "TRACK_F", "TRACK_G", "TRACK_H"):
         if (-9.5 <= dist_1d_ma20 <= -2.0) and ma20_1d_falling:
             out["score_adj"] -= 3
@@ -646,8 +733,8 @@ def _calculate_resistance_based_tps(price, df_15m, df_1h, conservative_scale=1.0
     return tps, [p1_pct, p2_pct, p3_pct], [lbl1, lbl2, lbl3]
 
 
-def _calculate_macro_longterm_tps(price, turnover_m, oi_m, df_4h, df_1d, df_1w=None):
-    """거래대금 + OI 규모(size_proxy = max(turnover_m, oi_m * 4.5))로 Tier 체급 착시 교정"""
+def _calculate_macro_longterm_tps(price, turnover_m, oi_m, df_4h, df_1d, df_1w=None, market_cap_m=0.0):
+    """[방안 1 보완] 실제 시가총액(market_cap_m) 우선 Tier 분류 (미수신 시 거래대금·OI 프록시 자동 폴백)"""
     h4 = df_4h["high"].astype(float)
     l4 = df_4h["low"].astype(float)
     box_h_30d = to_float(h4.max(), price * 1.15)
@@ -675,13 +762,22 @@ def _calculate_macro_longterm_tps(price, turnover_m, oi_m, df_4h, df_1d, df_1w=N
         if w_peaks:
             weekly_res_pct = sorted(w_peaks)[0]
 
-    size_proxy = max(to_float(turnover_m, 0.0), to_float(oi_m, 0.0) * 4.5)
-    if size_proxy < 12.0:
-        tier_lbl, tier_mult, tp3_min_cap, tp3_max_cap = "Tier1 초대형확장", 1.32, 145.0, 250.0
-    elif size_proxy < 45.0:
-        tier_lbl, tier_mult, tp3_min_cap, tp3_max_cap = "Tier2 계단식확장", 1.12, 115.0, 190.0
+    mc_m = to_float(market_cap_m, 0.0)
+    if mc_m >= 1.0:
+        if mc_m < 35.0:
+            tier_lbl, tier_mult, tp3_min_cap, tp3_max_cap = "Tier1 초소형확장", 1.32, 145.0, 250.0
+        elif mc_m < 180.0:
+            tier_lbl, tier_mult, tp3_min_cap, tp3_max_cap = "Tier2 계단식확장", 1.12, 115.0, 190.0
+        else:
+            tier_lbl, tier_mult, tp3_min_cap, tp3_max_cap = "Tier3 중대형추세확장", 0.95, 90.0, 145.0
     else:
-        tier_lbl, tier_mult, tp3_min_cap, tp3_max_cap = "Tier3 중형추세확장", 0.95, 90.0, 145.0
+        size_proxy = max(to_float(turnover_m, 0.0), to_float(oi_m, 0.0) * 4.5)
+        if size_proxy < 12.0:
+            tier_lbl, tier_mult, tp3_min_cap, tp3_max_cap = "Tier1 초대형확장", 1.32, 145.0, 250.0
+        elif size_proxy < 45.0:
+            tier_lbl, tier_mult, tp3_min_cap, tp3_max_cap = "Tier2 계단식확장", 1.12, 115.0, 190.0
+        else:
+            tier_lbl, tier_mult, tp3_min_cap, tp3_max_cap = "Tier3 중형추세확장", 0.95, 90.0, 145.0
 
     macro_scale = float(np.clip((atr_1d_pct / 5.8) * tier_mult, 0.85, 1.65))
 
@@ -711,10 +807,7 @@ def _calculate_macro_longterm_tps(price, turnover_m, oi_m, df_4h, df_1d, df_1w=N
 
 
 def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, funding_pct, df_4h):
-    """
-    [장기 포지션 Track D1~D6 정밀 보완 + 영점 캘리브레이션(86~91점)]
-    - 1W/1D 가산(+2~+5) + OI Q1(+3) 결합 시 A급 90~94점, S급 95~99점, 오답 감점 정상 작동
-    """
+    """[장기 포지션 Track D1~D6 정밀 보완 + 영점 캘리브레이션(86~91점)]"""
     if df_4h is None or df_4h.empty or len(df_4h) < 55:
         return None
     if change_24h >= 22.0:
@@ -929,7 +1022,7 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
                     ],
                 })
 
-    # D6: 와이코프 스프링 (최근 4일 내 스윕 + 최근 24시간 내 바닥선 돌파 + 상한 +10% 이내)
+    # D6: 와이코프 스프링
     if len(df_4h) >= 100 and turnover_m >= 3.0 and oi_m >= 0.8 and oi_ratio >= 15.0 and funding_pct <= 0.006:
         prior_floor = to_float(l4.iloc[:-24].min(), price)
         prior_high_30 = to_float(h4.iloc[:-12].max(), price)
@@ -1026,6 +1119,19 @@ def analyze_symbol(
     oi_q = _evaluate_oi_quadrant(price, oi_m, oi_snapshot_prev)
     if oi_q["block"]:
         return None
+
+    # 로컬 시총 캐시 조회 (API 호출 0회)
+    market_cap_m = get_market_cap_m(symbol)
+
+    # 최종 관문 통과 정예 후보에만 1회 호출되는 스마트머니/개미 L/S 로컬 캐시
+    cached_overlay = {"fetched": False, "data": None}
+
+    def _get_supply_overlay():
+        if not cached_overlay["fetched"]:
+            ls_info = fetch_smart_money_ls_ratio(symbol)
+            cached_overlay["data"] = _evaluate_supply_overlay(symbol, oi_m, turnover_m, market_cap_m, ls_info=ls_info)
+            cached_overlay["fetched"] = True
+        return cached_overlay["data"]
 
     sess_adj, sess_note = _get_session_adjustment()
     now_kst = datetime.now(KST)
@@ -1124,7 +1230,7 @@ def analyze_symbol(
         return cached_1d_1w["df_1d"], cached_1d_1w["df_1w"]
 
     # =========================================================================
-    # [1순위] 장기 포지션 (Track D1~D6) — scan_long_term=True일 때만 4H 조회 (API 65% 절감 지원)
+    # [1순위] 장기 포지션 (Track D1~D6) + 공통 수급 오버레이(OI/시총 · 고래/개미 L/S)
     # =========================================================================
     if (
         scan_long_term
@@ -1150,18 +1256,27 @@ def analyze_symbol(
                 funding_pct=funding_pct,
             )
             if mtf_long["allow"]:
+                ov = _get_supply_overlay()
                 d_vol_m = to_float(macro_d.get("vol_metric"), max(bull_vol_2, 1.0))
                 raw_d = (
                     macro_d["score"]
                     + mtf_long["score_adj"]
+                    + ov["score_adj"]
                     + (3 if oi_q["quadrant"] == "Q1" else 0)
                     + (1 if sess_adj > 0 else 0)
                 )
                 d_score = int(np.clip(raw_d - _get_pm_penalty("TRACK_D", d_vol_m), 0, 99))
                 if d_score >= long_cut:
-                    tps, tp_pcts, tp_labels = _calculate_macro_longterm_tps(price, turnover_m, oi_m, df_4h, df_1d, df_1w=df_1w)
+                    tps, tp_pcts, tp_labels = _calculate_macro_longterm_tps(
+                        price, turnover_m, oi_m, df_4h, df_1d, df_1w=df_1w, market_cap_m=market_cap_m
+                    )
                     stop_price = round(price * (1.0 - LONGTERM_SL_PCT / 100.0), 6)
-                    reasons = [f"장기 전략: {macro_d['sub_strategy']}"] + macro_d["reasons"][:2] + mtf_long["reasons"][:1]
+                    reasons = (
+                        [f"장기 전략: {macro_d['sub_strategy']}"]
+                        + macro_d["reasons"][:2]
+                        + ov["reasons"][:1]
+                        + mtf_long["reasons"][:1]
+                    )
                     if oi_q["note"]:
                         reasons.append(oi_q["note"])
                     htf_long_str = f"{mtf_long['htf_tag']} ({htf_status})" if mtf_long["htf_tag"] else f"4H·1D 매집구조 ({htf_status})"
@@ -1185,6 +1300,13 @@ def analyze_symbol(
                         "turnover_m": round(turnover_m, 1),
                         "oi_m": round(oi_m, 1),
                         "oi_ratio": oi_ratio,
+                        "market_cap_m": ov["market_cap_m"],
+                        "oi_mc_pct": ov["oi_mc_pct"],
+                        "turn_mc_pct": ov["turn_mc_pct"],
+                        "ls_source": ov["ls_source"],
+                        "top_ls": ov["top_ls"],
+                        "retail_ls": ov["retail_ls"],
+                        "ls_divergence": ov["ls_divergence"],
                         "funding_pct": funding_pct,
                         "btc_1h_pct": btc_1h_pct,
                         "htf_status": htf_long_str,
@@ -1215,7 +1337,6 @@ def analyze_symbol(
 
     swing_high_ref = to_float(highs.iloc[-min(len(highs) - 1, 48):-1].max(), price * 1.03)
 
-    # 영점 캘리브레이션 수급 배점 (평균 9점, 최대 12점)
     supply_score = (6 if oi_ratio >= 20.0 else (5 if oi_ratio >= 9.0 else 3)) + (6 if funding_pct < -0.005 else (4 if funding_pct <= 0.012 else 2))
     base_supply_reasons = []
     if oi_ratio >= 20.0:
@@ -1235,12 +1356,11 @@ def analyze_symbol(
 
     def _register_candidate(tk, title, tech_sc, tk_reasons, vol_metric):
         """
-        tech_sc(최대 83) + supply(최대 12) + oi_q(최대 4) + sess(-3~+2) + wave(-3~+2) - pm_penalty
-        → 평범 82~88(탈락), A급 90~94, S급 95~99, 오답 감점 정상 작동
+        1W/1D(+3) + 공통 수급 오버레이(+5) 가산 여지를 감안해 (short_cut - 6) 이상 후보만 최종 관문으로 전달
         """
         capped_tech = min(83, int(tech_sc))
         raw_sc = capped_tech + supply_score + oi_q["bonus"] + sess_adj + wave_bonus - _get_pm_penalty(tk, vol_metric)
-        if raw_sc >= (short_cut - 3):
+        if raw_sc >= (short_cut - 6):
             r_list = list(tk_reasons) + list(base_supply_reasons)
             if oi_q["note"]:
                 r_list.append(oi_q["note"])
@@ -1470,7 +1590,6 @@ def analyze_symbol(
                             rebound_vol_wake = (curr_c > curr_o) and (curr_uwick_ratio <= 0.45) and (curr_vol_v >= avg_v_wave2 * 1.15 or bull_vol_2 >= 1.0)
                             is_bullish_turn = bull_trigger_ok or (curr_lwick >= 0.45 and curr_c >= prev_l and curr_uwick_ratio <= 0.35)
                             is_momentum_turn = (kdj_j_15m > kdj_j_prev) and (rsi6_15m > rsi6_prev) and (rsi6_15m <= 60.0)
-                            # [보완] 바닥 이탈 방지(>= 1.003) + -6% SL이 바닥 아래에 위치하도록 추격 상한(<= 1.052) 보호
                             is_holding_low = (recent_low_4 * 1.003 <= curr_c <= recent_low_4 * 1.052)
 
                             if vol_dry_ratio <= 0.35 and rebound_vol_wake and is_bullish_turn and is_momentum_turn and is_holding_low:
@@ -1532,8 +1651,6 @@ def analyze_symbol(
                 )
 
         # [Track H] 🧬 Top 5 급등 DNA 자동 적응 트랙
-        # - Track C 우회 누수 차단(change_24h < 12.0 통일)
-        # - 학습-실전 괴리 해소: 순수 역산 차트 4대 DNA + 발사 거래량 매칭, 수급(OI>=8%, 펀딩<=0.01%) 고정 가드 분리
         if (
             not short_candidates
             and htf_bull
@@ -1573,7 +1690,6 @@ def analyze_symbol(
                     matched_names = [nm for nm, ok in chart_checks if ok]
                     match_cnt = len(matched_names)
 
-                    # 순수 차트 DNA 4개 중 3개 이상 + 발사 거래량(필수) = 5대 차트 DNA 중 4~5개 일치
                     if match_cnt >= 3:
                         sc_h = (
                             (35 if match_cnt == 4 else 31)
@@ -1597,8 +1713,9 @@ def analyze_symbol(
     if not short_candidates:
         return None
 
-    # [전문 트레이더 1W(주봉) · 1D(일봉) PPO + 상단 저항벽 최종 관문 검증]
+    # [최종 정예 관문] 1W(주봉) · 1D(일봉) PPO + 공통 수급 오버레이(OI/시총 · 고래/개미 L/S) 결합
     df_1d, df_1w = _get_1d_1w()
+    ov_short = _get_supply_overlay()
     verified_candidates = []
     for cand in short_candidates:
         mtf_s = _evaluate_weekly_daily_pro_filter(
@@ -1611,10 +1728,10 @@ def analyze_symbol(
         )
         if not mtf_s["allow"]:
             continue
-        final_sc = int(np.clip(cand["raw_score"] + mtf_s["score_adj"], 0, 99))
+        final_sc = int(np.clip(cand["raw_score"] + mtf_s["score_adj"] + ov_short["score_adj"], 0, 99))
         if final_sc < short_cut:
             continue
-        merged_reasons = list(cand["reasons"]) + list(mtf_s["reasons"])
+        merged_reasons = list(cand["reasons"][:2]) + list(ov_short["reasons"][:1]) + list(mtf_s["reasons"]) + list(cand["reasons"][2:])
         cand["score"] = final_sc
         cand["reasons"] = merged_reasons[:4]
         cand["htf_tag"] = mtf_s["htf_tag"]
@@ -1644,6 +1761,13 @@ def analyze_symbol(
         "turnover_m": round(turnover_m, 1),
         "oi_m": round(oi_m, 1),
         "oi_ratio": oi_ratio,
+        "market_cap_m": ov_short["market_cap_m"],
+        "oi_mc_pct": ov_short["oi_mc_pct"],
+        "turn_mc_pct": ov_short["turn_mc_pct"],
+        "ls_source": ov_short["ls_source"],
+        "top_ls": ov_short["top_ls"],
+        "retail_ls": ov_short["retail_ls"],
+        "ls_divergence": ov_short["ls_divergence"],
         "funding_pct": funding_pct,
         "btc_1h_pct": btc_1h_pct,
         "htf_status": final_htf_status,
