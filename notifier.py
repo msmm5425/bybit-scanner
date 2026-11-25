@@ -114,6 +114,7 @@ def fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=10):
 
 
 def _fetch_replay_klines_window(symbol, interval, start_ms, end_ms, max_bars=850):
+    """api.fetch_klines_window 우선 사용 (구버전 api.py 호환 백업 포함)"""
     if api_mod is not None and hasattr(api_mod, "fetch_klines_window"):
         df = api_mod.fetch_klines_window(symbol, interval=str(interval), start_ms=start_ms, end_ms=end_ms, max_bars=max_bars)
         if isinstance(df, pd.DataFrame) and not df.empty:
@@ -142,6 +143,7 @@ def _resample_4h_to_12h(df_4h):
 
 
 def _build_supply_overlay_line(res):
+    """[방안 1] 시총 · Bybit OI/시총 · 회전율 · 스마트머니/개미 L/S 요약 라인 생성"""
     parts = []
     mc_m = to_float(res.get("market_cap_m"), 0.0)
     oi_mc_pct = to_float(res.get("oi_mc_pct"), 0.0)
@@ -247,129 +249,30 @@ def build_briefing_message(res, now_str):
     return "\n".join(lines)
 
 
-def _pick_variant(variants, symbol):
-    if not variants:
-        return ""
-    seed = sum(ord(ch) for ch in str(symbol or "BTC"))
-    return variants[seed % len(variants)]
-
-
 def build_x_hook_line(res):
-    """
-    [확장된 전략별 X(트위터) 훅(Hook) 문구 엔진 · 총 36종]
-    - 장기 세부전략(D1~D6), 단기 전 전략(Track A~H), 재진입, 고래/개미 L/S 괴리, OI/시총 화약고까지 맞춤 대응
-    """
-    symbol = str(res.get("symbol", ""))
-    track_type = str(res.get("track_type", "TRACK_A")).upper()
-    r_text = " ".join(str(x) for x in (res.get("reasons") or []))
-    title_str = str(res.get("track_title", ""))
-
-    # 1) 장기 포지션 (Track D1 ~ D6)
+    track_type = str(res.get("track_type", "TRACK_A"))
     if track_type == "TRACK_D" or res.get("is_long_term"):
         sub_s = str(res.get("sub_strategy", "")).upper()
         if "D6" in sub_s or "스프링" in sub_s:
-            return _pick_variant([
-                "신저가 개미털기(스프링) 후 다개월 바닥선 거래량 동반 재탈환 포착",
-                "공포 투매 물량 흡수 완료! 바닥선 강하게 재탈환하는 역발상 대시세 초입",
-                "개미 손절 털어낸 뒤 거래량 터지며 바닥 위로 올라탄 와이코프 스프링 포착",
-            ], symbol)
-        if "D1" in sub_s:
-            return _pick_variant([
-                "가격 횡보 속 세력 OI·OBV 선행 매집 포착! 조용히 물량 잠기는 대시세 초입",
-                "티 안 나게 세력 수급이 먼저 뚫린 스텔스 바닥 매집 구간 포착",
-            ], symbol)
-        if "D2" in sub_s:
-            return _pick_variant([
-                "세력 매집봉 출현 후 거래량 건조 눌림 마무리! 2차 대시세 출발 직전",
-                "매집봉 지지선 방어 후 거래량 말리며 반등 턴 나오는 세력 눌림목 포착",
-            ], symbol)
-        if "D3" in sub_s:
-            return _pick_variant([
-                "30일 장기 박스권 상단 거래량 폭발 첫 돌파! 큰 추세 파동 개시 포착",
-                "한 달간 응축된 장기 박스권 저항을 거래량 싣고 뚫어낸 대시세 초입",
-            ], symbol)
-        if "D4" in sub_s:
-            return _pick_variant([
-                "장기 하락추세 탈출 및 4H 50MA 거래량 돌파 안착! 추세 턴어라운드 초입",
-                "이중바닥 완성 후 주요 추세선 돌파! 중장기 상승 1파동 시작점 포착",
-            ], symbol)
-        if "D5" in sub_s:
-            return _pick_variant([
-                "바닥권 4H PPO·RSI·OBV 3중 강세 다이버전스 완성! 세력 바닥 흡수 포착",
-                "하락 에너지는 멈추고 세력 매수세는 유입되는 매크로 바닥 반전 초입",
-            ], symbol)
-        return _pick_variant([
-            "세력 4H·1D 매집 후 대시세 1파동 초입 포착",
-            "상위 프레임 바닥 숙성 완료! 세력 수급 결집되는 중장기 대시세 초입",
-        ], symbol)
-
-    # 2) 스탑헌팅 후 재진입
-    if "재진입" in title_str or "재탈환" in r_text:
-        return _pick_variant([
-            "개미털기 바닥 확인 후 거래량 실리며 V자 반등 시도중",
-            "스탑헌팅 악성 매물 소화 완료! 비과열 구간에서 V자 재탈환 시도중",
-            "밑꼬리 개미털기 후 매수세 재유입되며 단기 추세 재가동중",
-        ], symbol)
-
-    # 3) 수급심층 특화 훅 (고래 압도적 우위 또는 OI/시총 고압 화약고)
-    oi_mc_pct = to_float(res.get("oi_mc_pct"), 0.0)
-    top_ls = to_float(res.get("top_ls"), 0.0)
-    retail_ls = to_float(res.get("retail_ls"), 0.0)
-    ls_div = to_float(res.get("ls_divergence"), 0.0)
-    if top_ls >= 1.50 and 0 < retail_ls <= 1.05 and ls_div >= 1.60:
-        return _pick_variant([
-            "고래는 롱 매집, 개미는 숏 쏠림! 스마트머니 포지션 괴리 폭발 초입",
-            "탑트레이더 롱 베팅 vs 일반투자자 숏 쏠림! 수급 비대칭 급등 후보 포착",
-        ], symbol)
-    if oi_mc_pct >= 15.0:
-        return _pick_variant([
-            "시총 대비 선물 OI 압축 임계치 도달! 레버리지 화약고 점화 초입 포착",
-            "과적재된 선물 OI에 매수 거래량 점화! 강한 변동성 분출 직전 타점",
-        ], symbol)
-
-    # 4) 단기·스윙 트랙별 맞춤 훅 (Track A ~ H)
+            return " 신저가 개미털기(스프링) 후 다개월 바닥선 거래량 동반 재탈환 포착"
+        return " 세력 4H·1D 매집 후 대시세 1파동 초입 포착"
+    r_text = " ".join(str(x) for x in (res.get("reasons") or []))
+    if "재진입" in str(res.get("track_title", "")) or "재탈환" in r_text:
+        return "개미털기 바닥 확인 후 거래량 실리며 V자 반등 시도중"
     if track_type == "TRACK_H":
-        return _pick_variant([
-            "최근 급등 대장주 Top 5 발사 직전 DNA 패턴과 일치하는 초입 포착",
-            "최근 시장을 주도한 급등주들의 발사 직전 차트 공식을 그대로 닮은 초입",
-            "급등주 역추적 알고리즘이 포착한 에너지 응축·거래량 점화 초입 타점",
-        ], symbol)
+        return "최근 급등 대장주 Top 5 발사 직전 DNA 패턴과 일치하는 초입 포착"
     if track_type == "TRACK_E":
-        return _pick_variant([
-            "24H 저점 유동성 스윕(개미털기) 직후 강한 반전 매수세 유입중",
-            "전저점 스탑헌팅 아래꼬리 흡수 후 강세 다이버전스와 함께 급반전 시도중",
-            "저점 이탈 공포 물량을 세력이 받아먹고 지지선 탈환하는 SFP 반전 타점",
-        ], symbol)
+        return "24H 저점 유동성 스윕(개미털기) 직후 강한 반전 매수세 유입중"
     if track_type == "TRACK_F":
-        return _pick_variant([
-            "비트코인 흔들림 속에서도 역행 강세 보이는 상대강도 대장주 포착",
-            "시장 조정장에서도 고점권 버티며 독주하는 상대강도(RS) 1티어 주도주",
-            "비트코인 약세를 무시하고 OBV 신고가와 함께 치고 나가는 역행 대장주",
-        ], symbol)
+        return "비트코인 흔들림 속에서도 역행 강세 보이는 상대강도 대장주 포착"
     if track_type == "TRACK_G":
-        return _pick_variant([
-            "깊은 음수 펀딩비와 OI 집중 속 숏스퀴즈 강제청산 초입 포착",
-            "과도하게 쌓인 숏 포지션 위에 매수 폭발! 연쇄 숏스퀴즈 발사 직전",
-            "음수 펀딩비 연료 가득 찬 상태에서 저항선 돌파하는 숏스퀴즈 초입 타점",
-        ], symbol)
+        return "깊은 음수 펀딩비와 OI 집중 속 숏스퀴즈 강제청산 초입 포착"
     if track_type == "TRACK_C":
-        return _pick_variant([
-            "급등 대장주 핵심 눌림목 지지 후 2차 파동 시도중",
-            "1파 급등 후 거래량 건조 조정 마무리! 피보나치 핵심 지지선 반등 타점",
-            "대장주 건강한 눌림목 소화 완료! 5분봉 추세 전환과 함께 2차 상승 시동",
-        ], symbol)
+        return "급등 대장주 핵심 눌림목 지지 후 2차 파동 시도중"
     if track_type == "TRACK_B":
-        return _pick_variant([
-            "거래량이 살아나면서 24H 전고점 돌파 시도중",
-            "24시간 주요 저항선을 건전한 양봉과 거래량으로 뚫어낸 구조 돌파 초입",
-            "돌파 후 지지 전환(S-R Flip) 확인! 매물벽 소화하고 상방 확장 시도중",
-        ], symbol)
-    if track_type == "TRACK_A" or "응축" in r_text or "스퀴즈" in r_text:
-        return _pick_variant([
-            "박스권 에너지 응축 후 거래량 살아나며 추세 전환중",
-            "볼린저·켈트너 초응축(TTM 스퀴즈) 상방 발사! 매수 델타 유입 초입",
-            "좁아진 변동성 박스를 거래량 싣고 뚫어내는 에너지 폭발 초입 포착",
-        ], symbol)
+        return "거래량이 살아나면서 24H 전고점 돌파 시도중"
+    if "응축" in r_text or "스퀴즈" in r_text:
+        return "박스권 에너지 응축 후 거래량 살아나며 추세 전환중"
     if "음수 펀딩" in r_text:
         return "숏 스퀴즈 수급 유입되며 단기 추세 반등 시도중"
     return "눌림목 거래량 건조 후 수급 살아나며 반등 시도중"
@@ -791,7 +694,15 @@ def generate_signal_chart_bytes(res):
 
 
 def generate_profit_replay_video_bytes(close_info):
-    """[최종 전량 익절 30초 HD MP4 리플레이 영상 자동 제작 엔진 v7 (5단계 캔들 + 페이지네이션)]"""
+    """
+    [최종 전량 익절 30초 HD MP4 리플레이 영상 자동 제작 엔진 v7 (5단계 캔들 + 페이지네이션)]
+    - 보유 기간별 5단계 타임프레임 자동 선택:
+      * 10시간 미만: 1분봉 (1m)
+      * 10시간 ~ 20시간 미만: 5분봉 (5m)
+      * 20시간 ~ 70시간 미만: 15분봉 (15m)
+      * 70시간 ~ 90시간 미만: 1시간봉 (1H)
+      * 90시간 이상: 4시간봉 (4H)
+    """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
 
