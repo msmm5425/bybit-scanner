@@ -1,6 +1,35 @@
 {
   "records": [
     {
+      "id": "USUALUSDT_1795514236",
+      "engine_ver": "v3",
+      "symbol": "USUALUSDT",
+      "track_type": "TRACK_A",
+      "score": 91,
+      "entry_price": 0.01145,
+      "stop_price": 0.010763,
+      "sl_trigger_price": 0.01045,
+      "sl_pct": 6,
+      "created_at": 1795514236,
+      "sl_at": 1795617813,
+      "hold_minutes": 1726,
+      "max_high_price": 0.0125,
+      "max_favorable_pct": 9.17,
+      "vol_mult": 5.56,
+      "rsi6_15m": 47.5,
+      "oi_m": 0.4,
+      "oi_ratio": 14.3,
+      "funding_pct": 0.005,
+      "change_24h": -1.9,
+      "btc_1h_pct": 0.0,
+      "kst_block": "18-21",
+      "cause": "+9.2% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "ZKCUSDT_1795122403",
       "engine_ver": "v3",
       "symbol": "ZKCUSDT",
@@ -310,6 +339,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795617811,
+  "updated_at": 1795617836,
   "engine_ver": "v3"
 }
