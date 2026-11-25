@@ -1,6 +1,35 @@
 {
   "records": [
     {
+      "id": "ETHFIUSDT_1795302309",
+      "engine_ver": "v3",
+      "symbol": "ETHFIUSDT",
+      "track_type": "TRACK_A",
+      "score": 93,
+      "entry_price": 0.4704,
+      "stop_price": 0.442176,
+      "sl_trigger_price": 0.4415,
+      "sl_pct": 6,
+      "created_at": 1795302309,
+      "sl_at": 1795614691,
+      "hold_minutes": 5206,
+      "max_high_price": 0.5443,
+      "max_favorable_pct": 15.71,
+      "vol_mult": 3.38,
+      "rsi6_15m": 71.6,
+      "oi_m": 5.0,
+      "oi_ratio": 120.4,
+      "funding_pct": 0.005,
+      "change_24h": 5.48,
+      "btc_1h_pct": 0.0,
+      "kst_block": "06-09",
+      "cause": "단기 고점 RSI 과열 추격",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "PLUMEUSDT_1795264778",
       "engine_ver": "v3",
       "symbol": "PLUMEUSDT",
@@ -252,6 +281,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795614690,
+  "updated_at": 1795614716,
   "engine_ver": "v3"
 }
