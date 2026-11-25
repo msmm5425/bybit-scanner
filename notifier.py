@@ -142,7 +142,7 @@ def _resample_4h_to_12h(df_4h):
 
 
 def _build_supply_overlay_line(res):
-    """시총 · Bybit OI/시총 · 회전율 · 5대 거래소(BN·GATE·BG·BYBIT·OKX) L/S 요약 라인 생성"""
+    """[2-2단계] 시총 · Bybit OI/시총 · 회전율 · 5대 거래소(BN·GATE·BG·BYBIT·OKX) L/S 요약 라인 생성"""
     parts = []
     mc_m = to_float(res.get("market_cap_m"), 0.0)
     oi_mc_pct = to_float(res.get("oi_mc_pct"), 0.0)
@@ -392,12 +392,10 @@ def build_x_post_message(res):
     p2 = round(to_float(tp_pcts[1], 15.0), 1)
     p3 = round(to_float(tp_pcts[2], 22.0), 1)
     hook_line = build_x_hook_line(res)
-    jp_header = "上昇可能性の高いコインをスキャンしました\n#仮想通貨 #コインシグナル\n\n"
     footer_tags = "#코인시황 #코인신호 #코인 #재테크"
 
     if is_long:
         return (
-            f"{jp_header}"
             "【장기 포지션】1개월이상 홀딩예상\n"
             "🔺️상승 예상 코인 검색기에 포착된 종목😎\n"
             f"⚠️{hook_line}⚠️\n\n"
@@ -413,7 +411,6 @@ def build_x_post_message(res):
         )
 
     return (
-        f"{jp_header}"
         "🔺️상승 예상 코인 검색기에 포착된 종목😎\n"
         f"⚠️{hook_line}⚠️\n\n"
         f"${base} ({symbol})\n\n"
