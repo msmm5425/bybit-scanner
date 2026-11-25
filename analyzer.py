@@ -46,7 +46,8 @@ except Exception:
 KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
 HISTORY_FILE = getattr(cfg, "ANALYZER_HISTORY_FILE", "analyzer_history.json")
 DNA_PROFILE_FILE = "top5_dna_profile.json"
-ELITE_SCORE_THRESHOLD = max(90, int(getattr(cfg, "SCORE_THRESHOLD", 90)))
+# [v3 영점 최적화] 강화된 하드 필터(건전 양봉 거래량·피뢰침 차단·L/S 괴리·PPO) 기준 정예 커트라인 88점 고정
+ELITE_SCORE_THRESHOLD = 88
 FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 LONGTERM_SL_PCT = 20
 
