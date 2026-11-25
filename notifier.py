@@ -62,6 +62,15 @@ def fmt_price(price):
     return f"{p:,.2f}" if p >= 1000 else (f"{p:.3f}" if p >= 10 else (f"{p:.4f}" if p >= 1 else (f"{p:.5f}" if p >= 0.01 else f"{p:.6f}")))
 
 
+def _fmt_market_cap(mc_m):
+    v = to_float(mc_m, 0.0)
+    if v >= 1000.0:
+        return f"{v / 1000.0:.2f}B"
+    if v >= 100.0:
+        return f"{v:.0f}M"
+    return f"{v:.1f}M"
+
+
 def _fmt_hold_duration(hold_minutes):
     m = max(1, int(to_float(hold_minutes, 1)))
     if m < 60:
@@ -133,6 +142,46 @@ def _resample_4h_to_12h(df_4h):
         return pd.DataFrame()
 
 
+def _build_supply_overlay_line(res):
+    """[방안 1] 시총 · Bybit OI/시총 · 회전율 · 스마트머니/개미 L/S 요약 라인 생성"""
+    parts = []
+    mc_m = to_float(res.get("market_cap_m"), 0.0)
+    oi_mc_pct = to_float(res.get("oi_mc_pct"), 0.0)
+    turn_mc_pct = to_float(res.get("turn_mc_pct"), 0.0)
+
+    if mc_m >= 1.0:
+        parts.append(f"시총 {_fmt_market_cap(mc_m)}")
+        parts.append(f"Bybit OI/시총 {oi_mc_pct:.1f}% · 회전 {turn_mc_pct:.1f}%")
+
+    ls_src = str(res.get("ls_source") or "NONE").upper()
+    s_val = to_float(res.get("top_ls"), 0.0)
+    t_val = to_float(res.get("retail_ls"), 0.0)
+    div = to_float(res.get("ls_divergence"), 0.0)
+    if div <= 0 and s_val > 0 and t_val > 0:
+        div = round(s_val / max(t_val, 0.05), 2)
+
+    if ls_src == "BINANCE" and s_val > 0 and t_val > 0:
+        if s_val >= 1.30 and div >= 1.35:
+            ls_badge = "🟢고래우위"
+        elif (s_val <= 1.05 and t_val >= 2.20) or (s_val < 0.90 and t_val >= 1.80) or (t_val >= 3.00 and div <= 0.65):
+            ls_badge = "🔴개미쏠림"
+        elif s_val <= 1.15 and t_val >= 1.80 and div <= 0.65:
+            ls_badge = "🟠개미편중"
+        else:
+            ls_badge = "⚪중립"
+        parts.append(f"L/S(BN) 고래 {s_val:.2f} vs 개미 {t_val:.2f} ({div:.2f}x · {ls_badge})")
+    elif ls_src in ("BYBIT", "OKX") and t_val > 0:
+        if t_val <= 0.75:
+            ls_badge = "🟢숏쏠림"
+        elif t_val >= 2.10:
+            ls_badge = "🔴롱과밀"
+        else:
+            ls_badge = "⚪중립"
+        parts.append(f"L/S({ls_src}) 리테일 {t_val:.2f} ({ls_badge})")
+
+    return f"• 수급심층: {' | '.join(parts)}" if parts else ""
+
+
 def build_briefing_message(res, now_str):
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
@@ -170,6 +219,13 @@ def build_briefing_message(res, now_str):
         f"🕒 포착 시각: {now_str}",
         f"• 현재가: {fmt_price(price)} USDT (24h {chg:+.2f}%)",
         f"• 수급: 거래대금 {turn_m:.1f}M | OI {oi_m:.1f}M (비중 {oi_ratio:.0f}%) | 펀딩 {fund:+.4f}%",
+    ]
+
+    overlay_line = _build_supply_overlay_line(res)
+    if overlay_line:
+        lines.append(overlay_line)
+
+    lines.extend([
         f"• 멀티프레임: {htf} | 15m RSI6 {rsi15:.1f} · J {kdj15:.1f}{ppo_str}",
         "",
         f"🎯 [{'장기 포지션 매매 전략 가이드' if is_long else '매매 전략 가이드'}]",
@@ -178,7 +234,7 @@ def build_briefing_message(res, now_str):
         f"• 1차 구간(TP1·전량 홀딩): {fmt_price(tps[0])} USDT (+{to_float(tp_pcts[0]):.1f}% | {tp_labels[0]} · 익절 없이 100% 홀딩)",
         f"• 2차 구간(TP2·전량 홀딩): {fmt_price(tps[1])} USDT (+{to_float(tp_pcts[1]):.1f}% | {tp_labels[1]} · 돌파시 방어선 TP1({fmt_price(tps[0])}) 상향 고정)",
         f"• 3차 목표(TP3·50% 익절): {fmt_price(tps[2])} USDT (+{to_float(tp_pcts[2]):.1f}% | {tp_labels[2]} · 방어선 TP2 상향 & 잔여 50% 고점 -{trail_drop}% 트레일링)",
-    ]
+    ])
 
     if reasons:
         lines.append("\n🔍 [포착 근거]")
@@ -640,14 +696,12 @@ def generate_signal_chart_bytes(res):
 def generate_profit_replay_video_bytes(close_info):
     """
     [최종 전량 익절 30초 HD MP4 리플레이 영상 자동 제작 엔진 v7 (5단계 캔들 + 페이지네이션)]
-    - 규격: X 최적화 1280×720 (16:9), 10fps 캡처 → 30fps 표준 H.264 출력, 정확히 30.5초
     - 보유 기간별 5단계 타임프레임 자동 선택:
       * 10시간 미만: 1분봉 (1m)
       * 10시간 ~ 20시간 미만: 5분봉 (5m)
       * 20시간 ~ 70시간 미만: 15분봉 (15m)
       * 70시간 ~ 90시간 미만: 1시간봉 (1H)
       * 90시간 이상: 4시간봉 (4H)
-    - 진입 시각 커버 실패 시 다음 상위 타임프레임으로 자동 안전 폴백
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -676,7 +730,6 @@ def generate_profit_replay_video_bytes(close_info):
     hold_minutes = max(1, int(to_float(close_info.get("hold_minutes"), (closed_at - created_at) // 60)))
     hold_hours = (closed_at - created_at) / 3600.0
 
-    # 5단계 보유 기간별 타임프레임 규칙 엄격 적용
     tf_ladder = [
         ("1", "1m", 60, 820),
         ("5", "5m", 300, 420),
@@ -704,7 +757,6 @@ def generate_profit_replay_video_bytes(close_info):
 
     for idx_t in range(start_tier, len(tf_ladder)):
         cand_code, cand_lbl, cand_step, cand_max_bars = tf_ladder[idx_t]
-        # MA20 워밍업(25봉) + 배경 캔들(26봉) 포함하여 진입 시각 이전부터 역방향 페이지네이션 조회
         req_start_ms = created_ms - (55 * cand_step * 1000)
         req_end_ms = closed_ms + (2 * cand_step * 1000)
         cand_df = _fetch_replay_klines_window(
@@ -719,7 +771,6 @@ def generate_profit_replay_video_bytes(close_info):
         if best_fallback is None:
             best_fallback = (cand_df, cand_code, cand_lbl, cand_step)
         earliest_ts = int(to_float(cand_df["timestamp"].iloc[0], 0))
-        # 진입 시각(created_ms)이 정상 포함되었는지 검증 (오차 3봉 이내 허용)
         if earliest_ts <= (created_ms + cand_step * 1000 * 3):
             df_raw, tf_code, tf_label, step_sec = cand_df, cand_code, cand_lbl, cand_step
             break
@@ -806,7 +857,6 @@ def generate_profit_replay_video_bytes(close_info):
         ma20_js.append({"time": ts_sec, "value": to_float(row["ma20"])} if pd.notna(row.get("ma20")) else None)
         kst_strs.append(datetime.fromtimestamp(ts_ms / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST"))
 
-    # 캔들 수에 비례한 우측 여백 확보 (1m 550봉~4H 40봉 모두 동일한 8% 곡선 화살표 공간 유지)
     tail_bars = max(5, min(48, int(round(len(candles_js) * 0.08))))
     ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, tail_bars + 1)]
     decimals = 6 if entry_p < 0.01 else (5 if entry_p < 1 else (4 if entry_p < 10 else (3 if entry_p < 1000 else 2)))
@@ -819,14 +869,13 @@ def generate_profit_replay_video_bytes(close_info):
     price_diff_prefix = "+" if exit_p >= entry_p else "-"
     exit_headline = f"+{total_realized_pct:.2f}% ({price_diff_prefix}{fmt_price(price_diff_abs)}) · {hold_str}"
 
-    # 10fps 캡처 × 305프레임 = 30.5초 (30fps 표준 H.264 출력)
     in_fps = 10
     out_fps = 30
     total_frames = 305
-    thumb_end = 20           # 0.0s ~ 2.0s (2.0초 썸네일 고정)
-    play_start = 30          # 2.0s ~ 3.0s (1.0초 진입 봉 리셋 준비)
-    play_end = 259           # 3.0s ~ 26.0s (23.0초 본격 상승 리플레이)
-    outro_static_start = 270 # 26.0s ~ 27.0s 화살표 드로잉 / 27.0s ~ 30.5s 완성 고정
+    thumb_end = 20
+    play_start = 30
+    play_end = 259
+    outro_static_start = 270
 
     html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <script src="{lw_script_url}"></script>
