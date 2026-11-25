@@ -122,37 +122,16 @@ def save_json_safe(path, data):
 
 def update_market_cap_cache(now_ts):
     """
-    [시총 캐시 무중단 일간 갱신]
-    1순위: CoinPaprika /v1/tickers 단 1회 호출로 시총 상위 2,000개 일괄 수집 (페이지네이션 429 차단 없음)
-    2순위: CoinGecko 상위 750개(3페이지) 보완 병합
+    [방안 1 · 시가총액 캐시 일간 자동 갱신]
+    - CoinGecko 상위 1,250개(250개 × 5페이지) 시가총액($M)을 수집해 market_cap_cache.json에 저장
+    - 동일 티커 충돌 시 시가총액이 더 큰 본진 코인 우선 반영, API 일시 제한 시 기존 캐시 보존
     """
     existing = load_json_safe(MARKET_CAP_CACHE_FILE, {"updated_at": 0, "count": 0, "caps": {}})
     caps = dict(existing.get("caps") or {})
     fresh_caps = {}
+    fetched_pages = 0
 
-    # 1순위: CoinPaprika 상위 2,000개 단발 수집
-    try:
-        cp_url = clean_url(f"{SCHEME}api.coinpaprika.com/v1/tickers")
-        cp_resp = requests.get(cp_url, headers=BROWSER_HEADERS, timeout=15)
-        if cp_resp.status_code == 200:
-            cp_rows = cp_resp.json()
-            if isinstance(cp_rows, list):
-                for it in cp_rows:
-                    sym_b = str(it.get("symbol") or "").upper().strip()
-                    usd_q = (it.get("quotes") or {}).get("USD") or {}
-                    mc_usd = to_float(usd_q.get("market_cap"), 0.0)
-                    if not sym_b or not sym_b.isascii() or mc_usd <= 0:
-                        continue
-                    if is_stock_or_tradfi_symbol(sym_b):
-                        continue
-                    mc_m = round(mc_usd / 1e6, 3)
-                    if sym_b not in fresh_caps or mc_m > fresh_caps[sym_b]:
-                        fresh_caps[sym_b] = mc_m
-    except Exception as e:
-        print(f"[CoinPaprika 시총 수집 예외] {e}")
-
-    # 2순위: CoinGecko 상위 750개(3페이지) 보완 병합
-    for page in range(1, 4):
+    for page in range(1, 6):
         try:
             url = clean_url(f"{SCHEME}api.coingecko.com/api/v3/coins/markets")
             params = {
@@ -163,11 +142,15 @@ def update_market_cap_cache(now_ts):
                 "sparkline": "false",
             }
             resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=10)
+            if resp.status_code == 429:
+                time.sleep(5.0)
+                resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=10)
             if resp.status_code != 200:
                 break
             rows = resp.json()
             if not isinstance(rows, list) or not rows:
                 break
+            fetched_pages += 1
             for it in rows:
                 sym_b = str(it.get("symbol") or "").upper().strip()
                 mc_usd = to_float(it.get("market_cap"), 0.0)
@@ -178,9 +161,10 @@ def update_market_cap_cache(now_ts):
                 mc_m = round(mc_usd / 1e6, 3)
                 if sym_b not in fresh_caps or mc_m > fresh_caps[sym_b]:
                     fresh_caps[sym_b] = mc_m
-            if page < 3:
-                time.sleep(1.5)
-        except Exception:
+            if page < 5:
+                time.sleep(1.8)
+        except Exception as e:
+            print(f"[시총 캐시 수집 page {page} 예외] {e}")
             break
 
     if fresh_caps:
@@ -189,6 +173,7 @@ def update_market_cap_cache(now_ts):
             MARKET_CAP_CACHE_FILE,
             {
                 "updated_at": now_ts,
+                "fetched_pages": fetched_pages,
                 "count": len(caps),
                 "caps": caps,
             },
@@ -532,6 +517,7 @@ def main():
     now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
+    # [방안 1] CoinGecko 상위 1,250개 시가총액 캐시 일간 자동 갱신
     mc_total, mc_fresh = update_market_cap_cache(now_ts)
 
     state = load_merged_state()
@@ -600,6 +586,12 @@ def main():
             f"  {idx}. ${it['base']} ({it['change_24h']:+.1f}%) [{c_tag}] | "
             f"응축 {dna.get('pre_bb_width', 0)}% · 건조 {dna.get('pre_vol_dry_ratio', 0)} · "
             f"발사양봉 {dna.get('launch_vol_mult', 0)}x · 직전RSI {dna.get('pre_rsi6', 0)} · 1H이격 {dna.get('pre_1h_ma20_dist', 0):+}%"
+        )
+    if dna_formula.get("enabled"):
+        log_lines.append(
+            f"• 🧬 Track H 순수 5D 차트 DNA ({DNA_VERSION} | 14일 표본 {dna_formula['sample_count']}건 / 미포착 {dna_formula['missed_count']}건): "
+            f"주력 [{dna_formula['dominant_tag']}] | 응축 <= {dna_formula['bb_width_max']}% · 건조 <= {dna_formula['vol_dry_max']} · "
+            f"발사양봉 >= {dna_formula['launch_vol_min']}x · 직전RSI {dna_formula['pre_rsi_min']}~{dna_formula['pre_rsi_max']}"
         )
 
     full_log = "\n".join(log_lines)
