@@ -1,6 +1,35 @@
 {
   "records": [
     {
+      "id": "IDOLUSDT_1795612954",
+      "engine_ver": "v3",
+      "symbol": "IDOLUSDT",
+      "track_type": "TRACK_A",
+      "score": 93,
+      "entry_price": 0.0171,
+      "stop_price": 0.016074,
+      "sl_trigger_price": 0.015942,
+      "sl_pct": 6,
+      "created_at": 1795612954,
+      "sl_at": 1795646712,
+      "hold_minutes": 562,
+      "max_high_price": 0.017222,
+      "max_favorable_pct": 0.71,
+      "vol_mult": 3.33,
+      "rsi6_15m": 70.4,
+      "oi_m": 0.5,
+      "oi_ratio": 20.6,
+      "funding_pct": 0.005,
+      "change_24h": -0.29,
+      "btc_1h_pct": 0.0,
+      "kst_block": "21-24",
+      "cause": "단기 고점 RSI 과열 추격",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "NAORISUSDT_1795118707",
       "engine_ver": "v3",
       "symbol": "NAORISUSDT",
@@ -385,6 +414,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795646710,
+  "updated_at": 1795646745,
   "engine_ver": "v3"
 }
