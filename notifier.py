@@ -114,7 +114,6 @@ def fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=10):
 
 
 def _fetch_replay_klines_window(symbol, interval, start_ms, end_ms, max_bars=850):
-    """api.fetch_klines_window 우선 사용 (구버전 api.py 호환 백업 포함)"""
     if api_mod is not None and hasattr(api_mod, "fetch_klines_window"):
         df = api_mod.fetch_klines_window(symbol, interval=str(interval), start_ms=start_ms, end_ms=end_ms, max_bars=max_bars)
         if isinstance(df, pd.DataFrame) and not df.empty:
@@ -143,7 +142,7 @@ def _resample_4h_to_12h(df_4h):
 
 
 def _build_supply_overlay_line(res):
-    """[방안 1] 시총 · Bybit OI/시총 · 회전율 · 스마트머니/개미 L/S 요약 라인 생성"""
+    """[방안 1] 시총 · Bybit OI/시총 · 회전율 · Binance/Gate/Bitget 고래 vs 개미 L/S 요약 라인"""
     parts = []
     mc_m = to_float(res.get("market_cap_m"), 0.0)
     oi_mc_pct = to_float(res.get("oi_mc_pct"), 0.0)
@@ -160,7 +159,8 @@ def _build_supply_overlay_line(res):
     if div <= 0 and s_val > 0 and t_val > 0:
         div = round(s_val / max(t_val, 0.05), 2)
 
-    if ls_src == "BINANCE" and s_val > 0 and t_val > 0:
+    src_tag = {"BINANCE": "BN", "GATE": "GATE", "BITGET": "BG"}.get(ls_src, ls_src)
+    if ls_src in ("BINANCE", "GATE", "BITGET") and s_val > 0 and t_val > 0:
         if s_val >= 1.30 and div >= 1.35:
             ls_badge = "🟢고래우위"
         elif (s_val <= 1.05 and t_val >= 2.20) or (s_val < 0.90 and t_val >= 1.80) or (t_val >= 3.00 and div <= 0.65):
@@ -169,15 +169,15 @@ def _build_supply_overlay_line(res):
             ls_badge = "🟠개미편중"
         else:
             ls_badge = "⚪중립"
-        parts.append(f"L/S(BN) 고래 {s_val:.2f} vs 개미 {t_val:.2f} ({div:.2f}x · {ls_badge})")
-    elif ls_src in ("BYBIT", "OKX") and t_val > 0:
+        parts.append(f"L/S({src_tag}) 고래 {s_val:.2f} vs 개미 {t_val:.2f} ({div:.2f}x · {ls_badge})")
+    elif ls_src in ("GATE", "BITGET", "BYBIT", "OKX") and t_val > 0:
         if t_val <= 0.75:
             ls_badge = "🟢숏쏠림"
         elif t_val >= 2.10:
             ls_badge = "🔴롱과밀"
         else:
             ls_badge = "⚪중립"
-        parts.append(f"L/S({ls_src}) 리테일 {t_val:.2f} ({ls_badge})")
+        parts.append(f"L/S({src_tag}) 리테일 {t_val:.2f} ({ls_badge})")
 
     return f"• 수급심층: {' | '.join(parts)}" if parts else ""
 
@@ -249,30 +249,126 @@ def build_briefing_message(res, now_str):
     return "\n".join(lines)
 
 
+def _pick_variant(variants, symbol):
+    if not variants:
+        return ""
+    seed = sum(ord(ch) for ch in str(symbol or "BTC"))
+    return variants[seed % len(variants)]
+
+
 def build_x_hook_line(res):
-    track_type = str(res.get("track_type", "TRACK_A"))
+    """[확장된 전략별 X(트위터) 훅(Hook) 문구 엔진 · 총 36종]"""
+    symbol = str(res.get("symbol", ""))
+    track_type = str(res.get("track_type", "TRACK_A")).upper()
+    r_text = " ".join(str(x) for x in (res.get("reasons") or []))
+    title_str = str(res.get("track_title", ""))
+
+    # 1) 장기 포지션 (Track D1 ~ D6)
     if track_type == "TRACK_D" or res.get("is_long_term"):
         sub_s = str(res.get("sub_strategy", "")).upper()
         if "D6" in sub_s or "스프링" in sub_s:
-            return " 신저가 개미털기(스프링) 후 다개월 바닥선 거래량 동반 재탈환 포착"
-        return " 세력 4H·1D 매집 후 대시세 1파동 초입 포착"
-    r_text = " ".join(str(x) for x in (res.get("reasons") or []))
-    if "재진입" in str(res.get("track_title", "")) or "재탈환" in r_text:
-        return "개미털기 바닥 확인 후 거래량 실리며 V자 반등 시도중"
+            return _pick_variant([
+                "신저가 개미털기(스프링) 후 다개월 바닥선 거래량 동반 재탈환 포착",
+                "공포 투매 물량 흡수 완료! 바닥선 강하게 재탈환하는 역발상 대시세 초입",
+                "개미 손절 털어낸 뒤 거래량 터지며 바닥 위로 올라탄 와이코프 스프링 포착",
+            ], symbol)
+        if "D1" in sub_s:
+            return _pick_variant([
+                "가격 횡보 속 세력 OI·OBV 선행 매집 포착! 조용히 물량 잠기는 대시세 초입",
+                "티 안 나게 세력 수급이 먼저 뚫린 스텔스 바닥 매집 구간 포착",
+            ], symbol)
+        if "D2" in sub_s:
+            return _pick_variant([
+                "세력 매집봉 출현 후 거래량 건조 눌림 마무리! 2차 대시세 출발 직전",
+                "매집봉 지지선 방어 후 거래량 말리며 반등 턴 나오는 세력 눌림목 포착",
+            ], symbol)
+        if "D3" in sub_s:
+            return _pick_variant([
+                "30일 장기 박스권 상단 거래량 폭발 첫 돌파! 큰 추세 파동 개시 포착",
+                "한 달간 응축된 장기 박스권 저항을 거래량 싣고 뚫어낸 대시세 초입",
+            ], symbol)
+        if "D4" in sub_s:
+            return _pick_variant([
+                "장기 하락추세 탈출 및 4H 50MA 거래량 돌파 안착! 추세 턴어라운드 초입",
+                "이중바닥 완성 후 주요 추세선 돌파! 중장기 상승 1파동 시작점 포착",
+            ], symbol)
+        if "D5" in sub_s:
+            return _pick_variant([
+                "바닥권 4H PPO·RSI·OBV 3중 강세 다이버전스 완성! 세력 바닥 흡수 포착",
+                "하락 에너지는 멈추고 세력 매수세는 유입되는 매크로 바닥 반전 초입",
+            ], symbol)
+        return _pick_variant([
+            "세력 4H·1D 매집 후 대시세 1파동 초입 포착",
+            "상위 프레임 바닥 숙성 완료! 세력 수급 결집되는 중장기 대시세 초입",
+        ], symbol)
+
+    # 2) 스탑헌팅 후 재진입
+    if "재진입" in title_str or "재탈환" in r_text:
+        return _pick_variant([
+            "개미털기 바닥 확인 후 거래량 실리며 V자 반등 시도중",
+            "스탑헌팅 악성 매물 소화 완료! 비과열 구간에서 V자 재탈환 시도중",
+            "밑꼬리 개미털기 후 매수세 재유입되며 단기 추세 재가동중",
+        ], symbol)
+
+    # 3) 수급심층 특화 훅 (고래 압도적 우위 또는 OI/시총 고압 화약고)
+    oi_mc_pct = to_float(res.get("oi_mc_pct"), 0.0)
+    top_ls = to_float(res.get("top_ls"), 0.0)
+    retail_ls = to_float(res.get("retail_ls"), 0.0)
+    ls_div = to_float(res.get("ls_divergence"), 0.0)
+    if top_ls >= 1.50 and 0 < retail_ls <= 1.05 and ls_div >= 1.60:
+        return _pick_variant([
+            "고래는 롱 매집, 개미는 숏 쏠림! 스마트머니 포지션 괴리 폭발 초입",
+            "탑트레이더 롱 베팅 vs 일반투자자 숏 쏠림! 수급 비대칭 급등 후보 포착",
+        ], symbol)
+    if oi_mc_pct >= 15.0:
+        return _pick_variant([
+            "시총 대비 선물 OI 압축 임계치 도달! 레버리지 화약고 점화 초입 포착",
+            "과적재된 선물 OI에 매수 거래량 점화! 강한 변동성 분출 직전 타점",
+        ], symbol)
+
+    # 4) 단기·스윙 트랙별 맞춤 훅 (Track A ~ H)
     if track_type == "TRACK_H":
-        return "최근 급등 대장주 Top 5 발사 직전 DNA 패턴과 일치하는 초입 포착"
+        return _pick_variant([
+            "최근 급등 대장주 Top 5 발사 직전 DNA 패턴과 일치하는 초입 포착",
+            "최근 시장을 주도한 급등주들의 발사 직전 차트 공식을 그대로 닮은 초입",
+            "급등주 역추적 알고리즘이 포착한 에너지 응축·거래량 점화 초입 타점",
+        ], symbol)
     if track_type == "TRACK_E":
-        return "24H 저점 유동성 스윕(개미털기) 직후 강한 반전 매수세 유입중"
+        return _pick_variant([
+            "24H 저점 유동성 스윕(개미털기) 직후 강한 반전 매수세 유입중",
+            "전저점 스탑헌팅 아래꼬리 흡수 후 강세 다이버전스와 함께 급반전 시도중",
+            "저점 이탈 공포 물량을 세력이 받아먹고 지지선 탈환하는 SFP 반전 타점",
+        ], symbol)
     if track_type == "TRACK_F":
-        return "비트코인 흔들림 속에서도 역행 강세 보이는 상대강도 대장주 포착"
+        return _pick_variant([
+            "비트코인 흔들림 속에서도 역행 강세 보이는 상대강도 대장주 포착",
+            "시장 조정장에서도 고점권 버티며 독주하는 상대강도(RS) 1티어 주도주",
+            "비트코인 약세를 무시하고 OBV 신고가와 함께 치고 나가는 역행 대장주",
+        ], symbol)
     if track_type == "TRACK_G":
-        return "깊은 음수 펀딩비와 OI 집중 속 숏스퀴즈 강제청산 초입 포착"
+        return _pick_variant([
+            "깊은 음수 펀딩비와 OI 집중 속 숏스퀴즈 강제청산 초입 포착",
+            "과도하게 쌓인 숏 포지션 위에 매수 폭발! 연쇄 숏스퀴즈 발사 직전",
+            "음수 펀딩비 연료 가득 찬 상태에서 저항선 돌파하는 숏스퀴즈 초입 타점",
+        ], symbol)
     if track_type == "TRACK_C":
-        return "급등 대장주 핵심 눌림목 지지 후 2차 파동 시도중"
+        return _pick_variant([
+            "급등 대장주 핵심 눌림목 지지 후 2차 파동 시도중",
+            "1파 급등 후 거래량 건조 조정 마무리! 피보나치 핵심 지지선 반등 타점",
+            "대장주 건강한 눌림목 소화 완료! 5분봉 추세 전환과 함께 2차 상승 시동",
+        ], symbol)
     if track_type == "TRACK_B":
-        return "거래량이 살아나면서 24H 전고점 돌파 시도중"
-    if "응축" in r_text or "스퀴즈" in r_text:
-        return "박스권 에너지 응축 후 거래량 살아나며 추세 전환중"
+        return _pick_variant([
+            "거래량이 살아나면서 24H 전고점 돌파 시도중",
+            "24시간 주요 저항선을 건전한 양봉과 거래량으로 뚫어낸 구조 돌파 초입",
+            "돌파 후 지지 전환(S-R Flip) 확인! 매물벽 소화하고 상방 확장 시도중",
+        ], symbol)
+    if track_type == "TRACK_A" or "응축" in r_text or "스퀴즈" in r_text:
+        return _pick_variant([
+            "박스권 에너지 응축 후 거래량 살아나며 추세 전환중",
+            "볼린저·켈트너 초응축(TTM 스퀴즈) 상방 발사! 매수 델타 유입 초입",
+            "좁아진 변동성 박스를 거래량 싣고 뚫어내는 에너지 폭발 초입 포착",
+        ], symbol)
     if "음수 펀딩" in r_text:
         return "숏 스퀴즈 수급 유입되며 단기 추세 반등 시도중"
     return "눌림목 거래량 건조 후 수급 살아나며 반등 시도중"
@@ -694,15 +790,7 @@ def generate_signal_chart_bytes(res):
 
 
 def generate_profit_replay_video_bytes(close_info):
-    """
-    [최종 전량 익절 30초 HD MP4 리플레이 영상 자동 제작 엔진 v7 (5단계 캔들 + 페이지네이션)]
-    - 보유 기간별 5단계 타임프레임 자동 선택:
-      * 10시간 미만: 1분봉 (1m)
-      * 10시간 ~ 20시간 미만: 5분봉 (5m)
-      * 20시간 ~ 70시간 미만: 15분봉 (15m)
-      * 70시간 ~ 90시간 미만: 1시간봉 (1H)
-      * 90시간 이상: 4시간봉 (4H)
-    """
+    """[최종 전량 익절 30초 HD MP4 리플레이 영상 자동 제작 엔진 v7 (5단계 캔들 + 페이지네이션)]"""
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
 
@@ -1377,130 +1465,4 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
                 )
                 page = browser.new_page(viewport={"width": 1280, "height": 720}, device_scale_factor=1)
-                page.on("pageerror", lambda err: js_errors.append(str(err)))
-                page.goto(f"file://{html_path}", wait_until="load", timeout=25000)
-                page.wait_for_function("window.__REPLAY_READY === true", timeout=15000)
-                page.wait_for_timeout(120)
-
-                for fi in range(total_frames):
-                    dst_jpg = os.path.join(tmpdir, f"f_{fi:04d}.jpg")
-                    if 1 <= fi < thumb_end:
-                        shutil.copyfile(os.path.join(tmpdir, "f_0000.jpg"), dst_jpg)
-                        continue
-                    if (thumb_end + 1) <= fi < play_start:
-                        shutil.copyfile(os.path.join(tmpdir, f"f_{thumb_end:04d}.jpg"), dst_jpg)
-                        continue
-                    if fi > outro_static_start:
-                        shutil.copyfile(os.path.join(tmpdir, f"f_{outro_static_start:04d}.jpg"), dst_jpg)
-                        continue
-
-                    page.evaluate(f"window.__renderFrame({fi})")
-                    page.screenshot(path=dst_jpg, type="jpeg", quality=88)
-                browser.close()
-
-            cmd = [
-                "ffmpeg", "-y", "-loglevel", "error",
-                "-framerate", str(in_fps),
-                "-i", os.path.join(tmpdir, "f_%04d.jpg"),
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",
-                "-preset", "fast",
-                "-crf", "21",
-                "-r", str(out_fps),
-                "-movflags", "+faststart",
-                out_mp4,
-            ]
-            res_ff = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-            if res_ff.returncode != 0 or not os.path.exists(out_mp4):
-                LAST_VIDEO_ERROR = f"ffmpeg 인코딩 오류: {(res_ff.stderr or '')[:180]}"
-                print(f"[리플레이 영상 실패] {LAST_VIDEO_ERROR}")
-                return None
-
-            print(
-                f"[리플레이 영상 완료] {symbol} ({tf_label}, {len(df_win)}봉) | "
-                f"{total_frames}프레임 / {in_fps}fps → {out_fps}fps = {total_frames / in_fps:.1f}초 (v7-5tier)"
-            )
-            with open(out_mp4, "rb") as vf:
-                return vf.read()
-    except Exception as e:
-        err_extra = f" | JS: {js_errors[0][:120]}" if js_errors else ""
-        LAST_VIDEO_ERROR = f"렌더링 예외: {str(e)[:150]}{err_extra}"
-        print(f"[리플레이 영상 예외] {symbol}: {LAST_VIDEO_ERROR}")
-        return None
-
-
-def send_telegram_single(text, reply_markup=None):
-    token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
-    chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
-    if not text or not token or not chat_id:
-        return False
-    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendMessage")
-    payload = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
-    try:
-        return requests.post(url, json=payload, timeout=12).status_code == 200
-    except Exception:
-        return False
-
-
-def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=None):
-    token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
-    chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
-    if not photo_bytes or not token or not chat_id:
-        return False
-    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendPhoto")
-    for _ in range(3):
-        try:
-            files = {"photo": ("tv_signal_chart.png", photo_bytes, "image/png")}
-            data = {"chat_id": chat_id}
-            if caption_text:
-                data["caption"] = caption_text
-            if reply_markup:
-                data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False) if isinstance(reply_markup, dict) else str(reply_markup)
-            resp = requests.post(url, data=data, files=files, timeout=18)
-            if resp.status_code == 200:
-                time.sleep(0.7)
-                return True
-        except Exception:
-            pass
-        time.sleep(1.2)
-    return False
-
-
-def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=None, filename="profit_replay.mp4"):
-    """30초 HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송"""
-    global LAST_VIDEO_ERROR
-    token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
-    chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
-    if not video_bytes or not token or not chat_id:
-        LAST_VIDEO_ERROR = "영상 데이터 또는 텔레그램 토큰/챗ID 누락"
-        return False
-    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendVideo")
-    last_resp_err = ""
-    for _ in range(3):
-        try:
-            files = {"video": (filename, video_bytes, "video/mp4")}
-            data = {
-                "chat_id": chat_id,
-                "width": "1280",
-                "height": "720",
-                "duration": "30",
-                "supports_streaming": "true",
-            }
-            if caption_text:
-                data["caption"] = caption_text
-            if reply_markup:
-                data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False) if isinstance(reply_markup, dict) else str(reply_markup)
-            resp = requests.post(url, data=data, files=files, timeout=50)
-            if resp.status_code == 200:
-                time.sleep(0.8)
-                return True
-            last_resp_err = f"Telegram HTTP {resp.status_code}: {resp.text[:160]}"
-        except Exception as e:
-            last_resp_err = f"Telegram 전송 예외: {str(e)[:150]}"
-        time.sleep(1.5)
-    LAST_VIDEO_ERROR = last_resp_err or "Telegram sendVideo 3회 실패"
-    print(f"[sendVideo 실패] {LAST_VIDEO_ERROR}")
-    return False
-# === END OF FILE ===
+                page.on("pageerror",
