@@ -351,6 +351,23 @@
   ],
   "wins": [
     {
+      "id": "VVVUSDT_1795265541",
+      "engine_ver": "v3",
+      "symbol": "VVVUSDT",
+      "track_type": "TRACK_A",
+      "score": 95,
+      "created_at": 1795265541,
+      "win_at": 1795635215,
+      "max_favorable_pct": 22.2,
+      "vol_mult": 4.32,
+      "rsi6_15m": 76.6,
+      "oi_ratio": 58.8,
+      "funding_pct": 0.005,
+      "change_24h": 11.66,
+      "btc_1h_pct": 0.0,
+      "kst_block": "21-24"
+    },
+    {
       "id": "OPGUSDT_1795152267",
       "engine_ver": "v3",
       "symbol": "OPGUSDT",
@@ -368,6 +385,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795635213,
+  "updated_at": 1795635247,
   "engine_ver": "v3"
 }
