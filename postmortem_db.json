@@ -111,10 +111,10 @@
       "btc_1h_pct": 0.0,
       "kst_block": "06-09",
       "cause": "+17.6% 반등 후 차익 매물 출회",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -4.3,
+      "autopsy_post_low_pct": -1.8
     },
     {
       "id": "JCTUSDT_1795487061",
@@ -223,6 +223,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795614000,
+  "updated_at": 1795614051,
   "engine_ver": "v3"
 }
