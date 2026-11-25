@@ -9,11 +9,13 @@ try:
     STATE_FILE = getattr(cfg, "STATE_FILE", "bot_state.json")
     KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
     FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
+    BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
 except Exception:
     cfg = None
     STATE_FILE = "bot_state.json"
     KST = timezone(timedelta(hours=9))
     FIXED_SL_PCT = 6
+    BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 try:
     import postmortem
@@ -31,6 +33,7 @@ from api import (
 SCHEME = "ht" + "tps://"
 HISTORY_FILE = "analyzer_history.json"
 DNA_PROFILE_FILE = "top5_dna_profile.json"
+MARKET_CAP_CACHE_FILE = "market_cap_cache.json"
 DNA_RETENTION_SEC = 14 * 86400
 DNA_VERSION = "v3_pure_chart"
 STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json"]))
@@ -56,7 +59,7 @@ def fmt_price(price):
 
 def send_telegram_report(text):
     if not SEND_DAILY_TELEGRAM:
-        print("[일간 백그라운드 모드] 텔레그램 발송 생략 (Top 5 순수 차트 DNA 및 파라미터 자동 학습 완료)")
+        print("[일간 백그라운드 모드] 텔레그램 발송 생략 (Top 5 DNA · 시가총액 캐시 자동 학습 완료)")
         return False
     token = (os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or "").strip()
     chat_id = (os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or getattr(cfg, "TELEGRAM_CHAT_ID", "") or "").strip()
@@ -117,6 +120,67 @@ def save_json_safe(path, data):
         pass
 
 
+def update_market_cap_cache(now_ts):
+    """
+    [방안 1 · 시가총액 캐시 일간 자동 갱신]
+    - CoinGecko 상위 1,250개(250개 × 5페이지) 시가총액($M)을 수집해 market_cap_cache.json에 저장
+    - 동일 티커 충돌 시 시가총액이 더 큰 본진 코인 우선 반영, API 일시 제한 시 기존 캐시 보존
+    """
+    existing = load_json_safe(MARKET_CAP_CACHE_FILE, {"updated_at": 0, "count": 0, "caps": {}})
+    caps = dict(existing.get("caps") or {})
+    fresh_caps = {}
+    fetched_pages = 0
+
+    for page in range(1, 6):
+        try:
+            url = clean_url(f"{SCHEME}api.coingecko.com/api/v3/coins/markets")
+            params = {
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": 250,
+                "page": page,
+                "sparkline": "false",
+            }
+            resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=10)
+            if resp.status_code == 429:
+                time.sleep(5.0)
+                resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=10)
+            if resp.status_code != 200:
+                break
+            rows = resp.json()
+            if not isinstance(rows, list) or not rows:
+                break
+            fetched_pages += 1
+            for it in rows:
+                sym_b = str(it.get("symbol") or "").upper().strip()
+                mc_usd = to_float(it.get("market_cap"), 0.0)
+                if not sym_b or not sym_b.isascii() or mc_usd <= 0:
+                    continue
+                if is_stock_or_tradfi_symbol(sym_b):
+                    continue
+                mc_m = round(mc_usd / 1e6, 3)
+                if sym_b not in fresh_caps or mc_m > fresh_caps[sym_b]:
+                    fresh_caps[sym_b] = mc_m
+            if page < 5:
+                time.sleep(1.8)
+        except Exception as e:
+            print(f"[시총 캐시 수집 page {page} 예외] {e}")
+            break
+
+    if fresh_caps:
+        caps.update(fresh_caps)
+        save_json_safe(
+            MARKET_CAP_CACHE_FILE,
+            {
+                "updated_at": now_ts,
+                "fetched_pages": fetched_pages,
+                "count": len(caps),
+                "caps": caps,
+            },
+        )
+    return len(caps), len(fresh_caps)
+
+
 def load_merged_state():
     merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
     for path in STATE_CANDIDATE_FILES:
@@ -171,10 +235,6 @@ def calc_rsi(series, period=6):
 
 
 def _find_launchpad_index(df_15m):
-    """
-    최근 24~36시간(15분봉) 내에서 급등 1파가 시작된 '건전 양봉 발사 시점(Launch Index)' 역산
-    - analyzer.py 1단계와 동일하게 피뢰침(윗꼬리 > 45%)을 제외한 건전 양봉 거래량 돌파 기준 적용
-    """
     n = len(df_15m)
     if n < 35:
         return max(20, n - 4)
@@ -210,7 +270,6 @@ def _find_launchpad_index(df_15m):
 
 
 def analyze_top_gainer_with_dna(coin, caught_map):
-    """Top 5 급등주의 발사 직전(Pre-Pump Launchpad) 순수 차트 5대 DNA 역추적"""
     sym = coin["symbol"]
     base = coin.get("base_coin") or sym.replace("USDT", "")
     price = to_float(coin.get("price"))
@@ -231,8 +290,6 @@ def analyze_top_gainer_with_dna(coin, caught_map):
     if not df_15m.empty and len(df_15m) >= 35:
         closes = df_15m["close"].astype(float)
         opens = df_15m["open"].astype(float)
-        highs = df_15m["high"].astype(float)
-        lows = df_15m["low"].astype(float)
         vols = df_15m["volume"].astype(float).fillna(0.0)
 
         live_p = to_float(closes.iloc[-1], 0.0)
@@ -258,7 +315,6 @@ def analyze_top_gainer_with_dna(coin, caught_map):
         v_pre_base = to_float(vols.iloc[max(0, pre_idx - 23) : max(1, pre_idx - 5)].mean(), v_pre_recent)
         pre_vol_dry_ratio = round(float(np.clip(v_pre_recent / max(v_pre_base, 1e-8), 0.05, 3.0)), 2)
 
-        # 발사 시점의 직전 20봉 평균(shift 1) 대비 건전 양봉 거래량 배수 역산
         v_base_20 = to_float(vols.iloc[max(0, l_idx - 20) : l_idx].mean(), 1.0)
         l_win = df_15m.iloc[l_idx : min(len(df_15m), l_idx + 2)]
         l_bull_vols = []
@@ -304,7 +360,6 @@ def analyze_top_gainer_with_dna(coin, caught_map):
             pattern_note = f"1H 추세선(이격 {pre_1h_ma20_dist:+.1f}%) 지지 + 발사 거래량 {launch_vol_mult:.1f}배 가속"
 
         caught_info = caught_map.get(sym)
-        # Training-Serving Skew 제거: 발사 직전 역산 가능한 순수 차트 5대 DNA만 학습 레코드로 저장
         dna = {
             "dna_version": DNA_VERSION,
             "symbol": sym,
@@ -329,10 +384,6 @@ def analyze_top_gainer_with_dna(coin, caught_map):
 
 
 def update_top5_dna_profile(analyzed_top5, now_ts):
-    """
-    [3단계 보완] 급등 후 왜곡되는 OI/펀딩비를 DNA 공식에서 완전히 제거하고
-    발사 직전 순수 차트 5대 DNA(응축폭·건조도·발사거래량·직전RSI·1H이격)만 자동 학습
-    """
     profile = load_json_safe(DNA_PROFILE_FILE, {"samples": [], "active_dna_formula": {}, "updated_at": 0})
     samples = [
         s for s in (profile.get("samples") or [])
@@ -466,6 +517,9 @@ def main():
     now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
+    # [방안 1] CoinGecko 상위 1,250개 시가총액 캐시 일간 자동 갱신
+    mc_total, mc_fresh = update_market_cap_cache(now_ts)
+
     state = load_merged_state()
     caught_map = get_recent_scanner_caught_map(state, now_ts)
 
@@ -522,8 +576,8 @@ def main():
     save_json_safe(HISTORY_FILE, history_data)
 
     log_lines = [
-        f"🧬 [Bybit Top 5 백그라운드 순수 차트 DNA 학습 완료] ({now_str})",
-        f"• 48h 사후검증 추적: {len(verified_48h_lines)}건 | 변동성 기준 TP: +{p1_l:.1f}% / +{p2_l:.1f}% / +{p3_l:.1f}%",
+        f"🧬 [Bybit Top 5 백그라운드 DNA & 시총 캐시 학습 완료] ({now_str})",
+        f"• 시가총액 캐시: 총 {mc_total}종목 보관 (금회 갱신 {mc_fresh}종목) | 48h 검증 {len(verified_48h_lines)}건",
     ]
     for idx, it in enumerate(analyzed_top5, 1):
         dna = it.get("dna") or {}
@@ -537,11 +591,8 @@ def main():
         log_lines.append(
             f"• 🧬 Track H 순수 5D 차트 DNA ({DNA_VERSION} | 14일 표본 {dna_formula['sample_count']}건 / 미포착 {dna_formula['missed_count']}건): "
             f"주력 [{dna_formula['dominant_tag']}] | 응축 <= {dna_formula['bb_width_max']}% · 건조 <= {dna_formula['vol_dry_max']} · "
-            f"발사양봉 >= {dna_formula['launch_vol_min']}x · 직전RSI {dna_formula['pre_rsi_min']}~{dna_formula['pre_rsi_max']} · "
-            f"1H이격 {dna_formula['ma20_1h_dist_min']:+}~{dna_formula['ma20_1h_dist_max']:+}%"
+            f"발사양봉 >= {dna_formula['launch_vol_min']}x · 직전RSI {dna_formula['pre_rsi_min']}~{dna_formula['pre_rsi_max']}"
         )
-    else:
-        log_lines.append(f"• 🧬 Track H 학습 대기 중 (현재 표본 {dna_formula.get('sample_count', 0)}/5건)")
 
     full_log = "\n".join(log_lines)
     print(full_log)
