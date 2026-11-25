@@ -1,6 +1,35 @@
 {
   "records": [
     {
+      "id": "NAORISUSDT_1795118707",
+      "engine_ver": "v3",
+      "symbol": "NAORISUSDT",
+      "track_type": "TRACK_D",
+      "score": 94,
+      "entry_price": 0.03329,
+      "stop_price": 0.026632,
+      "sl_trigger_price": 0.02661,
+      "sl_pct": 20,
+      "created_at": 1795118707,
+      "sl_at": 1795621959,
+      "hold_minutes": 8387,
+      "max_high_price": 0.03789,
+      "max_favorable_pct": 13.82,
+      "vol_mult": 1.36,
+      "rsi6_15m": 58.9,
+      "oi_m": 1.0,
+      "oi_ratio": 3.5,
+      "funding_pct": 0.005,
+      "change_24h": 0.0,
+      "btc_1h_pct": 0.0,
+      "kst_block": "03-06",
+      "cause": "+13.8% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "USUALUSDT_1795514236",
       "engine_ver": "v3",
       "symbol": "USUALUSDT",
@@ -339,6 +368,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795621956,
+  "updated_at": 1795621984,
   "engine_ver": "v3"
 }
