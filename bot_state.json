@@ -3001,33 +3001,6 @@
     "OPUSDT": 1795697036
   },
   "sl_history": {
-    "ICNTUSDT_1795308759": {
-      "symbol": "ICNTUSDT",
-      "track_type": "TRACK_A",
-      "score": 99,
-      "entry_price": 0.355,
-      "stop_price": 0.3337,
-      "sl_trigger_price": 0.3263,
-      "sl_pct": 6,
-      "created_at": 1795308759,
-      "sl_at": 1795438578,
-      "hold_minutes": 2163,
-      "max_high_price": 0.3703,
-      "max_favorable_pct": 4.31,
-      "vol_mult": 3.4,
-      "rsi6_15m": 68.5,
-      "oi_m": 2.6,
-      "oi_ratio": 24.2,
-      "funding_pct": -0.0006000000000000001,
-      "change_24h": -10.62,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "볼린저/켈트너 초응축(3.2%) + 15m PPO(-0.21%) 전환",
-        "15m 매수 델타(CVD)·OBV 바닥 흡수 확인",
-        "OI 집중도 최상(24%)",
-        "PPO 파동 정렬(15m PPO 히스토그램 확장)"
-      ]
-    },
     "QUSDT_1795443452": {
       "symbol": "QUSDT",
       "track_type": "TRACK_A",
