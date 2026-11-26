@@ -38,11 +38,7 @@ def fmt_price(price):
 
 
 def calc_weighted_realized_pct(e, c):
-    """
-    [P1-1 수정] 실체결가(exit_price) 및 왕복 수수료·슬리피지(0.15%)가 반영된 실현 수익률 산출
-    - 손절: 원장 realized_weighted_pct / exit_price 최우선 사용 (고정 -6.0% 왜곡 제거)
-    - 익절/만료: 원장 확정 수익률 최우선 사용
-    """
+    """실체결가(exit_price) 및 왕복 수수료·슬리피지(0.15%)가 반영된 실현 수익률 산출"""
     is_long = bool(e.get("is_long_term") or e.get("track_type") == "TRACK_D")
     entry_ref = max(to_float(e.get("entry_price")), 1e-8)
     saved_w = to_float(e.get("realized_weighted_pct"), 0.0)
@@ -210,9 +206,7 @@ def backfill_in_memory_only(episodes, now_ts):
 
 
 def classify_episode_by_actual_flags(e):
-    """
-    [P1-1 수정] 실제 체결 플래그 최우선 분류 + 만료/레거시 마감·실시간 활성 포지션 정확 분리
-    """
+    """실제 체결 플래그 최우선 분류 + 마감/실시간 활성 포지션 정확 분리"""
     fav = to_float(e.get("max_favorable_pct"))
     entry_p = to_float(e.get("entry_price"))
     max_h = to_float(e.get("max_high_price"))
@@ -302,13 +296,11 @@ def main():
     sl_hits = sum(1 for _, c in weekly_eps if c["sl"])
     expired_cnt = sum(1 for _, c in weekly_eps if c["expired"])
     legacy_cnt = sum(1 for _, c in weekly_eps if c["legacy_closed"])
-    # [P1-1 수정] 실제 미마감 포지션만 직접 집계 (만료/레거시 마감 착시 제거)
     active_cnt = sum(1 for _, c in weekly_eps if c["is_active"])
 
     closed_win_loss_cnt = tp2_hits + sl_hits
     win_rate = round((tp2_hits / closed_win_loss_cnt) * 100.0, 1) if closed_win_loss_cnt > 0 else 0.0
 
-    # [P1-1] 확정 마감 종목 기준 실현 손익 및 거래당 기대값(Expectancy · 비용반영) 산출
     closed_pnls = [calc_weighted_realized_pct(e, c) for e, c in weekly_eps if c["is_closed"]]
     cum_realized_pct = round(sum(closed_pnls), 2) if closed_pnls else 0.0
     expectancy_pct = round(float(np.mean(closed_pnls)), 2) if closed_pnls else 0.0
@@ -347,11 +339,23 @@ def main():
             track_stats[tk][2] += 1
         track_stats[tk][3].append(c["fav"])
 
-    best_5 = sorted(
-        [(e, c) for e, c in weekly_eps if not c["sl"] and not c["expired"]],
-        key=lambda x: (calc_weighted_realized_pct(x[0], x[1]), x[1]["fav"]),
+    # [2-2단계 수정] 실현 익절 마감 Top 5(is_closed=True)와 미실현 진행 중 Top 3(is_active=True) 완전 분리
+    best_5_realized = sorted(
+        [
+            (e, c, calc_weighted_realized_pct(e, c))
+            for e, c in weekly_eps
+            if c["is_closed"] and (not c["sl"]) and (not c["expired"]) and calc_weighted_realized_pct(e, c) > 0
+        ],
+        key=lambda x: (x[2], x[1]["fav"]),
         reverse=True,
     )[:5]
+
+    open_top3 = sorted(
+        [(e, c) for e, c in weekly_eps if c["is_active"] and c["fav"] >= 6.5],
+        key=lambda x: x[1]["fav"],
+        reverse=True,
+    )[:3]
+
     sl_eps = [(e, c) for e, c in weekly_eps if c["sl"]]
 
     extra_closed_note = ""
@@ -391,41 +395,49 @@ def main():
         f"• 1파동(TP1) 돌파율: 전체 포착 중 {w1_rate:.1f}% ({tp1_hits}/{total_signals}건)",
         f"• 2파동(TP2) 종가안착 유지력: TP1 돌파 종목 중 {w2_retention:.1f}%가 2차 구간 안착 ({tp2_hits}/{max(tp1_hits, 1)}건)",
         f"• 3파동(TP3) 클라이맥스 도달률: TP2 안착 종목 중 {w3_retention:.1f}% 3차 돌파 ({tp3_hits}/{max(tp2_hits, 1)}건)",
-        "\n🏆 [4. 주간 베스트 수익률 Top 5 타점 (전량 홀딩 · 3차 50%+50% 합산)]",
+        "\n🏆 [4. 주간 확정 익절 베스트 Top 5 (실제 수익 마감 완료 기준)]",
     ])
 
-    if best_5:
-        for idx, (b, c) in enumerate(best_5, 1):
+    if best_5_realized:
+        for idx, (b, c, w_pct) in enumerate(best_5_realized, 1):
             sym = b.get("symbol", "")
             base = sym.replace("USDT", "")
             entry_p = to_float(b.get("entry_price"))
             max_h = to_float(b.get("max_high_price"))
             fav_pct = c["fav"]
-            w_pct = calc_weighted_realized_pct(b, c)
             h_tag = "[장기] " if (b.get("is_long_term") or b.get("track_type") == "TRACK_D") else ""
             stage = (
                 "3차50%·트레일링마감"
-                if (c["tp3"] and c["trailing_closed"])
-                else (
-                    "3차50%·트레일링중"
-                    if c["tp3"]
-                    else (
-                        "TP1방어선마감"
-                        if (c["tp2"] and c["trailing_closed"])
-                        else ("2차안착·TP1방어중" if c["tp2"] else ("1차돌파·전량홀딩" if c["tp1"] else "추적중"))
-                    )
-                )
+                if c["tp3"]
+                else ("TP1방어선마감" if c["tp2"] else "익절마감")
             )
             lines.append(
-                f"{idx}. {h_tag}${base} ({sym}): 진입 {fmt_price(entry_p)} → 최고 {fmt_price(max_h)} (최고 +{fav_pct:.1f}% | 합산 {w_pct:+.2f}% | {stage})"
+                f"{idx}. {h_tag}${base} ({sym}): 진입 {fmt_price(entry_p)} → 최고 {fmt_price(max_h)} (최고 +{fav_pct:.1f}% | 실현 {w_pct:+.2f}% | {stage})"
             )
     else:
-        lines.append("• 집계된 주간 수익 타점 기록이 아직 없습니다.")
+        lines.append("• 이번 주 최종 수익 마감(실현) 완료된 종목이 아직 없습니다.")
+
+    if open_top3:
+        lines.append("\n🏃 [진행 중(미실현) 최고 수익 추적 Top 3 (홀딩 진행 중)]")
+        for idx, (b, c) in enumerate(open_top3, 1):
+            sym = b.get("symbol", "")
+            base = sym.replace("USDT", "")
+            entry_p = to_float(b.get("entry_price"))
+            max_h = to_float(b.get("max_high_price"))
+            fav_pct = c["fav"]
+            h_tag = "[장기] " if (b.get("is_long_term") or b.get("track_type") == "TRACK_D") else ""
+            stage = (
+                "3차50%·트레일링중"
+                if c["tp3"]
+                else ("2차안착·TP1방어중" if c["tp2"] else "1차돌파·전량홀딩중")
+            )
+            lines.append(
+                f"{idx}. {h_tag}${base} ({sym}): 진입 {fmt_price(entry_p)} → 장중최고 {fmt_price(max_h)} (최고 +{fav_pct:.1f}% | {stage})"
+            )
 
     lines.append(f"\n📓 [5. 주간 손절(SL) 오답노트 v3 & 25h 사후 부검 (주간 전체 SL {len(sl_eps)}건)]")
     if postmortem is not None and hasattr(postmortem, "build_daily_postmortem_summary"):
         try:
-            # [P1-2 수정] 구버전 sl_history 혼용 없이 순수 v3 DB 기준 출력
             lines.extend(postmortem.build_daily_postmortem_summary())
         except Exception:
             pass
