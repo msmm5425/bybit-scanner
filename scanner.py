@@ -61,7 +61,8 @@ RE_ALERT_COOLDOWN_SEC = 86400
 SL_RECOVERY_COOLDOWN_SEC = 14400
 TP_CLOSE_REENTRY_COOLDOWN_SEC = 21600
 HISTORY_RETENTION_SEC = 259200
-EPISODE_RETENTION_SEC = 604800
+# 한 달 실전 성과 분석용 원장 보존 기간 35일 (주간 리포트는 자체 7일 필터 사용)
+EPISODE_RETENTION_SEC = 35 * 86400
 MAX_NEW_ALERTS_PER_SCAN = 2
 
 # config.py 단일 원천 기준 (신규 88점 / 손절 후 재진입 90점 · 소프트 캡 없음)
@@ -139,13 +140,7 @@ def _write_json_atomic(path, obj):
 
 
 def check_btc_market_regime():
-    """
-    [P0-3 수정 · BTC 3단계 마켓 레짐 게이트]
-    - BTCUSDT 60분봉 limit=24(기존 limit=12 버그 완전 수정)로 1H/4H 변동률 100% 정상 수집
-    - OPEN: 정상 구간 → 전체 트랙 탐색
-    - COUNTER_TREND_ONLY: 완만 조정 → Track E(SFP) · Track F(RS)만 예외 허용
-    - FULL_LOCK: 폭락 구간 → 신규 진입 전면 차단
-    """
+    """BTC 3단계 마켓 레짐 게이트 (BTCUSDT 1H limit=24 정상 수집)"""
     regime = {
         "gate_mode": "OPEN",
         "gate_locked": False,
@@ -250,11 +245,7 @@ def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
 
 
 def sanitize_flags_by_mfe(item):
-    """
-    [P1-1 수정] 단순 윗꼬리 MFE(fav)로 tp2_hit·tp3_hit을 강제 승격하는 모순 제거!
-    - tp2_hit / tp3_hit은 오직 evaluate_single_tracked_1m()의 확정 종가 판정으로만 활성화
-    - sl_alerted와 tp2_hit/tp3_hit 동시 활성화 방지 (실제 SL 발생 시 승리 플래그 비오염 유지)
-    """
+    """단순 윗꼬리 MFE로 tp2_hit·tp3_hit 강제 승격 방지 (확정 종가 플래그 유지)"""
     if not isinstance(item, dict):
         return item
     entry_p = to_float(item.get("entry_price"))
@@ -454,7 +445,7 @@ def _record_pm_win(symbol, t_item, now_ts, max_fav):
 
 
 def _fetch_post_candles_no_gap(symbol, interval, created_ms, last_checked_ts, now_ms, fast_limit_sec, max_bars):
-    """[P1-4] 보유 시간이 150봉 창구를 넘거나 체크 공백이 길면 fetch_klines_window로 누락 없이 조회"""
+    """보유 시간이 150봉 창구를 넘어도 fetch_klines_window 페이지네이션으로 누락 없이 추적"""
     age_sec = max(0.0, (now_ms - created_ms) / 1000.0)
     since_last_sec = max(0.0, (now_ms / 1000.0) - last_checked_ts) if last_checked_ts > 0 else age_sec
     if age_sec <= fast_limit_sec:
@@ -470,12 +461,12 @@ def _fetch_post_candles_no_gap(symbol, interval, created_ms, last_checked_ts, no
     return fetch_klines(symbol, interval, limit=150)
 
 
-def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params, force_expire=False):
+def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     """
-    [기존 전량 홀딩 철학 100% 유지 + P1-1 실체결가/수수료 정산 + P1-4 창구 단절·만료 정산 보강]
+    [기존 전량 홀딩·고정 손절 철학 100% 유지 · 만료 강제 정산 제거]
     - 단기(SL -6% · 15m 종가 확정) / 장기(SL -20% · 1H 종가 확정)
     - TP1: 100% 전량 홀딩 / TP2: 15m(1H) 종가 안착 시 TP1 방어선 / TP3: 50% 익절 + 잔여 50% 트레일링
-    - 실현 수익률은 실제 마감 종가/손절가 기준 - 왕복 수수료·슬리피지(0.15%) 정직 기록
+    - 실제 SL 또는 익절 마감이 발생할 때까지 끝까지 추적 (실체결가 - 0.15% 비용반영 정산)
     """
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("expired_closed") or t_item.get("closed_alerted"):
         return None
@@ -666,7 +657,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params, force_expire=F
             t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
             t_item["exit_price"] = last_closed_c
-            # [P1-1] 실제 마감 종가(last_closed_c) 기준 + 왕복 수수료/슬리피지 차감
             exit_g = round((last_closed_c - entry_ref) / entry_ref * 100.0, 2)
             w3 = round(g3 * 0.50, 2)
             w_rem = round(exit_g * 0.50, 2)
@@ -726,7 +716,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params, force_expire=F
             t_item["closed_alerted"] = True
             t_item["tp3_at"] = now_ts
             t_item["exit_price"] = last_closed_c
-            # [P1-1] 실제 마감 종가(last_closed_c) 기준 + 왕복 수수료/슬리피지 차감
             exit_g = round(((last_closed_c - entry_ref) / entry_ref * 100.0) - FEE_SLIPPAGE_PCT, 2)
             t_item["realized_weighted_pct"] = exit_g
             msgs.append(
@@ -790,23 +779,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params, force_expire=F
                 f"• 진입 후 최고 상승폭: +{max_fav:.1f}% (보유 {hold_min}분)"
             )
             return {"messages": msgs, "sl_record": (f"{symbol}_{created_at}", sl_payload), "video_payload": None}
-
-    # [P1-4] 최대 추적 기한 만료(단기 5일 / 장기 30일) 시 조용한 삭제 대신 현재가 강제 정산(Time-Stop)
-    if force_expire and not t_item.get("closed_alerted"):
-        settle_p = last_close if last_close > 0 else (last_closed_c if last_closed_c > 0 else entry_ref)
-        settle_pct = round(((settle_p - entry_ref) / entry_ref * 100.0) - FEE_SLIPPAGE_PCT, 2)
-        t_item["expired_closed"] = True
-        t_item["closed_alerted"] = True
-        t_item["expired_at"] = now_ts
-        t_item["exit_price"] = settle_p
-        t_item["realized_weighted_pct"] = settle_pct
-        max_days = 30 if is_long else 5
-        msgs.append(
-            f"⏱️ {horizon_tag}[추적 기한({max_days}일) 만료 자동 정산] ${base} ({symbol})\n"
-            f"• 진입가 {fmt_price(entry_ref)} → 만료 정산가 {fmt_price(settle_p)} ({settle_pct:+.2f}% · 비용반영)\n"
-            f"• 보유 기간 중 최고 상승폭: +{max_fav:.1f}%"
-        )
-        return {"messages": msgs, "sl_record": None, "video_payload": None}
 
     return {"messages": msgs, "sl_record": None, "video_payload": None}
 
@@ -934,11 +906,9 @@ def run_latest_profit_video_test():
 
 def _git_sync_state():
     """
-    [P0-1 치명적 버그 완전 해결]
-    - 기존 git reset --soft가 .py 코드 커밋을 자동 롤백하던 문제를 원천 차단!
+    [Git .py 롤백 원천 차단]
     - 병합 완료된 JSON만 /tmp에 저장 → git reset --hard origin/main으로 최신 코드 100% 보존 →
-      오직 bot_state.json(단일화, oi_snapshot 제외)과 postmortem_db.json만 선택 스테이징 후 커밋·푸시
-    - 로컬 실행 환경에서는 Git을 건드리지 않고 안전하게 통과
+      오직 bot_state.json(단일화, oi_snapshot 제외)과 postmortem_db.json만 커밋·푸시
     """
     is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
     if not is_ci:
@@ -953,7 +923,6 @@ def _git_sync_state():
                 time.sleep(2.0)
                 continue
 
-            # 1) 상태 JSON 원격+로컬 합집합 병합 (/tmp에 전체본 + Git용 경량본 보관)
             loc_dict = load_state()
             for rf in (STATE_FILE, LEGACY_DUPLICATE_STATE_FILE):
                 show_res = subprocess.run(["git", "show", f"origin/main:{rf}"], capture_output=True, text=True, check=False)
@@ -965,7 +934,6 @@ def _git_sync_state():
             _write_json_atomic(LOCAL_RUNTIME_CACHE, loc_dict)
             _write_json_atomic(GIT_STATE_STAGE_TMP, _build_git_clean_state(loc_dict))
 
-            # 2) postmortem_db.json 원격+로컬 합집합 병합 (/tmp에 보관)
             pm_merged = None
             local_pm = _read_json(POSTMORTEM_DB_FILE)
             remote_pm = {}
@@ -987,20 +955,17 @@ def _git_sync_state():
                     pm_merged = local_pm or remote_pm
                 _write_json_atomic(GIT_PM_STAGE_TMP, pm_merged)
 
-            # 3) 핵심: git reset --hard origin/main 으로 최신 .py / .yml 코드를 100% 보존 (코드 롤백 원천 불가!)
             reset_r = subprocess.run(["git", "reset", "--hard", "origin/main"], check=False)
             if reset_r.returncode != 0:
                 time.sleep(2.0)
                 continue
 
-            # 4) 오직 상태 JSON 파일만 덮어쓰고 지정 스테이징
             with open(GIT_STATE_STAGE_TMP, "r", encoding="utf-8") as s:
                 clean_state_txt = s.read()
             with open(STATE_FILE, "w", encoding="utf-8") as d:
                 d.write(clean_state_txt)
             subprocess.run(["git", "add", STATE_FILE], check=False)
 
-            # 레거시 중복 파일(scanner_state.json)이 저장소에 남아 있으면 깔끔히 제거
             if os.path.exists(LEGACY_DUPLICATE_STATE_FILE) and LEGACY_DUPLICATE_STATE_FILE != STATE_FILE:
                 subprocess.run(["git", "rm", "-f", "--ignore-unmatch", LEGACY_DUPLICATE_STATE_FILE], check=False)
 
@@ -1064,8 +1029,8 @@ def main(scan_long_term=True):
         if sym_ep and c_at > int(alert_history.get(sym_ep, 0)):
             alert_history[sym_ep] = c_at
 
-    # [1단계] 기존 보유 포지션 감시 (만료 직전 미마감 종목은 강제 정산 후 정리)
-    active_eval_list = []
+    # [1단계] 기존 보유 포지션 감시 (만료 자동 정산 없이 실제 SL 또는 익절 마감까지 끝까지 추적)
+    active_syms = []
     for sym in list(tracked.keys()):
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         t_item = tracked[sym]
@@ -1079,20 +1044,23 @@ def main(scan_long_term=True):
             alert_history[sym] = c_at
         is_done = bool(t_item.get("sl_alerted") or t_item.get("tp3_completed") or t_item.get("expired_closed") or t_item.get("closed_alerted"))
         done_ts = int(t_item.get("sl_at") or t_item.get("tp3_at") or t_item.get("expired_at") or c_at)
-        max_age = 2592000 if t_item.get("is_long_term") else 432000
         if is_done:
             if (now_ts - done_ts) > 86400:
                 del tracked[sym]
             continue
-        active_eval_list.append((sym, age_sec >= max_age))
+        # 상폐 등으로 영원히 안 닫히는 예외만 90일 뒤 안전 정리
+        if age_sec > (90 * 86400):
+            del tracked[sym]
+            continue
+        active_syms.append(sym)
 
-    if active_eval_list:
+    if active_syms:
         pending_msgs = []
         pending_videos = []
         with ThreadPoolExecutor(max_workers=8) as ex:
             f_map = {
-                ex.submit(evaluate_single_tracked_1m, s, tracked[s], now_ts, tp_params, force_exp): s
-                for s, force_exp in active_eval_list
+                ex.submit(evaluate_single_tracked_1m, s, tracked[s], now_ts, tp_params): s
+                for s in active_syms
             }
             for fut in as_completed(f_map):
                 s = f_map[fut]
@@ -1296,11 +1264,7 @@ def main(scan_long_term=True):
 
 
 def run_loop_mode(max_iterations=10, sleep_sec=285, max_budget_sec=2640):
-    """
-    [P0-2 수정 · 동적 시간 예산(Wall-Clock Budget) 루프]
-    - 최대 44분(2640초) 예산 또는 매시 :52 이전 정상 종료 → GitHub Actions 77% 강제 취소 완전 해소
-    - 장기 포지션(Track D)은 1 · 4 · 7 · 10회차(약 15분 주기) 탐색 유지
-    """
+    """동적 시간 예산(Wall-Clock Budget) 루프 — 최대 44분 / 매시 :52 이전 정상 종료"""
     loop_start = time.time()
     start_hour = datetime.now(KST).hour
 
@@ -1311,7 +1275,6 @@ def run_loop_mode(max_iterations=10, sleep_sec=285, max_budget_sec=2640):
             if elapsed >= max_budget_sec:
                 print(f"[시간 예산 도달] {elapsed / 60.0:.1f}분 경과로 정각 전 안전 종료합니다.")
                 break
-            # 같은 시각 내에서 매시 :52 도달 시 다음 정각 cron 충돌 방지를 위해 안전 종료
             if now_kst.hour == start_hour and now_kst.minute >= 52:
                 print(f"[정각 안전 종료] {now_kst.strftime('%H:%M KST')} 도달로 다음 정각 스케줄 전 정상 종료합니다.")
                 break
