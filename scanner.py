@@ -191,7 +191,7 @@ def check_btc_market_regime():
         elif regime["btc_15m_pct"] <= BTC_DUMP_DROP_15M_PCT or regime["btc_1h_pct"] <= BTC_DUMP_DROP_1H_PCT:
             regime["gate_mode"] = "COUNTER_TREND_ONLY"
             regime["gate_locked"] = False
-            regime["reason"] = f"BTC 완만 조정 · 역추세(Track E·F) 전용 모드 (15m {regime['btc_15m_pct']:+.2f}%, 1H {regime['btc_1h_pct']:+.2f}%)"
+            regime["reason"] = f"BTC 완만 조정 · 역추세(Track E·F) + 장기(Track D) 전용 모드 (15m {regime['btc_15m_pct']:+.2f}%, 1H {regime['btc_1h_pct']:+.2f}%)"
     except Exception as e:
         print(f"[BTC 레짐 조회 예외] {e}")
     return regime
@@ -1198,6 +1198,7 @@ def main(scan_long_term=True):
 
     if not candidates:
         save_state(state)
+        print(f"[{now_str}] ⚠️ [경고] 후보군 수집 0건 (API 제한/네트워크 확인 필요 | 기존 감시 {sent_count}건 완료)")
         return
 
     oi_ref_map = _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts)
@@ -1269,6 +1270,7 @@ def main(scan_long_term=True):
         to_analyze.append(c)
 
     results = []
+    analyze_err_cnt = 0
     with ThreadPoolExecutor(max_workers=8) as ex:
         f_map = {
             ex.submit(
@@ -1283,12 +1285,15 @@ def main(scan_long_term=True):
             for c in to_analyze
         }
         for fut in as_completed(f_map):
+            sym_a = f_map[fut]
             try:
                 r = fut.result()
                 if r:
                     results.append(r)
-            except Exception:
-                pass
+            except Exception as e:
+                analyze_err_cnt += 1
+                if analyze_err_cnt <= 3:
+                    print(f"[분석 예외] {sym_a}: {e}")
 
     results.sort(key=lambda x: x["score"], reverse=True)
     new_sent = 0
@@ -1355,9 +1360,12 @@ def main(scan_long_term=True):
 
     save_state(state)
     lt_lbl = "장기ON" if scan_long_term else "단기전용"
+    top_info = f"최고 ${results[0].get('base_coin', results[0]['symbol'])} {results[0]['score']}점({results[0]['track_type']})" if results else "통과없음"
+    err_info = f" · 예외{analyze_err_cnt}" if analyze_err_cnt > 0 else ""
     print(
-        f"[{now_str}] 스캔 완료 ({time.time() - start_t:.1f}초 | {lt_lbl} | "
-        f"보유 단기{active_short_cnt}·장기{active_long_cnt} · 고정컷{ELITE_SCORE_THRESHOLD}/재진입{REENTRY_CUT_SCORE} | "
+        f"[{now_str}] 스캔 완료 ({time.time() - start_t:.1f}초 | {lt_lbl} | 게이트:{market_regime['gate_mode']} | "
+        f"퍼널: 후보{len(candidates)}→분석{len(to_analyze)}→통과{len(results)}({top_info}{err_info}) | "
+        f"보유 단기{active_short_cnt}·장기{active_long_cnt} · 컷{ELITE_SCORE_THRESHOLD}/{REENTRY_CUT_SCORE} | "
         f"BTC 15m {market_regime['btc_15m_pct']:+.2f}% / 1H {market_regime['btc_1h_pct']:+.2f}% / 4H {market_regime['btc_4h_pct']:+.2f}%) - 전송 {sent_count}건"
     )
 
