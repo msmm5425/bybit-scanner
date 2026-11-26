@@ -164,8 +164,8 @@ def _evaluate_supply_overlay(symbol, oi_m, turnover_m, market_cap_m, ls_info=Non
     [전 전략 공통 수급 오버레이 (-6 ~ +5점 캡)]
     1) Bybit 단일 스케일 보정 OI/시총(화약고 압축도) & 거래대금/시총(회전율) 가산
     2) Binance · Gate.io · Bitget 통합 스마트머니(고래 S) vs 개미(T) 롱숏 괴리 가감점
-       - 진짜 개미 롱 함정(S<=1.05 & T>=2.20 / S<0.90 & T>=1.90) -5점 차단 유지
-       - 알트코인 구조적 롱 편향을 고려해 경계/단일 리테일 임계치만 현실화
+       - notifier.py의 🔴개미쏠림 기준(S<=1.05 & T>=2.20 / S<0.90 & T>=1.80 / T>=3.00 & div<=0.65)과
+         100% 일치시켜 개미 롱 함정은 -5점으로 확실히 차단
     """
     out = {
         "score_adj": 0,
@@ -220,7 +220,7 @@ def _evaluate_supply_overlay(symbol, oi_m, turnover_m, market_cap_m, ls_info=Non
         elif s_val >= 1.30 and div >= 1.35:
             adj += 2
             out["reasons"].append(f"[{src_lbl}] 스마트머니 롱 우위(고래 {s_val:.2f} / 개미 {t_val:.2f}, +2점)")
-        elif (s_val <= 1.05 and t_val >= 2.20) or (s_val < 0.90 and t_val >= 1.90) or (t_val >= 3.20 and div <= 0.60):
+        elif (s_val <= 1.05 and t_val >= 2.20) or (s_val < 0.90 and t_val >= 1.80) or (t_val >= 3.00 and div <= 0.65):
             adj -= 5
             out["reasons"].append(f"⚠️ [{src_lbl}] 개미 롱 쏠림 함정 경계(고래 {s_val:.2f} vs 개미 {t_val:.2f}, -5점)")
         elif s_val <= 1.10 and t_val >= 2.10 and div <= 0.60:
@@ -568,7 +568,6 @@ def _evaluate_weekly_daily_pro_filter(
         elif has_1d and obv1d_alive and not out["reasons"]:
             out["reasons"].append("1D 일봉 OBV 매집 생존 확인")
 
-        # 장기 1W/1D 가산점 상한 5점 (99점 포화는 방지하면서 A급 88~92점 정상 진입 복원)
         out["score_adj"] = int(min(5, out["score_adj"]))
         return out
 
@@ -814,11 +813,7 @@ def _calculate_macro_longterm_tps(price, turnover_m, oi_m, df_4h, df_1d, df_1w=N
 
 
 def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, funding_pct, df_4h):
-    """
-    [장기 포지션 Track D1~D6 정밀 영점 (기본 84~88점)]
-    - 1W/1D(+2~5) + 수급오버레이(-5~+4) + Q1(+2) + 세션(+1) 결합 시
-      A급 88~92점 · S급 93~97점 분포 (오전 $XPL/$MOODENG 수준 정상 포착 + 99점 포화 방지)
-    """
+    """[장기 포지션 Track D1~D6 정밀 영점 (기본 84~88점)]"""
     if df_4h is None or df_4h.empty or len(df_4h) < 55:
         return None
     if change_24h >= 22.0:
@@ -1346,11 +1341,8 @@ def analyze_symbol(
 
     swing_high_ref = to_float(highs.iloc[-min(len(highs) - 1, 48):-1].max(), price * 1.03)
 
-    # [영점 복원] 수급 점수 평범 8~9점 / 최상 11점 (99점 포화는 방지하면서 디플레이션 해소)
     supply_score = (6 if oi_ratio >= 20.0 else (5 if oi_ratio >= 9.0 else 3)) + (5 if funding_pct < -0.008 else (4 if funding_pct <= 0.012 else 2))
-    # [이중 감점 해소] 정상 돌파 RSI(69~73) 중복 차감 제거 → 극단 과열(74+)에만 -2점 적용
     rsi_chase_pen = -2 if rsi6_15m >= 74.0 else 0
-    # [1안 균형 완화] 미세 BTC 역풍 감점 기준 -1.20% 유지
     btc_tail_bonus = 1 if btc_1h_pct >= 0.30 else (-2 if btc_1h_pct <= -1.20 else 0)
 
     base_supply_reasons = []
