@@ -72,7 +72,7 @@ DEFAULT_FIXED_SL_PCT = int(FIXED_SL_PCT)
 DEFAULT_LONGTERM_SL_PCT = int(LONGTERM_SL_PCT)
 FEE_SLIPPAGE_PCT = float(ROUNDTRIP_FEE_SLIPPAGE_PCT)
 
-# 런타임 전체 캐시(oi_snapshot 포함)는 /tmp 전용, Git 저장 파일은 STATE_FILE(bot_state.json) 단일화
+# 런타임 전체 캐시(oi_snapshot·삭제 툼스톤 포함)는 /tmp 전용, Git 저장 파일은 STATE_FILE(bot_state.json) 단일화
 LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
 GIT_STATE_STAGE_TMP = "/tmp/scanner_git_state_clean.json"
 GIT_PM_STAGE_TMP = "/tmp/postmortem_git_merged.json"
@@ -269,10 +269,98 @@ def sanitize_flags_by_mfe(item):
     return item
 
 
+def _record_pruned_tracked(state, sym, created_at, now_ts):
+    """의도적으로 삭제한 tracked 심볼의 (created_at) 툼스톤 기록 (원격 병합 부활 방지)"""
+    pruned = state.setdefault("_pruned_tracked", {})
+    prev_c = int(to_float((pruned.get(sym) or {}).get("created_at"), 0))
+    pruned[sym] = {"created_at": max(prev_c, int(to_float(created_at, 0))), "pruned_at": int(now_ts)}
+
+
+def _apply_state_cleanup(state, now_ts, rwa_blocked=None):
+    """
+    [P0-1 수정] 의도적 삭제 심볼 부활 방지 및 마감+24h·만료 이력 결정론적 정리
+    - _git_sync_state() 원격 병합 직후에도 호출되어, 삭제 대상 52건 등이 원격에서 되살아나는 현상 원천 차단
+    """
+    rwa_set = set(rwa_blocked or ())
+    tracked = state.setdefault("tracked", {})
+    alert_history = state.setdefault("alert_history", {})
+    sl_history = state.setdefault("sl_history", {})
+    signal_episodes = state.setdefault("signal_episodes", {})
+    pruned = state.setdefault("_pruned_tracked", {})
+
+    for ps in list(pruned.keys()):
+        p_info = pruned.get(ps)
+        if not isinstance(p_info, dict) or (now_ts - int(to_float(p_info.get("pruned_at"), 0))) > 172800:
+            del pruned[ps]
+
+    for h_sym in list(alert_history.keys()):
+        if is_stock_or_tradfi_symbol(h_sym) or (now_ts - int(to_float(alert_history.get(h_sym), 0)) > 172800):
+            del alert_history[h_sym]
+
+    for sl_k in list(sl_history.keys()):
+        sl_v = sl_history.get(sl_k) or {}
+        if is_stock_or_tradfi_symbol(sl_v.get("symbol", "")) or (now_ts - int(to_float(sl_v.get("sl_at"), 0)) > HISTORY_RETENTION_SEC):
+            del sl_history[sl_k]
+
+    for ep_k in list(signal_episodes.keys()):
+        ep = signal_episodes.get(ep_k) or {}
+        sym_ep = str(ep.get("symbol", "")).upper()
+        c_at = int(to_float(ep.get("created_at"), 0))
+        if is_stock_or_tradfi_symbol(sym_ep) or (c_at > 0 and (now_ts - c_at) > EPISODE_RETENTION_SEC):
+            del signal_episodes[ep_k]
+            continue
+        signal_episodes[ep_k] = sanitize_flags_by_mfe(ep)
+        if sym_ep and c_at > int(to_float(alert_history.get(sym_ep), 0)) and (now_ts - c_at) <= 172800:
+            alert_history[sym_ep] = c_at
+
+    for sym in list(tracked.keys()):
+        t_item = tracked.get(sym)
+        if not isinstance(t_item, dict):
+            del tracked[sym]
+            continue
+        base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
+        c_at = int(to_float(t_item.get("created_at"), 0))
+
+        # 툼스톤 일치 시(동일 이하 created_at) 원격에서 복원되지 않도록 즉시 제거
+        p_rec = pruned.get(sym)
+        if isinstance(p_rec, dict) and c_at <= int(to_float(p_rec.get("created_at"), 0)):
+            del tracked[sym]
+            continue
+
+        if is_stock_or_tradfi_symbol(sym) or is_tradfi_ticker(base_c) or (rwa_set and base_c in rwa_set):
+            _record_pruned_tracked(state, sym, c_at, now_ts)
+            del tracked[sym]
+            continue
+
+        is_done = bool(
+            t_item.get("sl_alerted")
+            or t_item.get("tp3_completed")
+            or t_item.get("expired_closed")
+            or t_item.get("closed_alerted")
+        )
+        done_ts = int(to_float(t_item.get("sl_at") or t_item.get("tp3_at") or t_item.get("expired_at") or c_at, c_at))
+        if is_done and (now_ts - done_ts) > 86400:
+            _record_pruned_tracked(state, sym, c_at, now_ts)
+            del tracked[sym]
+            continue
+
+        if c_at > 0 and (now_ts - c_at) > (90 * 86400):
+            _record_pruned_tracked(state, sym, c_at, now_ts)
+            del tracked[sym]
+            continue
+
+
 def _merge_state_dicts(base_state, incoming_state):
-    """상태 딕셔너리 단방향 합집합 병합"""
+    """상태 딕셔너리 단방향 합집합 병합 (_pruned_tracked 툼스톤 존중)"""
     if not isinstance(incoming_state, dict):
         return base_state
+    pruned = base_state.setdefault("_pruned_tracked", {})
+    for ps, pv in (incoming_state.get("_pruned_tracked") or {}).items():
+        if isinstance(pv, dict):
+            prev_p = pruned.get(ps) or {}
+            if int(to_float(pv.get("created_at"), 0)) >= int(to_float(prev_p.get("created_at"), 0)):
+                pruned[ps] = dict(pv)
+
     for s, ts_v in (incoming_state.get("alert_history") or {}).items():
         if not is_stock_or_tradfi_symbol(s):
             base_state["alert_history"][s] = max(int(base_state["alert_history"].get(s, 0)), int(to_float(ts_v, 0)))
@@ -314,6 +402,10 @@ def _merge_state_dicts(base_state, incoming_state):
             continue
         tv = sanitize_flags_by_mfe(dict(tv))
         c_t = int(tv.get("created_at", 0))
+        # [P0-1] 로컬에서 의도적으로 정리(삭제)한 동일 에피소드는 원격 병합 시 부활 금지
+        p_rec = pruned.get(s)
+        if isinstance(p_rec, dict) and c_t <= int(to_float(p_rec.get("created_at"), 0)):
+            continue
         if c_t > 0:
             base_state["alert_history"][s] = max(int(base_state["alert_history"].get(s, 0)), c_t)
         pt = base_state["tracked"].get(s)
@@ -351,7 +443,7 @@ def _merge_state_dicts(base_state, incoming_state):
 
 
 def _build_git_clean_state(state):
-    """Git 저장용 경량 상태 생성 (휘발성 oi_snapshot 제외해 저장소 비대화 원천 차단)"""
+    """Git 저장용 경량 상태 생성 (휘발성 oi_snapshot·런타임 툼스톤 제외)"""
     return {
         "tracked": state.get("tracked") or {},
         "alert_history": state.get("alert_history") or {},
@@ -361,14 +453,20 @@ def _build_git_clean_state(state):
 
 
 def load_state():
-    merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}, "oi_snapshot": {}}
+    merged = {
+        "tracked": {}, "alert_history": {}, "sl_history": {},
+        "signal_episodes": {}, "oi_snapshot": {}, "_pruned_tracked": {},
+    }
+    # 로컬 런타임 캐시(툼스톤 포함)를 먼저 읽어 삭제 심볼이 파일 병합 시 부활하지 않도록 보장
+    _merge_state_dicts(merged, _read_json(LOCAL_RUNTIME_CACHE))
     for path in READ_STATE_FILES:
-        _merge_state_dicts(merged, _read_json(path))
+        if path != LOCAL_RUNTIME_CACHE:
+            _merge_state_dicts(merged, _read_json(path))
     return merged
 
 
 def save_state(state):
-    """전체 런타임 상태(oi_snapshot 포함)는 /tmp에, Git용 단일 상태(bot_state.json)는 경량본으로 저장"""
+    """전체 런타임 상태(oi_snapshot·툼스톤 포함)는 /tmp에, Git용 단일 상태(bot_state.json)는 경량본으로 저장"""
     _write_json_atomic(LOCAL_RUNTIME_CACHE, state)
     _write_json_atomic(STATE_FILE, _build_git_clean_state(state))
 
@@ -463,10 +561,10 @@ def _fetch_post_candles_no_gap(symbol, interval, created_ms, last_checked_ts, no
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     """
-    [기존 전량 홀딩·고정 손절 철학 100% 유지 · 만료 강제 정산 제거]
-    - 단기(SL -6% · 15m 종가 확정) / 장기(SL -20% · 1H 종가 확정)
+    [기존 전량 홀딩·고정 손절 철학 100% 유지 · 만료 강제 정산 제거 · Track D 1H 단독 손절 분리]
+    - 단기(SL -6% · 15m/1m 기준, 방어선 15m 종가 확정)
+    - 장기(Track D: SL -20% · 1H 확정 종가 단독 판정 — 15m/1m 노이즈 손절 혼입 원천 차단)
     - TP1: 100% 전량 홀딩 / TP2: 15m(1H) 종가 안착 시 TP1 방어선 / TP3: 50% 익절 + 잔여 50% 트레일링
-    - 실제 SL 또는 익절 마감이 발생할 때까지 끝까지 추적 (실체결가 - 0.15% 비용반영 정산)
     """
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("expired_closed") or t_item.get("closed_alerted"):
         return None
@@ -480,7 +578,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     trail_mult = 1.0 - (trail_drop_pct / 100.0)
     horizon_tag = "[장기 포지션] " if is_long else ""
 
-    confirm_tf = "60" if is_long else "15"
     confirm_tf_ms = 3600000 if is_long else 900000
     confirm_tf_lbl = "1H" if is_long else "15m"
 
@@ -496,26 +593,8 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     hist_min_low, hist_min_close = None, None
     hist_last_close, hist_last_ts_ms = 0.0, 0
 
-    df_15m = None
-    if (now_ts - created_at) >= 180:
-        df_15m = _fetch_post_candles_no_gap(
-            symbol, "15", created_ms, last_checked_ts, now_ms,
-            fast_limit_sec=30 * 3600, max_bars=500,
-        )
-    if df_15m is not None and not df_15m.empty and "timestamp" in df_15m.columns:
-        post_15m = df_15m[df_15m["timestamp"] >= created_ms]
-        if not post_15m.empty:
-            p_idx = post_15m["high"].idxmax()
-            h_15m = to_float(post_15m.loc[p_idx, "high"], default=entry_ref)
-            if 0.40 <= (h_15m / entry_ref) <= 15.0 and h_15m >= prev_max_h:
-                prev_max_h = h_15m
-                prev_peak_ms = int(to_float(post_15m.loc[p_idx, "timestamp"], default=created_ms))
-            hist_min_low = to_float(post_15m["low"].min(), default=0.0)
-            hist_min_close = to_float(post_15m["close"].min(), default=0.0)
-            hist_last_close = to_float(post_15m["close"].iloc[-1], default=0.0)
-            hist_last_ts_ms = int(to_float(post_15m["timestamp"].iloc[-1], default=0))
-
     if is_long:
+        # [P2 수정] 장기 포지션은 1H 캔들만 조회·평가하여 15m 손절 혼입 원천 차단 + API 절감
         df_confirm = _fetch_post_candles_no_gap(
             symbol, "60", created_ms, last_checked_ts, now_ms,
             fast_limit_sec=5 * 86400, max_bars=750,
@@ -528,16 +607,27 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 if 0.40 <= (h_1h / entry_ref) <= 15.0 and h_1h >= prev_max_h:
                     prev_max_h = h_1h
                     prev_peak_ms = int(to_float(post_1h.loc[p_idx_h, "timestamp"], default=created_ms))
-                low_1h = to_float(post_1h["low"].min(), default=0.0)
-                cls_1h = to_float(post_1h["close"].min(), default=0.0)
-                if low_1h > 0:
-                    hist_min_low = min(hist_min_low, low_1h) if hist_min_low else low_1h
-                if cls_1h > 0:
-                    hist_min_close = min(hist_min_close, cls_1h) if hist_min_close else cls_1h
-                if hist_last_close <= 0:
-                    hist_last_close = to_float(post_1h["close"].iloc[-1], default=0.0)
-                    hist_last_ts_ms = int(to_float(post_1h["timestamp"].iloc[-1], default=0))
+                hist_last_close = to_float(post_1h["close"].iloc[-1], default=0.0)
+                hist_last_ts_ms = int(to_float(post_1h["timestamp"].iloc[-1], default=0))
     else:
+        df_15m = None
+        if (now_ts - created_at) >= 180:
+            df_15m = _fetch_post_candles_no_gap(
+                symbol, "15", created_ms, last_checked_ts, now_ms,
+                fast_limit_sec=30 * 3600, max_bars=500,
+            )
+        if df_15m is not None and not df_15m.empty and "timestamp" in df_15m.columns:
+            post_15m = df_15m[df_15m["timestamp"] >= created_ms]
+            if not post_15m.empty:
+                p_idx = post_15m["high"].idxmax()
+                h_15m = to_float(post_15m.loc[p_idx, "high"], default=entry_ref)
+                if 0.40 <= (h_15m / entry_ref) <= 15.0 and h_15m >= prev_max_h:
+                    prev_max_h = h_15m
+                    prev_peak_ms = int(to_float(post_15m.loc[p_idx, "timestamp"], default=created_ms))
+                hist_min_low = to_float(post_15m["low"].min(), default=0.0)
+                hist_min_close = to_float(post_15m["close"].min(), default=0.0)
+                hist_last_close = to_float(post_15m["close"].iloc[-1], default=0.0)
+                hist_last_ts_ms = int(to_float(post_15m["timestamp"].iloc[-1], default=0))
         df_confirm = df_15m
 
     closed_post_tf = None
@@ -738,47 +828,62 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 f"• 📈  100% 전량 홀딩하며 2차 목표가({fmt_price(tp2_p)}) 돌파를 기대합니다."
             )
 
-    # [2차 확정 전]: 고정 손절선 이탈 감시 (단기 -6% / 장기 -20%)
-    valid_lows = [v for v in (hist_min_low, min_1m_low) if v is not None and v > 0]
-    valid_closes = [v for v in (hist_min_close, min_1m_close) if v is not None and v > 0]
-    if has_live_price and valid_lows and valid_closes:
-        min_low, min_close = min(valid_lows), min(valid_closes)
-        if min_low <= init_stop_p and (min_close <= init_stop_p or (last_close > 0 and last_close <= init_stop_p)):
-            trig = min(min_close, last_close) if last_close > 0 else min_close
-            actual_sl_pct = round(((trig - entry_ref) / entry_ref * 100.0) - FEE_SLIPPAGE_PCT, 2)
-            t_item["sl_alerted"] = True
-            t_item["closed_alerted"] = True
-            t_item["sl_at"] = now_ts
-            t_item["exit_price"] = trig
-            t_item["realized_weighted_pct"] = actual_sl_pct
-            oi_r_val = to_float(t_item.get("oi_ratio"), 0.0)
-            if oi_r_val <= 0 and to_float(t_item.get("turnover_m"), 0.0) > 0:
-                oi_r_val = round(to_float(t_item.get("oi_m"), 0.0) / to_float(t_item.get("turnover_m"), 1.0) * 100.0, 1)
-            sl_payload = {
-                "symbol": symbol, "track_type": t_item.get("track_type", "TRACK_A"),
-                "score": int(t_item.get("score", ELITE_SCORE_THRESHOLD)), "entry_price": entry_ref,
-                "stop_price": init_stop_p, "sl_trigger_price": trig,
-                "sl_pct": sl_pct_use, "actual_sl_pct": actual_sl_pct,
-                "created_at": created_at, "sl_at": now_ts,
-                "hold_minutes": hold_min, "max_high_price": max_high, "max_favorable_pct": max_fav,
-                "vol_mult": to_float(t_item.get("vol_mult", 1.0)), "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
-                "oi_m": to_float(t_item.get("oi_m", 0.0)), "oi_ratio": oi_r_val,
-                "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
-                "change_24h": to_float(t_item.get("change_24h", 0.0)),
-                "btc_1h_pct": to_float(t_item.get("btc_1h_pct", 0.0)),
-                "reasons": t_item.get("reasons", []),
-            }
-            if postmortem is not None and hasattr(postmortem, "record_sl_postmortem"):
-                try:
-                    postmortem.record_sl_postmortem(sl_payload)
-                except Exception:
-                    pass
-            msgs.append(
-                f"⚠️ {horizon_tag}[손절 기준가 이탈] ${base} ({symbol})\n"
-                f"• 이탈 확인가: {fmt_price(trig)} USDT (손절선 {fmt_price(init_stop_p)}, 실정산 {actual_sl_pct:+.2f}%)\n"
-                f"• 진입 후 최고 상승폭: +{max_fav:.1f}% (보유 {hold_min}분)"
-            )
-            return {"messages": msgs, "sl_record": (f"{symbol}_{created_at}", sl_payload), "video_payload": None}
+    # [2차 확정 전]: 고정 손절선 이탈 감시
+    # - 장기(is_long=True): 오직 확정된 1H 종가(closed_post_tf) 기준으로만 -20% 손절 판정 (15m/1m 노이즈 배제)
+    # - 단기(is_long=False): 15m/1m 저가·종가 기준 -6% 손절 판정
+    sl_triggered = False
+    trig = 0.0
+    if is_long:
+        if has_closed_bar:
+            sl_1h_bars = closed_post_tf[closed_post_tf["close"].astype(float) <= init_stop_p]
+            if not sl_1h_bars.empty:
+                sl_triggered = True
+                trig = to_float(sl_1h_bars["close"].iloc[0], last_closed_c)
+    else:
+        valid_lows = [v for v in (hist_min_low, min_1m_low) if v is not None and v > 0]
+        valid_closes = [v for v in (hist_min_close, min_1m_close) if v is not None and v > 0]
+        if has_live_price and valid_lows and valid_closes:
+            min_low, min_close = min(valid_lows), min(valid_closes)
+            if min_low <= init_stop_p and (min_close <= init_stop_p or (last_close > 0 and last_close <= init_stop_p)):
+                sl_triggered = True
+                trig = min(min_close, last_close) if last_close > 0 else min_close
+
+    if sl_triggered and trig > 0:
+        actual_sl_pct = round(((trig - entry_ref) / entry_ref * 100.0) - FEE_SLIPPAGE_PCT, 2)
+        t_item["sl_alerted"] = True
+        t_item["closed_alerted"] = True
+        t_item["sl_at"] = now_ts
+        t_item["exit_price"] = trig
+        t_item["realized_weighted_pct"] = actual_sl_pct
+        oi_r_val = to_float(t_item.get("oi_ratio"), 0.0)
+        if oi_r_val <= 0 and to_float(t_item.get("turnover_m"), 0.0) > 0:
+            oi_r_val = round(to_float(t_item.get("oi_m"), 0.0) / to_float(t_item.get("turnover_m"), 1.0) * 100.0, 1)
+        sl_payload = {
+            "symbol": symbol, "track_type": t_item.get("track_type", "TRACK_A"),
+            "score": int(t_item.get("score", ELITE_SCORE_THRESHOLD)), "entry_price": entry_ref,
+            "stop_price": init_stop_p, "sl_trigger_price": trig,
+            "sl_pct": sl_pct_use, "actual_sl_pct": actual_sl_pct,
+            "created_at": created_at, "sl_at": now_ts,
+            "hold_minutes": hold_min, "max_high_price": max_high, "max_favorable_pct": max_fav,
+            "vol_mult": to_float(t_item.get("vol_mult", 1.0)), "rsi6_15m": to_float(t_item.get("rsi6_15m", 50.0)),
+            "oi_m": to_float(t_item.get("oi_m", 0.0)), "oi_ratio": oi_r_val,
+            "funding_pct": to_float(t_item.get("funding_pct", 0.0)),
+            "change_24h": to_float(t_item.get("change_24h", 0.0)),
+            "btc_1h_pct": to_float(t_item.get("btc_1h_pct", 0.0)),
+            "reasons": t_item.get("reasons", []),
+        }
+        if postmortem is not None and hasattr(postmortem, "record_sl_postmortem"):
+            try:
+                postmortem.record_sl_postmortem(sl_payload)
+            except Exception:
+                pass
+        sl_basis_txt = "1H 종가 이탈" if is_long else "이탈 확인가"
+        msgs.append(
+            f"⚠️ {horizon_tag}[손절 기준가 이탈] ${base} ({symbol})\n"
+            f"• {sl_basis_txt}: {fmt_price(trig)} USDT (손절선 {fmt_price(init_stop_p)}, 실정산 {actual_sl_pct:+.2f}%)\n"
+            f"• 진입 후 최고 상승폭: +{max_fav:.1f}% (보유 {hold_min}분)"
+        )
+        return {"messages": msgs, "sl_record": (f"{symbol}_{created_at}", sl_payload), "video_payload": None}
 
     return {"messages": msgs, "sl_record": None, "video_payload": None}
 
@@ -906,9 +1011,9 @@ def run_latest_profit_video_test():
 
 def _git_sync_state():
     """
-    [Git .py 롤백 원천 차단]
-    - 병합 완료된 JSON만 /tmp에 저장 → git reset --hard origin/main으로 최신 코드 100% 보존 →
-      오직 bot_state.json(단일화, oi_snapshot 제외)과 postmortem_db.json만 커밋·푸시
+    [Git .py 롤백 차단 + 삭제 심볼 부활 방지]
+    - 병합 완료된 JSON에 _apply_state_cleanup() 재적용 → /tmp 보관
+    - git reset --hard origin/main으로 최신 코드 100% 보존 → bot_state.json·postmortem_db.json만 커밋·푸시
     """
     is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
     if not is_ci:
@@ -923,6 +1028,7 @@ def _git_sync_state():
                 time.sleep(2.0)
                 continue
 
+            now_sync = int(time.time())
             loc_dict = load_state()
             for rf in (STATE_FILE, LEGACY_DUPLICATE_STATE_FILE):
                 show_res = subprocess.run(["git", "show", f"origin/main:{rf}"], capture_output=True, text=True, check=False)
@@ -931,6 +1037,8 @@ def _git_sync_state():
                         loc_dict = _merge_state_dicts(loc_dict, json.loads(show_res.stdout))
                     except Exception:
                         pass
+            # 원격 병합 직후에도 툼스톤 및 마감+24h 정리 재적용 (삭제 심볼 부활 원천 방지)
+            _apply_state_cleanup(loc_dict, now_sync)
             _write_json_atomic(LOCAL_RUNTIME_CACHE, loc_dict)
             _write_json_atomic(GIT_STATE_STAGE_TMP, _build_git_clean_state(loc_dict))
 
@@ -1011,48 +1119,20 @@ def main(scan_long_term=True):
     candidates, _, rwa_blocked = get_scanner_candidates()
     sent_count = 0
 
-    for h_sym in list(alert_history.keys()):
-        if is_stock_or_tradfi_symbol(h_sym) or (now_ts - int(alert_history.get(h_sym, 0)) > 172800):
-            del alert_history[h_sym]
-    for sl_k in list(sl_history.keys()):
-        sl_v = sl_history.get(sl_k) or {}
-        if is_stock_or_tradfi_symbol(sl_v.get("symbol", "")) or (now_ts - int(sl_v.get("sl_at", 0)) > HISTORY_RETENTION_SEC):
-            del sl_history[sl_k]
-    for ep_k in list(signal_episodes.keys()):
-        ep = signal_episodes.get(ep_k) or {}
-        sym_ep = str(ep.get("symbol", "")).upper()
-        c_at = int(ep.get("created_at", 0))
-        if is_stock_or_tradfi_symbol(sym_ep) or (now_ts - c_at > EPISODE_RETENTION_SEC):
-            del signal_episodes[ep_k]
-            continue
-        signal_episodes[ep_k] = sanitize_flags_by_mfe(ep)
-        if sym_ep and c_at > int(alert_history.get(sym_ep, 0)):
-            alert_history[sym_ep] = c_at
+    # [P0-1] 이력 및 마감+24h·실제 TradFi 항목 정리 (툼스톤 기록 포함)
+    _apply_state_cleanup(state, now_ts, rwa_blocked=rwa_blocked)
 
     # [1단계] 기존 보유 포지션 감시 (만료 자동 정산 없이 실제 SL 또는 익절 마감까지 끝까지 추적)
     active_syms = []
     for sym in list(tracked.keys()):
-        base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         t_item = tracked[sym]
         c_at = int(t_item.get("created_at", 0))
-        age_sec = now_ts - c_at
-        if is_stock_or_tradfi_symbol(sym) or is_tradfi_ticker(base_c) or base_c in rwa_blocked:
-            del tracked[sym]
-            continue
         sync_episode_ledger(signal_episodes, sym, t_item, sl_history)
-        if c_at > int(alert_history.get(sym, 0)):
+        if c_at > int(alert_history.get(sym, 0)) and (now_ts - c_at) <= 172800:
             alert_history[sym] = c_at
         is_done = bool(t_item.get("sl_alerted") or t_item.get("tp3_completed") or t_item.get("expired_closed") or t_item.get("closed_alerted"))
-        done_ts = int(t_item.get("sl_at") or t_item.get("tp3_at") or t_item.get("expired_at") or c_at)
-        if is_done:
-            if (now_ts - done_ts) > 86400:
-                del tracked[sym]
-            continue
-        # 상폐 등으로 영원히 안 닫히는 예외만 90일 뒤 안전 정리
-        if age_sec > (90 * 86400):
-            del tracked[sym]
-            continue
-        active_syms.append(sym)
+        if not is_done:
+            active_syms.append(sym)
 
     if active_syms:
         pending_msgs = []
@@ -1263,10 +1343,13 @@ def main(scan_long_term=True):
     )
 
 
-def run_loop_mode(max_iterations=10, sleep_sec=285, max_budget_sec=2640):
-    """동적 시간 예산(Wall-Clock Budget) 루프 — 최대 44분 / 매시 :52 이전 정상 종료"""
+def run_loop_mode(max_iterations=10, sleep_sec=285, max_budget_sec=2640, min_runtime_sec=900):
+    """
+    [P2 수정 · 크론 지연 안전 시간 예산 루프]
+    - :48~:55 지연 시작 런이 1회만 돌고 조기 종료되지 않도록 최소 가동 시간(15분) 보장
+    - 정시 시작 런은 매시 :52 이전(또는 최대 44분)에 정상 종료
+    """
     loop_start = time.time()
-    start_hour = datetime.now(KST).hour
 
     for i in range(1, max_iterations + 1):
         elapsed = time.time() - loop_start
@@ -1275,11 +1358,8 @@ def run_loop_mode(max_iterations=10, sleep_sec=285, max_budget_sec=2640):
             if elapsed >= max_budget_sec:
                 print(f"[시간 예산 도달] {elapsed / 60.0:.1f}분 경과로 정각 전 안전 종료합니다.")
                 break
-            if now_kst.hour == start_hour and now_kst.minute >= 52:
-                print(f"[정각 안전 종료] {now_kst.strftime('%H:%M KST')} 도달로 다음 정각 스케줄 전 정상 종료합니다.")
-                break
-            if now_kst.hour != start_hour and elapsed >= 1200:
-                print(f"[정각 경과 안전 종료] {now_kst.strftime('%H:%M KST')} ({elapsed / 60.0:.1f}분 경과) 정상 종료합니다.")
+            if elapsed >= min_runtime_sec and now_kst.minute >= 52:
+                print(f"[정각 안전 종료] {now_kst.strftime('%H:%M KST')} ({elapsed / 60.0:.1f}분 경과) 정상 종료합니다.")
                 break
 
         scan_lt = (i % 3 == 1)
@@ -1292,10 +1372,14 @@ def run_loop_mode(max_iterations=10, sleep_sec=285, max_budget_sec=2640):
         _git_sync_state()
 
         if i < max_iterations:
-            rem_budget = max_budget_sec - (time.time() - loop_start)
+            elapsed_after = time.time() - loop_start
+            rem_budget = max_budget_sec - elapsed_after
             now_after = datetime.now(KST)
-            sec_to_52 = max(0, (52 - now_after.minute) * 60 - now_after.second) if now_after.hour == start_hour else rem_budget
-            max_wait_allowed = min(rem_budget - 45.0, sec_to_52 - 20.0)
+            sec_to_52 = max(0, (52 - now_after.minute) * 60 - now_after.second)
+            if now_after.minute < 52 and (elapsed_after + sec_to_52) >= min_runtime_sec:
+                max_wait_allowed = min(rem_budget - 45.0, sec_to_52 - 20.0)
+            else:
+                max_wait_allowed = rem_budget - 45.0
             if max_wait_allowed < 60.0:
                 print(f"[루프 정상 마무리] 잔여 시간 여유 부족({max_wait_allowed:.0f}초)으로 안전 종료합니다.")
                 break
