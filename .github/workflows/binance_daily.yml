@@ -37,6 +37,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          BYBIT_PROXY_URL: ${{ secrets.BYBIT_PROXY_URL }}
         run: python binance_analyzer.py
 
       - name: Commit & Push Learned DNA Profile, Market Cap Cache & History
