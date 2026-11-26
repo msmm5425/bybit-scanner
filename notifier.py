@@ -1,35 +1,36 @@
 import os, re, io, sys, time, json, shutil, tempfile, subprocess, urllib.parse, requests
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
-try:
-    import config as cfg
-    TELEGRAM_BOT_TOKEN = getattr(cfg, "TELEGRAM_BOT_TOKEN", "")
-    TELEGRAM_CHAT_ID = getattr(cfg, "TELEGRAM_CHAT_ID", "")
-    FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
-    KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
-    BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
-except Exception:
-    cfg = None
-    TELEGRAM_BOT_TOKEN = ""
-    TELEGRAM_CHAT_ID = ""
-    FIXED_SL_PCT = 6
-    KST = timezone(timedelta(hours=9))
-    BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0"}
+import config as cfg
+from config import (
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+    FIXED_SL_PCT,
+    LONGTERM_SL_PCT,
+    KST,
+    BROWSER_HEADERS,
+    to_float,
+)
 
 try:
     import api as api_mod
+    from api import clean_url
 except Exception:
     api_mod = None
 
-if not TELEGRAM_BOT_TOKEN:
-    TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
-if not TELEGRAM_CHAT_ID:
-    TELEGRAM_CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
+    def clean_url(raw_url):
+        s = str(raw_url or "").strip()
+        s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\2", s)
+        s = s.replace("[", "").replace("]", "")
+        if not s.startswith("http"):
+            s = ("ht" + "tps://") + s.lstrip("/")
+        return s
 
 SCHEME = "ht" + "tps://"
 WATERMARK_HANDLE = "@DnaPyung"
+LOCAL_LW_CHARTS_JS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "lightweight-charts.standalone.production.js")
 _PLAYWRIGHT_READY = False
 LAST_VIDEO_ERROR = ""
 
@@ -38,21 +39,20 @@ def get_last_video_error():
     return LAST_VIDEO_ERROR
 
 
-def clean_url(raw_url):
-    s = str(raw_url or "").strip()
-    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\2", s)
-    s = s.replace("[", "").replace("]", "")
-    if not s.startswith("http"):
-        s = SCHEME + s.lstrip("/")
-    return s
-
-
-def to_float(value, default=0.0):
-    try:
-        val = float(value)
-        return default if np.isnan(val) or np.isinf(val) else val
-    except Exception:
-        return default
+def _get_lw_charts_script_tags():
+    """로컬 JS 번들(assets/lightweight-charts...) 우선 로드 + unpkg/jsdelivr 이중 CDN 폴백"""
+    lw_unpkg = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
+    lw_jsdelivr = clean_url(f"{SCHEME}cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
+    if os.path.exists(LOCAL_LW_CHARTS_JS):
+        local_uri = "file://" + LOCAL_LW_CHARTS_JS.replace("\\", "/")
+        return (
+            f'<script src="{local_uri}"></script>\n'
+            f'<script>if(typeof LightweightCharts==="undefined"){{document.write(\'<scr\'+\'ipt src="{lw_unpkg}"></scr\'+\'ipt>\');}}</script>'
+        )
+    return (
+        f'<script src="{lw_unpkg}"></script>\n'
+        f'<script>if(typeof LightweightCharts==="undefined"){{document.write(\'<scr\'+\'ipt src="{lw_jsdelivr}"></scr\'+\'ipt>\');}}</script>'
+    )
 
 
 def fmt_price(price):
@@ -189,7 +189,7 @@ def build_briefing_message(res, now_str):
     is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
     title = res.get("track_title", "🐋 [장기 포지션 · 세력 대시세 매집 초입]" if is_long else "🚀 [타점 포착]")
     horizon = res.get("position_horizon", "장기 포지션 (1개월 이상 홀딩 예상)" if is_long else "단기·스윙 포지션")
-    score = res.get("score", 90)
+    score = res.get("score", 88)
     price = to_float(res.get("price"))
     chg = to_float(res.get("change_24h"))
     turn_m = to_float(res.get("turnover_m"))
@@ -205,7 +205,7 @@ def build_briefing_message(res, now_str):
     e_low = to_float(res.get("entry_low"), price * 0.9970)
     e_high = to_float(res.get("entry_high"), price * 1.0015)
     sl_p = to_float(res.get("stop_price"))
-    sl_pct = int(round(to_float(res.get("sl_pct"), 20 if is_long else FIXED_SL_PCT)))
+    sl_pct = int(round(to_float(res.get("sl_pct"), LONGTERM_SL_PCT if is_long else FIXED_SL_PCT)))
     sl_note = res.get("sl_note", f"장기 고정손절(-{sl_pct}%)" if is_long else f"고정손절(-{sl_pct}%)")
 
     tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
@@ -311,7 +311,7 @@ def build_x_hook_line(res):
             "밑꼬리 개미털기 후 매수세 재유입되며 단기 추세 재가동중",
         ], symbol)
 
-    # 3) 수급심층 특화 훅 (고래 압도적 우위 또는 OI/시총 고압 화약고)
+    # 3) 수급심층 특화 훅
     oi_mc_pct = to_float(res.get("oi_mc_pct"), 0.0)
     top_ls = to_float(res.get("top_ls"), 0.0)
     retail_ls = to_float(res.get("retail_ls"), 0.0)
@@ -327,7 +327,7 @@ def build_x_hook_line(res):
             "과적재된 선물 OI에 매수 거래량 점화! 강한 변동성 분출 직전 타점",
         ], symbol)
 
-    # 4) 단기·스윙 트랙별 맞춤 훅 (Track A ~ H)
+    # 4) 단기·스윙 트랙별 맞춤 훅
     if track_type == "TRACK_H":
         return _pick_variant([
             "최근 급등 대장주 Top 5 발사 직전 DNA 패턴과 일치하는 초입 포착",
@@ -376,6 +376,7 @@ def build_x_hook_line(res):
 
 
 def build_x_post_message(res):
+    """기존 확정된 일본어 최상단 헤더 + 한국어 본문 X 포스팅 양식 100% 유지"""
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
     is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
@@ -383,7 +384,7 @@ def build_x_post_message(res):
     e_low = to_float(res.get("entry_low"), price * 0.9970)
     e_high = to_float(res.get("entry_high"), price * 1.0015)
     sl_p = to_float(res.get("stop_price"))
-    sl_pct = int(round(to_float(res.get("sl_pct"), 20 if is_long else FIXED_SL_PCT)))
+    sl_pct = int(round(to_float(res.get("sl_pct"), LONGTERM_SL_PCT if is_long else FIXED_SL_PCT)))
 
     tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
     tp_pcts = res.get("tp_pcts") or [8.0, 15.0, 22.0]
@@ -435,11 +436,12 @@ def build_x_intent_reply_markup(x_post_text, button_label="🚀 X(트위터) 앱
 
 
 def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
+    """[P2-1 수정] 임시 HTML 파일 finally 정리 보장 + 비선형 압축 표식 + 로컬 JS 번들 우선 지원"""
     if not _ensure_playwright():
         return None
     symbol = res.get("symbol", "")
     base = res.get("base_coin") or res.get("base") or symbol.replace("USDT", "")
-    score = res.get("score", 90)
+    score = res.get("score", 88)
     track_type = res.get("track_type", "TRACK_A")
     is_long = bool(res.get("is_long_term") or track_type == "TRACK_D")
     sub_s = str(res.get("sub_strategy", "")).upper()
@@ -454,7 +456,7 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
 
     orig_entry = to_float(res.get("price"), price)
     ratio_adj = price / orig_entry if orig_entry > 0 else 1.0
-    sl_pct = int(round(to_float(res.get("sl_pct"), 20 if is_long else FIXED_SL_PCT)))
+    sl_pct = int(round(to_float(res.get("sl_pct"), LONGTERM_SL_PCT if is_long else FIXED_SL_PCT)))
     sl_p = to_float(res.get("stop_price"), price * (1.0 - sl_pct / 100.0)) * ratio_adj
     tps = res.get("tps") or [price * 1.08, price * 1.15, price * 1.22]
     tp_pcts = res.get("tp_pcts") or [8.0, 15.0, 22.0]
@@ -479,6 +481,11 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
         float(np.clip((core_span * 0.14) / max(low_piv - sl_p, price * 0.008), 0.06, 1.0))
         if sl_p < low_piv
         else 1.0
+    )
+    comp_badge_html = (
+        '<span style="color:#9598a1">⚡Y축 TP구간 압축</span>'
+        if (up_comp < 0.98 or down_comp < 0.98)
+        else ""
     )
 
     def _fwd(val):
@@ -559,12 +566,10 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     }.get(track_type, track_type)
     decimals = 6 if price < 0.01 else (5 if price < 1 else (4 if price < 10 else (3 if price < 1000 else 2)))
     min_move = 10 ** (-decimals)
-    lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
-    lw_fallback_url = clean_url(f"{SCHEME}cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
+    lw_script_tags = _get_lw_charts_script_tags()
 
     html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<script src="{lw_script_url}"></script>
-<script>if(typeof LightweightCharts==='undefined'){{document.write('<scr'+'ipt src="{lw_fallback_url}"></scr'+'ipt>');}}</script>
+{lw_script_tags}
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#d1d4dc;width:1160px;height:680px;overflow:hidden}}
@@ -606,6 +611,7 @@ body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,Roboto,san
       <span style="color:#ffd166">● MA(9) {fmt_price(df["ma9"].iloc[-1])}</span>
       <span style="color:#2962ff">● MA(20) {fmt_price(df["ma20"].iloc[-1])}</span>
       <span style="color:#ff9800">▤ {fib_dir_tag}</span>
+      {comp_badge_html}
     </div>
     <div id="fib-overlay"></div>
   </div>
@@ -731,6 +737,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
 }}));
 </script></body></html>"""
 
+    tmp_html_path = None
     try:
         from playwright.sync_api import sync_playwright
         with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as f:
@@ -738,19 +745,23 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
             tmp_html_path = f.name
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
-            page = browser.new_page(viewport={"width": 1160, "height": 680}, device_scale_factor=1.5)
-            page.goto(f"file://{tmp_html_path}", wait_until="load", timeout=25000)
-            page.wait_for_function("window.__CHART_DONE === true", timeout=10000)
-            page.wait_for_timeout(200)
-            png_bytes = page.screenshot(type="png")
-            browser.close()
-        try:
-            os.remove(tmp_html_path)
-        except Exception:
-            pass
+            try:
+                page = browser.new_page(viewport={"width": 1160, "height": 680}, device_scale_factor=1.5)
+                page.goto(f"file://{tmp_html_path}", wait_until="load", timeout=25000)
+                page.wait_for_function("window.__CHART_DONE === true", timeout=10000)
+                page.wait_for_timeout(200)
+                png_bytes = page.screenshot(type="png")
+            finally:
+                browser.close()
         return png_bytes
     except Exception:
         return None
+    finally:
+        if tmp_html_path and os.path.exists(tmp_html_path):
+            try:
+                os.remove(tmp_html_path)
+            except Exception:
+                pass
 
 
 def generate_signal_chart_bytes(res):
@@ -904,7 +915,7 @@ def generate_profit_replay_video_bytes(close_info):
     is_long = bool(close_info.get("is_long_term") or close_info.get("track_type") == "TRACK_D")
     track_type = str(close_info.get("track_type", "TRACK_A"))
     close_type = str(close_info.get("close_type", "TP3_TRAILING"))
-    sl_pct = int(round(to_float(close_info.get("sl_pct"), 20 if is_long else FIXED_SL_PCT)))
+    sl_pct = int(round(to_float(close_info.get("sl_pct"), LONGTERM_SL_PCT if is_long else FIXED_SL_PCT)))
     sl_p = to_float(close_info.get("initial_stop_price"), entry_p * (1.0 - sl_pct / 100.0))
     tps = close_info.get("tps") or [entry_p * 1.08, entry_p * 1.15, entry_p * 1.22]
     tp1_p = to_float(tps[0], entry_p * 1.08)
@@ -953,8 +964,7 @@ def generate_profit_replay_video_bytes(close_info):
     ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, tail_bars + 1)]
     decimals = 6 if entry_p < 0.01 else (5 if entry_p < 1 else (4 if entry_p < 10 else (3 if entry_p < 1000 else 2)))
     min_move = 10 ** (-decimals)
-    lw_script_url = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
-    lw_fallback_url = clean_url(f"{SCHEME}cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
+    lw_script_tags = _get_lw_charts_script_tags()
 
     pos_badge = "LONG-TERM REPLAY" if is_long else f"{track_type.replace('_', ' ')} REPLAY"
     price_diff_abs = abs(exit_p - entry_p)
@@ -970,8 +980,7 @@ def generate_profit_replay_video_bytes(close_info):
     outro_static_start = 270
 
     html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<script src="{lw_script_url}"></script>
-<script>if(typeof LightweightCharts==='undefined'){{document.write('<scr'+'ipt src="{lw_fallback_url}"></scr'+'ipt>');}}</script>
+{lw_script_tags}
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR',sans-serif;color:#d1d4dc;width:1280px;height:720px;overflow:hidden}}
@@ -1468,27 +1477,29 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                     headless=True,
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
                 )
-                page = browser.new_page(viewport={"width": 1280, "height": 720}, device_scale_factor=1)
-                page.on("pageerror", lambda err: js_errors.append(str(err)))
-                page.goto(f"file://{html_path}", wait_until="load", timeout=25000)
-                page.wait_for_function("window.__REPLAY_READY === true", timeout=15000)
-                page.wait_for_timeout(120)
+                try:
+                    page = browser.new_page(viewport={"width": 1280, "height": 720}, device_scale_factor=1)
+                    page.on("pageerror", lambda err: js_errors.append(str(err)))
+                    page.goto(f"file://{html_path}", wait_until="load", timeout=25000)
+                    page.wait_for_function("window.__REPLAY_READY === true", timeout=15000)
+                    page.wait_for_timeout(120)
 
-                for fi in range(total_frames):
-                    dst_jpg = os.path.join(tmpdir, f"f_{fi:04d}.jpg")
-                    if 1 <= fi < thumb_end:
-                        shutil.copyfile(os.path.join(tmpdir, "f_0000.jpg"), dst_jpg)
-                        continue
-                    if (thumb_end + 1) <= fi < play_start:
-                        shutil.copyfile(os.path.join(tmpdir, f"f_{thumb_end:04d}.jpg"), dst_jpg)
-                        continue
-                    if fi > outro_static_start:
-                        shutil.copyfile(os.path.join(tmpdir, f"f_{outro_static_start:04d}.jpg"), dst_jpg)
-                        continue
+                    for fi in range(total_frames):
+                        dst_jpg = os.path.join(tmpdir, f"f_{fi:04d}.jpg")
+                        if 1 <= fi < thumb_end:
+                            shutil.copyfile(os.path.join(tmpdir, "f_0000.jpg"), dst_jpg)
+                            continue
+                        if (thumb_end + 1) <= fi < play_start:
+                            shutil.copyfile(os.path.join(tmpdir, f"f_{thumb_end:04d}.jpg"), dst_jpg)
+                            continue
+                        if fi > outro_static_start:
+                            shutil.copyfile(os.path.join(tmpdir, f"f_{outro_static_start:04d}.jpg"), dst_jpg)
+                            continue
 
-                    page.evaluate(f"window.__renderFrame({fi})")
-                    page.screenshot(path=dst_jpg, type="jpeg", quality=88)
-                browser.close()
+                        page.evaluate(f"window.__renderFrame({fi})")
+                        page.screenshot(path=dst_jpg, type="jpeg", quality=88)
+                finally:
+                    browser.close()
 
             cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
