@@ -9,7 +9,6 @@ RETENTION_SEC = 14 * 86400
 ENGINE_VER = "v3"
 _DB_LOCK = threading.RLock()
 
-# [P1-2 성능 최적화] 종목 평가마다 반복되던 디스크 json.load 병목 제거 (mtime 기반 자동 갱신 캐시)
 _DB_MEM_CACHE = {"mtime": -1.0, "ts": 0.0, "data": None}
 _TOXIC_MEM_CACHE = {"updated_at": -1, "ts": 0.0, "data": {}}
 
@@ -70,7 +69,11 @@ def _save_db_unlocked(data):
 
 
 def merge_postmortem_dbs(local_db, remote_db):
-    """원격과 로컬 postmortem_db.json을 ID 기준 합집합 병합 (autopsy_done=True 우선 보존)"""
+    """
+    원격과 로컬 postmortem_db.json을 ID 기준 합집합 병합
+    - [중복 커밋 방지] records/wins에 실제 변화가 없으면 updated_at을 기존 값으로 유지해
+      5분마다 의미 없는 1줄 커밋이 중복 생성되지 않도록 최적화
+    """
     now_ts = int(time.time())
     l_db = local_db if isinstance(local_db, dict) else {}
     r_db = remote_db if isinstance(remote_db, dict) else {}
@@ -112,10 +115,17 @@ def merge_postmortem_dbs(local_db, remote_db):
 
     recs_sorted = sorted(rec_map.values(), key=lambda x: int(_to_float(x.get("sl_at"), 0)), reverse=True)[:250]
     wins_sorted = sorted(win_map.values(), key=lambda x: int(_to_float(x.get("win_at"), 0)), reverse=True)[:250]
+
+    r_recs = r_db.get("records") if isinstance(r_db.get("records"), list) else []
+    r_wins = r_db.get("wins") if isinstance(r_db.get("wins"), list) else []
+    base_upd = max(int(_to_float(l_db.get("updated_at"), 0)), int(_to_float(r_db.get("updated_at"), 0)))
+    content_changed = (recs_sorted != r_recs) or (wins_sorted != r_wins)
+    final_upd = now_ts if (content_changed or base_upd <= 0) else base_upd
+
     return {
         "records": recs_sorted,
         "wins": wins_sorted,
-        "updated_at": max(int(_to_float(l_db.get("updated_at"), 0)), int(_to_float(r_db.get("updated_at"), 0)), now_ts),
+        "updated_at": final_upd,
         "engine_ver": ENGINE_VER,
     }
 
@@ -135,7 +145,7 @@ def classify_sl_cause(sl_item):
         return "기상승 고점 추격 진입"
     if rsi_v >= 70.0:
         return "단기 고점 RSI 과열 추격"
-    if btc_1h <= -0.5 and hold_m <= 60:
+    if btc_1h <= -1.0 and hold_m <= 60:
         return "BTC 역풍 구간 진입"
     if vol_m < 1.8 and max_f < 2.0:
         return "돌파 거래량 부족(가짜 돌파)"
@@ -253,10 +263,9 @@ def record_win_postmortem(win_payload):
 
 def run_post_sl_autopsy(fetch_klines_fn, max_checks=4):
     """
-    [P1-2 수정 · 손절 사후 부검 임계치 현실화 (100% NEUTRAL_CHOP 해소)]
-    - EARLY_ENTRY(스탑헌팅 헛털림): 진입가 대비 +6.0% 이상 반등 OR 손절가 대비 +12.0% 이상 반등
-    - TOXIC_BREAKOUT(구조 붕괴): 손절가 대비 -5.0% 이하 추가 하락
-    - 15분봉 limit=100 (25시간 전체 커버) 유지
+    손절 사후 부검 (25시간 커버)
+    - EARLY_ENTRY: 진입가 대비 +6.0% 이상 반등 OR 손절가 대비 +12.0% 이상 반등
+    - TOXIC_BREAKOUT: 손절가 대비 -5.0% 이하 추가 하락
     """
     if not callable(fetch_klines_fn):
         return 0
@@ -372,7 +381,7 @@ def _compute_toxic_patterns(recs, wins, now_ts, db_updated_at=-1):
         ("funding_overheat", "펀딩비 과열(>=+0.02%)", 8, lambda x: _to_float(x.get("funding_pct"), 0.0) >= 0.020),
         ("pump_chase", "기상승 추격(24h>=+25%)", 8, lambda x: _to_float(x.get("change_24h"), 0.0) >= 25.0),
         ("low_oi_ratio", "저OI 빈수급(OI비중<8%)", 7, lambda x: 0.0 < _to_float(x.get("oi_ratio"), 0.0) < 8.0),
-        ("btc_headwind", "BTC 역풍 진입(1H<-0.5%)", 7, lambda x: _to_float(x.get("btc_1h_pct"), 0.0) < -0.5),
+        ("btc_headwind", "BTC 역풍 진입(1H<-1.0%)", 7, lambda x: _to_float(x.get("btc_1h_pct"), 0.0) < -1.0),
     ]
 
     active_toxic = {}
@@ -487,7 +496,7 @@ def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
             penalty += toxic_map["pump_chase"]["penalty"]
         if "low_oi_ratio" in toxic_map and 0.0 < oi_r < 8.0:
             penalty += toxic_map["low_oi_ratio"]["penalty"]
-        if "btc_headwind" in toxic_map and btc_1h < -0.5 and tk not in ("TRACK_E", "TRACK_F"):
+        if "btc_headwind" in toxic_map and btc_1h < -1.0 and tk not in ("TRACK_E", "TRACK_F"):
             penalty += toxic_map["btc_headwind"]["penalty"]
         if "weak_session" in toxic_map and kst_blk == toxic_map["weak_session"].get("block"):
             penalty += toxic_map["weak_session"]["penalty"]
