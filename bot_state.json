@@ -3007,33 +3007,6 @@
     "ICPUSDT": 1795674732
   },
   "sl_history": {
-    "MONUSDT_1795418051": {
-      "symbol": "MONUSDT",
-      "track_type": "TRACK_A",
-      "score": 90,
-      "entry_price": 0.01231,
-      "stop_price": 0.011571,
-      "sl_trigger_price": 0.01156,
-      "sl_pct": 6,
-      "created_at": 1795418051,
-      "sl_at": 1795427464,
-      "hold_minutes": 156,
-      "max_high_price": 0.01242,
-      "max_favorable_pct": 0.89,
-      "vol_mult": 4.11,
-      "rsi6_15m": 62.9,
-      "oi_m": 3.4,
-      "oi_ratio": 96.6,
-      "funding_pct": -0.0071,
-      "change_24h": -6.38,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "볼린저/켈트너 초응축(2.5%) + 15m PPO(-0.21%) 전환",
-        "15m 매수 델타(CVD)·OBV 바닥 흡수 확인",
-        "OI 집중도 최상(97%)",
-        "음수 펀딩 숏스퀴즈(-0.0071%)"
-      ]
-    },
     "SKYUSDT_1795425291": {
       "symbol": "SKYUSDT",
       "track_type": "TRACK_E",
