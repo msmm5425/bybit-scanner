@@ -145,10 +145,10 @@
       "btc_1h_pct": 0.0,
       "kst_block": "03-06",
       "cause": "+9.1% 반등 후 차익 매물 출회",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "TOXIC_BREAKOUT",
+      "autopsy_post_high_pct": -3.2,
+      "autopsy_post_low_pct": -5.6
     },
     {
       "id": "IDOLUSDT_1795612954",
@@ -564,6 +564,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795686990,
+  "updated_at": 1795687046,
   "engine_ver": "v3"
 }
