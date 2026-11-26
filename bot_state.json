@@ -3056,33 +3056,6 @@
     "ICPUSDT": 1795674732
   },
   "sl_history": {
-    "FLUIDUSDT_1795234632": {
-      "symbol": "FLUIDUSDT",
-      "track_type": "TRACK_E",
-      "score": 97,
-      "entry_price": 1.569,
-      "stop_price": 1.47486,
-      "sl_trigger_price": 1.474,
-      "sl_pct": 6,
-      "created_at": 1795234632,
-      "sl_at": 1795423190,
-      "hold_minutes": 3142,
-      "max_high_price": 1.662,
-      "max_favorable_pct": 5.93,
-      "vol_mult": 18.19,
-      "rsi6_15m": 17.1,
-      "oi_m": 0.7,
-      "oi_ratio": 25.1,
-      "funding_pct": 0.005,
-      "change_24h": -9.9,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 74%)",
-        "바닥 반전 거래량 18.2배 폭발 + KDJ 바닥 급반전",
-        "OI 집중도 최상(25%)",
-        "⚠️ 1W·1D 상위 역배열 구간(단기 저항 주의)"
-      ]
-    },
     "MONUSDT_1795418051": {
       "symbol": "MONUSDT",
       "track_type": "TRACK_A",
