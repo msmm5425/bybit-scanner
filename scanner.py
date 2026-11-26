@@ -1,4 +1,3 @@
-python
 import os, sys, json, time, subprocess, requests
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
