@@ -1721,55 +1721,6 @@
       "expired_at": 0,
       "last_checked_ts": 1795682605
     },
-    "ICNTUSDT": {
-      "created_at": 1795570843,
-      "track_type": "TRACK_E",
-      "is_long_term": false,
-      "score": 93,
-      "entry_price": 0.3073,
-      "swing_high_line": 0.3364,
-      "entry_low": 0.306378,
-      "entry_high": 0.307761,
-      "initial_stop_price": 0.288862,
-      "stop_price": 0.288862,
-      "sl_pct": 6,
-      "tps": [
-        0.336494,
-        0.364151,
-        0.39611
-      ],
-      "tp_pcts": [
-        9.5,
-        18.5,
-        28.9
-      ],
-      "vol_mult": 2.75,
-      "rsi6_15m": 55.7,
-      "oi_m": 2.2,
-      "oi_ratio": 28.3,
-      "turnover_m": 7.7,
-      "change_24h": -0.62,
-      "funding_pct": 0.0013,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 -0.4% 스윕 후 지지선 탈환(아래꼬리 43%)",
-        "최근 2봉 건전 양봉 거래량 2.8배 폭발 + KDJ 바닥 급반전",
-        "OI 집중도 최상(28%)",
-        "PPO 파동 정렬(15m PPO 골든크로스)"
-      ],
-      "max_high_price": 0.3107,
-      "peak_ts_ms": 1795577400000,
-      "max_favorable_pct": 1.11,
-      "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0,
-      "tp3_at": 0,
-      "sl_at": 1795596298,
-      "hold_minutes": 424,
-      "sl_alerted": true,
-      "closed_alerted": true,
-      "expired_at": 0,
-      "last_checked_ts": 0
-    },
     "MOODENGUSDT": {
       "created_at": 1795588192,
       "track_type": "TRACK_D",
