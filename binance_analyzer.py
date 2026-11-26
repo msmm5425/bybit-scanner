@@ -4,24 +4,17 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-try:
-    import config as cfg
-    STATE_FILE = getattr(cfg, "STATE_FILE", "bot_state.json")
-    KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
-    FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
-    BROWSER_HEADERS = getattr(cfg, "BROWSER_HEADERS", {"User-Agent": "Mozilla/5.0"})
-except Exception:
-    cfg = None
-    STATE_FILE = "bot_state.json"
-    KST = timezone(timedelta(hours=9))
-    FIXED_SL_PCT = 6
-    BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0"}
-
-try:
-    import postmortem
-except Exception:
-    postmortem = None
-
+import config as cfg
+from config import (
+    STATE_FILE,
+    ANALYZER_HISTORY_FILE,
+    DNA_PROFILE_FILE,
+    MARKET_CAP_CACHE_FILE,
+    KST,
+    FIXED_SL_PCT,
+    BROWSER_HEADERS,
+    to_float,
+)
 from api import (
     get_scanner_candidates,
     fetch_klines,
@@ -31,23 +24,13 @@ from api import (
 )
 
 SCHEME = "ht" + "tps://"
-HISTORY_FILE = "analyzer_history.json"
-DNA_PROFILE_FILE = "top5_dna_profile.json"
-MARKET_CAP_CACHE_FILE = "market_cap_cache.json"
+HISTORY_FILE = ANALYZER_HISTORY_FILE
 DNA_RETENTION_SEC = 14 * 86400
-DNA_VERSION = "v3_pure_chart"
-STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json"]))
+DNA_VERSION = "v4_clean_launchpad"
+STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json"]))
 
 # [백그라운드 자동 학습 전용 모드] 일간 텔레그램 알림 OFF
 SEND_DAILY_TELEGRAM = False
-
-
-def to_float(val, default=0.0):
-    try:
-        v = float(val)
-        return default if np.isnan(v) or np.isinf(v) else v
-    except Exception:
-        return default
 
 
 def fmt_price(price):
@@ -59,7 +42,7 @@ def fmt_price(price):
 
 def send_telegram_report(text):
     if not SEND_DAILY_TELEGRAM:
-        print("[일간 백그라운드 모드] 텔레그램 발송 생략 (Top 5 DNA · 시가총액 캐시 자동 학습 완료)")
+        print("[일간 백그라운드 모드] 텔레그램 발송 생략 (자체 MFE TP · 정제 DNA · 시총 캐시 학습 완료)")
         return False
     token = (os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or "").strip()
     chat_id = (os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or getattr(cfg, "TELEGRAM_CHAT_ID", "") or "").strip()
@@ -121,17 +104,32 @@ def save_json_safe(path, data):
 
 
 def update_market_cap_cache(now_ts):
-    """
-    [방안 1 · 시가총액 캐시 일간 자동 갱신]
-    - CoinGecko 상위 1,250개(250개 × 5페이지) 시가총액($M)을 수집해 market_cap_cache.json에 저장
-    - 동일 티커 충돌 시 시가총액이 더 큰 본진 코인 우선 반영, API 일시 제한 시 기존 캐시 보존
-    """
+    """CoinPaprika 상위 2,000개 단발 수집 + CoinGecko 상위 750개 보완 병합"""
     existing = load_json_safe(MARKET_CAP_CACHE_FILE, {"updated_at": 0, "count": 0, "caps": {}})
     caps = dict(existing.get("caps") or {})
     fresh_caps = {}
-    fetched_pages = 0
 
-    for page in range(1, 6):
+    try:
+        cp_url = clean_url(f"{SCHEME}api.coinpaprika.com/v1/tickers")
+        cp_resp = requests.get(cp_url, headers=BROWSER_HEADERS, timeout=15)
+        if cp_resp.status_code == 200:
+            cp_rows = cp_resp.json()
+            if isinstance(cp_rows, list):
+                for it in cp_rows:
+                    sym_b = str(it.get("symbol") or "").upper().strip()
+                    usd_q = (it.get("quotes") or {}).get("USD") or {}
+                    mc_usd = to_float(usd_q.get("market_cap"), 0.0)
+                    if not sym_b or not sym_b.isascii() or mc_usd <= 0:
+                        continue
+                    if is_stock_or_tradfi_symbol(sym_b):
+                        continue
+                    mc_m = round(mc_usd / 1e6, 3)
+                    if sym_b not in fresh_caps or mc_m > fresh_caps[sym_b]:
+                        fresh_caps[sym_b] = mc_m
+    except Exception as e:
+        print(f"[CoinPaprika 시총 수집 예외] {e}")
+
+    for page in range(1, 4):
         try:
             url = clean_url(f"{SCHEME}api.coingecko.com/api/v3/coins/markets")
             params = {
@@ -142,15 +140,11 @@ def update_market_cap_cache(now_ts):
                 "sparkline": "false",
             }
             resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=10)
-            if resp.status_code == 429:
-                time.sleep(5.0)
-                resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=10)
             if resp.status_code != 200:
                 break
             rows = resp.json()
             if not isinstance(rows, list) or not rows:
                 break
-            fetched_pages += 1
             for it in rows:
                 sym_b = str(it.get("symbol") or "").upper().strip()
                 mc_usd = to_float(it.get("market_cap"), 0.0)
@@ -161,10 +155,9 @@ def update_market_cap_cache(now_ts):
                 mc_m = round(mc_usd / 1e6, 3)
                 if sym_b not in fresh_caps or mc_m > fresh_caps[sym_b]:
                     fresh_caps[sym_b] = mc_m
-            if page < 5:
-                time.sleep(1.8)
-        except Exception as e:
-            print(f"[시총 캐시 수집 page {page} 예외] {e}")
+            if page < 3:
+                time.sleep(1.5)
+        except Exception:
             break
 
     if fresh_caps:
@@ -173,7 +166,6 @@ def update_market_cap_cache(now_ts):
             MARKET_CAP_CACHE_FILE,
             {
                 "updated_at": now_ts,
-                "fetched_pages": fetched_pages,
                 "count": len(caps),
                 "caps": caps,
             },
@@ -246,6 +238,7 @@ def _find_launchpad_index(df_15m):
     vols = df_15m["volume"].astype(float).fillna(0.0).values
 
     vol_ma20 = pd.Series(vols).rolling(20, min_periods=5).mean().shift(1).replace(0, np.nan).values
+    rsi6_arr = calc_rsi(pd.Series(closes), 6).values
 
     search_start = max(22, n - 108)
     peak_idx = search_start + int(np.argmax(highs[search_start:]))
@@ -263,7 +256,9 @@ def _find_launchpad_index(df_15m):
         gain_2bar = ((closes[min(i + 1, n - 1)] - opens[i]) / max(opens[i], 1e-8)) * 100.0
         rng = max(highs[i] - lows[i], 1e-12)
         uwick = (highs[i] - max(opens[i], closes[i])) / rng
-        if v_ratio >= 1.8 and bar_gain >= 1.0 and gain_2bar >= 2.2 and uwick <= 0.45:
+        # [P1-2 수정] 이미 과열된 구간(직전 RSI >= 65)은 발사 기점으로 선택하지 않음
+        pre_rsi_val = float(rsi6_arr[i - 1]) if i > 0 else 50.0
+        if pre_rsi_val < 65.0 and v_ratio >= 1.8 and bar_gain >= 1.0 and gain_2bar >= 2.2 and uwick <= 0.45:
             return i
 
     return min(max(22, trough_idx + 1), n - 2)
@@ -359,21 +354,24 @@ def analyze_top_gainer_with_dna(coin, caught_map):
             pattern_tag = "1H 지지 추세가속"
             pattern_note = f"1H 추세선(이격 {pre_1h_ma20_dist:+.1f}%) 지지 + 발사 거래량 {launch_vol_mult:.1f}배 가속"
 
-        caught_info = caught_map.get(sym)
-        dna = {
-            "dna_version": DNA_VERSION,
-            "symbol": sym,
-            "timestamp": int(time.time()),
-            "change_24h": round(chg_24h, 2),
-            "caught_by_scanner": bool(caught_info is not None),
-            "caught_track": caught_info["track_type"] if caught_info else "MISSED",
-            "pre_bb_width": pre_bb_width,
-            "pre_vol_dry_ratio": pre_vol_dry_ratio,
-            "launch_vol_mult": launch_vol_mult,
-            "pre_rsi6": pre_rsi6,
-            "pre_1h_ma20_dist": pre_1h_ma20_dist,
-            "pattern_tag": pattern_tag,
-        }
+        # [P1-2 사후 편향 필터] 이미 과열(RSI>=65)되거나 거래량 건조가 깨진(>1.0) 발사 표본은 학습에서 배제
+        is_clean_sample = (pre_rsi6 < 65.0) and (pre_vol_dry_ratio <= 1.0) and (launch_vol_mult >= 1.6)
+        if is_clean_sample:
+            caught_info = caught_map.get(sym)
+            dna = {
+                "dna_version": DNA_VERSION,
+                "symbol": sym,
+                "timestamp": int(time.time()),
+                "change_24h": round(chg_24h, 2),
+                "caught_by_scanner": bool(caught_info is not None),
+                "caught_track": caught_info["track_type"] if caught_info else "MISSED",
+                "pre_bb_width": pre_bb_width,
+                "pre_vol_dry_ratio": pre_vol_dry_ratio,
+                "launch_vol_mult": launch_vol_mult,
+                "pre_rsi6": pre_rsi6,
+                "pre_1h_ma20_dist": pre_1h_ma20_dist,
+                "pattern_tag": pattern_tag,
+            }
 
     return {
         "symbol": sym, "base": base, "price": price, "change_24h": chg_24h,
@@ -384,10 +382,12 @@ def analyze_top_gainer_with_dna(coin, caught_map):
 
 
 def update_top5_dna_profile(analyzed_top5, now_ts):
+    """[P1-2 수정] 과열 오염 표본을 배제한 v4_clean_launchpad 표본만으로 Track H DNA 공식 산출"""
     profile = load_json_safe(DNA_PROFILE_FILE, {"samples": [], "active_dna_formula": {}, "updated_at": 0})
     samples = [
         s for s in (profile.get("samples") or [])
         if isinstance(s, dict)
+        and str(s.get("dna_version") or "") == DNA_VERSION
         and (now_ts - int(to_float(s.get("timestamp"), 0))) <= DNA_RETENTION_SEC
         and not is_stock_or_tradfi_symbol(s.get("symbol", ""))
     ]
@@ -423,9 +423,9 @@ def update_top5_dna_profile(analyzed_top5, now_ts):
     }
     if len(samples) >= 5 and weighted_pool:
         bb_vals = [to_float(x.get("pre_bb_width"), 6.0) for x in weighted_pool]
-        dry_vals = [to_float(x.get("pre_vol_dry_ratio"), 0.8) for x in weighted_pool]
+        dry_vals = [to_float(x.get("pre_vol_dry_ratio"), 0.75) for x in weighted_pool]
         lvol_vals = [to_float(x.get("launch_vol_mult"), 2.0) for x in weighted_pool]
-        rsi_vals = [to_float(x.get("pre_rsi6"), 50.0) for x in weighted_pool]
+        rsi_vals = [to_float(x.get("pre_rsi6"), 48.0) for x in weighted_pool]
         dist_vals = [to_float(x.get("pre_1h_ma20_dist"), 0.0) for x in weighted_pool]
         tags = [str(x.get("pattern_tag") or "초응축 돌파 폭발") for x in weighted_pool]
         dominant_tag = max(set(tags), key=tags.count)
@@ -436,13 +436,13 @@ def update_top5_dna_profile(analyzed_top5, now_ts):
             "sample_count": len(samples),
             "missed_count": missed_cnt,
             "dominant_tag": dominant_tag,
-            "bb_width_max": round(float(np.clip(np.percentile(bb_vals, 72), 4.0, 9.5)), 2),
-            "vol_dry_max": round(float(np.clip(np.percentile(dry_vals, 72), 0.50, 0.95)), 2),
-            "launch_vol_min": round(float(np.clip(np.percentile(lvol_vals, 35), 1.8, 3.8)), 2),
-            "pre_rsi_min": round(float(np.clip(np.percentile(rsi_vals, 15), 22.0, 48.0)), 1),
-            "pre_rsi_max": round(float(np.clip(np.percentile(rsi_vals, 82), 55.0, 68.0)), 1),
-            "ma20_1h_dist_min": round(float(np.clip(np.percentile(dist_vals, 15), -4.5, 0.5)), 2),
-            "ma20_1h_dist_max": round(float(np.clip(np.percentile(dist_vals, 82), 2.0, 6.5)), 2),
+            "bb_width_max": round(float(np.clip(np.percentile(bb_vals, 70), 4.0, 9.0)), 2),
+            "vol_dry_max": round(float(np.clip(np.percentile(dry_vals, 70), 0.45, 0.90)), 2),
+            "launch_vol_min": round(float(np.clip(np.percentile(lvol_vals, 35), 1.8, 3.2)), 2),
+            "pre_rsi_min": round(float(np.clip(np.percentile(rsi_vals, 15), 22.0, 45.0)), 1),
+            "pre_rsi_max": round(float(np.clip(np.percentile(rsi_vals, 80), 52.0, 65.0)), 1),
+            "ma20_1h_dist_min": round(float(np.clip(np.percentile(dist_vals, 15), -4.0, 0.5)), 2),
+            "ma20_1h_dist_max": round(float(np.clip(np.percentile(dist_vals, 80), 2.0, 5.5)), 2),
             "updated_at": now_ts,
         }
 
@@ -451,6 +451,35 @@ def update_top5_dna_profile(analyzed_top5, now_ts):
     profile["updated_at"] = now_ts
     save_json_safe(DNA_PROFILE_FILE, profile)
     return formula
+
+
+def compute_realistic_tp_from_own_episodes(state, now_ts):
+    """
+    [P1-2 수정 · 역선택 해소]
+    - 외부 24h Top 5 고점 대신 우리 스캐너 자체 포착 단기 에피소드(최근 14일 MFE 분포)로
+      도달 가능한 현실적 백업 TP(TP1 7.0~9.5%, TP2 12.5~16.5%, TP3 19.5~27.0%) 산출
+    """
+    eps = (state.get("signal_episodes") or {}).values()
+    short_mfes = []
+    for ep in eps:
+        if not isinstance(ep, dict):
+            continue
+        if ep.get("is_long_term") or ep.get("track_type") == "TRACK_D":
+            continue
+        c_at = int(to_float(ep.get("created_at"), 0))
+        if c_at <= 0 or (now_ts - c_at) > (14 * 86400):
+            continue
+        fav = to_float(ep.get("max_favorable_pct"), 0.0)
+        if fav >= 3.0:
+            short_mfes.append(fav)
+
+    if len(short_mfes) >= 12:
+        p1 = float(np.clip(np.percentile(short_mfes, 55), 7.0, 9.5))
+        p2 = float(np.clip(np.percentile(short_mfes, 78), max(p1 + 4.5, 12.5), 16.5))
+        p3 = float(np.clip(np.percentile(short_mfes, 90), max(p2 + 6.0, 19.5), 27.0))
+        return round(p1, 1), round(p2, 1), round(p3, 1), len(short_mfes)
+
+    return 7.8, 14.0, 21.5, len(short_mfes)
 
 
 def verify_48h_history(history_data, current_map, now_ts):
@@ -517,7 +546,6 @@ def main():
     now_ts = int(time.time())
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
-    # [방안 1] CoinGecko 상위 1,250개 시가총액 캐시 일간 자동 갱신
     mc_total, mc_fresh = update_market_cap_cache(now_ts)
 
     state = load_merged_state()
@@ -560,39 +588,36 @@ def main():
                 "max_high_48h": info["price"], "max_gain_pct": 0.0, "timestamp": now_ts,
             })
 
-    gains = [to_float(x.get("max_gain_pct")) for x in history_data.get("records", []) if to_float(x.get("max_gain_pct")) >= 6.0]
-    p1_l, p2_l, p3_l = (
-        (float(np.clip(np.percentile(gains, 35), 7.5, 11.0)),
-         float(np.clip(np.percentile(gains, 65), 14.0, 20.0)),
-         float(np.clip(np.percentile(gains, 85), 22.0, 32.0)))
-        if len(gains) >= 5 else (8.0, 15.0, 22.0)
-    )
+    # [P1-2] 자체 포착 에피소드 MFE 기반 현실적 백업 TP 학습 (외부 Top 5 역선택 제거)
+    p1_l, p2_l, p3_l, ep_n = compute_realistic_tp_from_own_episodes(state, now_ts)
     tp_obj = {
-        "tp1_min_pct": round(p1_l, 1), "tp2_min_pct": round(p2_l, 1),
-        "tp3_min_pct": round(p3_l, 1), "updated_at": now_ts,
+        "source": "own_episodes_mfe",
+        "sample_count": ep_n,
+        "tp1_min_pct": p1_l,
+        "tp2_min_pct": p2_l,
+        "tp3_min_pct": p3_l,
+        "updated_at": now_ts,
     }
     history_data["learned_tp_params"] = tp_obj
     history_data["dynamic_tp_tuning"] = tp_obj
     save_json_safe(HISTORY_FILE, history_data)
 
     log_lines = [
-        f"🧬 [Bybit Top 5 백그라운드 DNA & 시총 캐시 학습 완료] ({now_str})",
-        f"• 시가총액 캐시: 총 {mc_total}종목 보관 (금회 갱신 {mc_fresh}종목) | 48h 검증 {len(verified_48h_lines)}건",
+        f"🧬 [Bybit 백그라운드 학습 완료 ({DNA_VERSION})] ({now_str})",
+        f"• 시가총액 캐시: 총 {mc_total}종목 (금회 {mc_fresh}종목) | 자체 MFE({ep_n}건) 백업 TP: +{p1_l:.1f}% / +{p2_l:.1f}% / +{p3_l:.1f}%",
+        f"• 48h 검증 {len(verified_48h_lines)}건 | 정제 DNA 표본: {dna_formula.get('sample_count', 0)}건 (활성={dna_formula.get('enabled')})",
     ]
     for idx, it in enumerate(analyzed_top5, 1):
-        dna = it.get("dna") or {}
-        c_tag = f"✅포착({dna.get('caught_track')})" if dna.get("caught_by_scanner") else "❌미포착 사각지대"
-        log_lines.append(
-            f"  {idx}. ${it['base']} ({it['change_24h']:+.1f}%) [{c_tag}] | "
-            f"응축 {dna.get('pre_bb_width', 0)}% · 건조 {dna.get('pre_vol_dry_ratio', 0)} · "
-            f"발사양봉 {dna.get('launch_vol_mult', 0)}x · 직전RSI {dna.get('pre_rsi6', 0)} · 1H이격 {dna.get('pre_1h_ma20_dist', 0):+}%"
-        )
-    if dna_formula.get("enabled"):
-        log_lines.append(
-            f"• 🧬 Track H 순수 5D 차트 DNA ({DNA_VERSION} | 14일 표본 {dna_formula['sample_count']}건 / 미포착 {dna_formula['missed_count']}건): "
-            f"주력 [{dna_formula['dominant_tag']}] | 응축 <= {dna_formula['bb_width_max']}% · 건조 <= {dna_formula['vol_dry_max']} · "
-            f"발사양봉 >= {dna_formula['launch_vol_min']}x · 직전RSI {dna_formula['pre_rsi_min']}~{dna_formula['pre_rsi_max']}"
-        )
+        dna = it.get("dna")
+        if dna:
+            c_tag = f"✅포착({dna.get('caught_track')})" if dna.get("caught_by_scanner") else "❌미포착"
+            log_lines.append(
+                f"  {idx}. ${it['base']} ({it['change_24h']:+.1f}%) [{c_tag} · 정제표본채택] | "
+                f"응축 {dna.get('pre_bb_width', 0)}% · 건조 {dna.get('pre_vol_dry_ratio', 0)} · "
+                f"발사양봉 {dna.get('launch_vol_mult', 0)}x · 직전RSI {dna.get('pre_rsi6', 0)}"
+            )
+        else:
+            log_lines.append(f"  {idx}. ${it['base']} ({it['change_24h']:+.1f}%) [과열/비정형 표본 제외]")
 
     full_log = "\n".join(log_lines)
     print(full_log)
