@@ -567,7 +567,6 @@ def _evaluate_weekly_daily_pro_filter(
         elif has_1d and obv1d_alive and not out["reasons"]:
             out["reasons"].append("1D 일봉 OBV 매집 생존 확인")
 
-        # [2-1단계 균형화] 장기 1W/1D 가산점 상한 4점으로 제한 (95~99점 포화 방지)
         out["score_adj"] = int(min(4, out["score_adj"]))
         return out
 
@@ -813,11 +812,7 @@ def _calculate_macro_longterm_tps(price, turnover_m, oi_m, df_4h, df_1d, df_1w=N
 
 
 def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, funding_pct, df_4h):
-    """
-    [2-1단계 균형화 · 장기 포지션 Track D1~D6 (기본 81~86점)]
-    - 1W/1D(+2~4) + 수급오버레이(-5~+4) + Q1(+2) + 세션(+1) 결합 시
-      A급 88~92점 · S급 93~97점 분포로 95~99점 포화 현상 해소
-    """
+    """[장기 포지션 Track D1~D6 (기본 81~86점)]"""
     if df_4h is None or df_4h.empty or len(df_4h) < 55:
         return None
     if change_24h >= 22.0:
@@ -1239,10 +1234,9 @@ def analyze_symbol(
             cached_1d_1w.update({"fetched": True, "df_1d": d1, "df_1w": w1})
         return cached_1d_1w["df_1d"], cached_1d_1w["df_1w"]
 
-    # [1순위] 장기 포지션 (Track D1~D6 · 단기 스케일과 균형화)
+    # [1순위] 장기 포지션 (Track D1~D6 · 1안: 2단계 완만 조정장에서도 허용, 3단계 폭락에서만 차단)
     if (
         scan_long_term
-        and (not counter_trend_only)
         and oi_m >= 0.4
         and turnover_m >= 2.5
         and change_24h < 22.0
@@ -1266,7 +1260,6 @@ def analyze_symbol(
             if mtf_long["allow"]:
                 ov = _get_supply_overlay()
                 d_vol_m = to_float(macro_d.get("vol_metric"), max(bull_vol_2, 1.0))
-                # [2-1단계 균형화] 장기 점수 포화(95~99점) 해소: 기본(81~86) + 1W/1D(<=4) + ov(-5~+4) + Q1(2) + 세션(1)
                 ov_long_adj = int(np.clip(ov["score_adj"], -5, 4))
                 raw_d = (
                     macro_d["score"]
@@ -1349,7 +1342,8 @@ def analyze_symbol(
 
     supply_score = (6 if oi_ratio >= 22.0 else (4 if oi_ratio >= 10.0 else 2)) + (5 if funding_pct < -0.008 else (3 if funding_pct <= 0.010 else 1))
     rsi_chase_pen = -2 if rsi6_15m >= 70.0 else 0
-    btc_tail_bonus = 1 if btc_1h_pct >= 0.30 else (-2 if btc_1h_pct <= -0.60 else 0)
+    # [1안 균형 완화] 미세 BTC 역풍 감점 기준 -0.60% → -1.20% 완화 (일상 흔들림 통과)
+    btc_tail_bonus = 1 if btc_1h_pct >= 0.30 else (-2 if btc_1h_pct <= -1.20 else 0)
 
     base_supply_reasons = []
     if oi_ratio >= 22.0:
@@ -1368,10 +1362,6 @@ def analyze_symbol(
     short_candidates = []
 
     def _register_candidate(tk, title, tech_sc, tk_reasons, vol_metric):
-        """
-        [2-1단계 수정] 사전 필터를 short_cut - 8 (80점)로 완화하여
-        점심 감점(-3) 시 Track F·H가 1W/1D(+3)·수급오버레이(+5) 검증 전 조기 탈락하는 압박 해소
-        """
         capped_tech = min(80, int(tech_sc))
         btc_adj = 0 if tk in ("TRACK_E", "TRACK_F") else btc_tail_bonus
         raw_sc = (
@@ -1453,8 +1443,8 @@ def analyze_symbol(
                 vol_metric=bull_vol_2,
             )
 
-    # [Track F] ⚡ BTC 역행 상대강도 대장주
-    btc_weak_for_f = (-2.4 <= btc_4h_pct <= 0.4) or (btc_1h_pct <= -0.4)
+    # [Track F] ⚡ BTC 역행 상대강도 대장주 (완화된 2단계 구간과 연동해 4H -3.5%까지 허용)
+    btc_weak_for_f = (-3.5 <= btc_4h_pct <= 0.4) or (btc_1h_pct <= -0.5)
     if len(closes) >= 20 and btc_weak_for_f and ppo1h_bull and change_24h <= 28.0:
         p_4h_ago = to_float(closes.iloc[-17], price)
         coin_4h_pct = ((price - p_4h_ago) / max(p_4h_ago, 1e-8)) * 100.0
