@@ -280,13 +280,32 @@ def main():
     candidates, _, _ = get_scanner_candidates()
 
     weekly_eps = []
+    past_long_closed = []
     for ep in episodes.values():
         if not isinstance(ep, dict):
             continue
-        c_at = int(ep.get("created_at", 0))
+        c_at = int(to_float(ep.get("created_at"), 0))
         sym = str(ep.get("symbol", "")).upper()
-        if c_at >= week_ago_ts and not is_stock_or_tradfi_symbol(sym):
-            weekly_eps.append((ep, classify_episode_by_actual_flags(ep)))
+        if c_at <= 0 or is_stock_or_tradfi_symbol(sym):
+            continue
+        c_info = classify_episode_by_actual_flags(ep)
+        if c_at >= week_ago_ts:
+            weekly_eps.append((ep, c_info))
+        else:
+            # 7일 이전 진입했으나 이번 주 마감된 장기 포지션(Track D) 별도 보조 집계
+            is_long_ep = bool(ep.get("is_long_term") or ep.get("track_type") == "TRACK_D")
+            if is_long_ep and c_info["is_closed"]:
+                close_ts = max(
+                    int(to_float(ep.get("tp3_at"), 0)),
+                    int(to_float(ep.get("sl_at"), 0)),
+                    int(to_float(ep.get("expired_at"), 0)),
+                )
+                if close_ts >= week_ago_ts:
+                    w_pct = calc_weighted_realized_pct(ep, c_info)
+                    hold_days = max(1, int(round((close_ts - c_at) / 86400.0)))
+                    past_long_closed.append((ep, c_info, w_pct, hold_days, close_ts))
+
+    past_long_closed.sort(key=lambda x: x[4], reverse=True)
 
     total_signals = len(weekly_eps)
     tp1_hits = sum(1 for _, c in weekly_eps if c["tp1"])
@@ -339,7 +358,6 @@ def main():
             track_stats[tk][2] += 1
         track_stats[tk][3].append(c["fav"])
 
-    # [2-2단계 수정] 실현 익절 마감 Top 5(is_closed=True)와 미실현 진행 중 Top 3(is_active=True) 완전 분리
     best_5_realized = sorted(
         [
             (e, c, calc_weighted_realized_pct(e, c))
@@ -434,6 +452,21 @@ def main():
             lines.append(
                 f"{idx}. {h_tag}${base} ({sym}): 진입 {fmt_price(entry_p)} → 장중최고 {fmt_price(max_h)} (최고 +{fav_pct:.1f}% | {stage})"
             )
+
+    # [보조 섹션] 이번 주 마감된 과거 진입 장기 포지션 1줄 요약
+    if past_long_closed:
+        plc_wins = sum(1 for _, c, p, _, _ in past_long_closed if (not c["sl"]) and p > 0)
+        plc_sls = sum(1 for _, c, _, _, _ in past_long_closed if c["sl"])
+        plc_items = ", ".join(
+            f"${str(e.get('symbol', '')).replace('USDT', '')}({p:+.1f}%·{d}일)"
+            for e, _, p, d, _ in past_long_closed[:5]
+        )
+        extra_more = f" 외 {len(past_long_closed) - 5}건" if len(past_long_closed) > 5 else ""
+        lines.append(
+            f"\n🐋 [이번 주 마감된 과거 진입 장기 포지션 ({len(past_long_closed)}건)]: 익절 {plc_wins}건 · 손절 {plc_sls}건 | {plc_items}{extra_more}"
+        )
+    else:
+        lines.append("\n🐋 [이번 주 마감된 과거 진입 장기 포지션]: 이번 주 마감 건 없음")
 
     lines.append(f"\n📓 [5. 주간 손절(SL) 오답노트 v3 & 25h 사후 부검 (주간 전체 SL {len(sl_eps)}건)]")
     if postmortem is not None and hasattr(postmortem, "build_daily_postmortem_summary"):
