@@ -2954,33 +2954,6 @@
     "ICPUSDT": 1795674732
   },
   "sl_history": {
-    "SKYUSDT_1795425291": {
-      "symbol": "SKYUSDT",
-      "track_type": "TRACK_E",
-      "score": 97,
-      "entry_price": 0.03923,
-      "stop_price": 0.036876,
-      "sl_trigger_price": 0.03622,
-      "sl_pct": 6,
-      "created_at": 1795425291,
-      "sl_at": 1795431651,
-      "hold_minutes": 106,
-      "max_high_price": 0.03935,
-      "max_favorable_pct": 0.31,
-      "vol_mult": 6.32,
-      "rsi6_15m": 28.8,
-      "oi_m": 1.3,
-      "oi_ratio": 46.4,
-      "funding_pct": 0.005,
-      "change_24h": -11.59,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 94%)",
-        "바닥 반전 거래량 6.3배 폭발 + KDJ 바닥 급반전",
-        "OI 집중도 최상(46%)",
-        "롱 청산 매물 소화(OI -3.2%)"
-      ]
-    },
     "MMTUSDT_1795419132": {
       "symbol": "MMTUSDT",
       "track_type": "TRACK_A",
