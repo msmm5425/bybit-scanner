@@ -24,11 +24,13 @@ LONGTERM_SL_PCT = 20
 # 실전 원장 정산용 왕복 테이커 수수료 + 슬리피지 보정치 (%)
 ROUNDTRIP_FEE_SLIPPAGE_PCT = 0.15
 
-# BTC 3단계 마켓 레짐 게이트 임계치 (%)
-BTC_DUMP_DROP_15M_PCT = -0.70
-BTC_DUMP_DROP_1H_PCT = -1.50
-BTC_CRASH_15M_PCT = -1.50
-BTC_CRASH_1H_PCT = -2.50
+# [1안 · 균형 완화] BTC 3단계 마켓 레짐 게이트 임계치 (%)
+# - 2단계(역추세 E·F + 장기 D 허용): 15m <= -1.20% OR 1H <= -2.20%
+# - 3단계(신규 전면 차단): 15m <= -2.20% OR 1H <= -3.50%
+BTC_DUMP_DROP_15M_PCT = -1.20
+BTC_DUMP_DROP_1H_PCT = -2.20
+BTC_CRASH_15M_PCT = -2.20
+BTC_CRASH_1H_PCT = -3.50
 
 TELEGRAM_BOT_TOKEN = (
     os.getenv("TELEGRAM_TOKEN")
