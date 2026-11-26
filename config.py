@@ -60,6 +60,11 @@ HEAVY_MAJOR_COINS = {
     "BCH", "LTC", "WBTC", "WETH", "STETH", "WSTETH",
 }
 
+# 타 프로젝트 시총 충돌 빈발 단글자·중복 티커 (시총 캐시·조회 중립 처리 대상)
+AMBIGUOUS_MC_TICKERS = {
+    "H", "B", "M", "S", "Q", "W", "G", "T", "F", "C", "V", "K", "LIT", "RAIN",
+}
+
 # 정밀화된 TradFi / 주식 / ETF / 원자재 블랙리스트 (단글자·일반 크립토 충돌 티커 제거)
 TRADFI_BLACKLIST = {
     "SAMSUNG", "HYNIX", "SKHYNIX", "SKHY", "SSNLF", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
