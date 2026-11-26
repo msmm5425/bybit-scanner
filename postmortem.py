@@ -2,19 +2,16 @@ import os, json, time, threading
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-KST = timezone(timedelta(hours=9))
-POSTMORTEM_DB_FILE = "postmortem_db.json"
+import config as cfg
+from config import KST, POSTMORTEM_DB_FILE, to_float as _to_float
+
 RETENTION_SEC = 14 * 86400
-ENGINE_VER = "v3"  # 구버전 로직 손절 오염 자동 격리용 버전 태그
-_DB_LOCK = threading.Lock()
+ENGINE_VER = "v3"
+_DB_LOCK = threading.RLock()
 
-
-def _to_float(val, default=0.0):
-    try:
-        v = float(val)
-        return default if (v != v) else v
-    except Exception:
-        return default
+# [P1-2 성능 최적화] 종목 평가마다 반복되던 디스크 json.load 병목 제거 (mtime 기반 자동 갱신 캐시)
+_DB_MEM_CACHE = {"mtime": -1.0, "ts": 0.0, "data": None}
+_TOXIC_MEM_CACHE = {"updated_at": -1, "ts": 0.0, "data": {}}
 
 
 def get_kst_block(ts=None):
@@ -23,20 +20,38 @@ def get_kst_block(ts=None):
     return f"{start_h:02d}-{start_h + 3:02d}"
 
 
-def _load_db_unlocked():
-    if os.path.exists(POSTMORTEM_DB_FILE):
+def invalidate_cache():
+    """Git 동기화 직후 메모리 캐시를 즉시 무효화해 최신 원격 DB 반영"""
+    with _DB_LOCK:
+        _DB_MEM_CACHE.update({"mtime": -1.0, "ts": 0.0, "data": None})
+        _TOXIC_MEM_CACHE.update({"updated_at": -1, "ts": 0.0, "data": {}})
+
+
+def _load_db_unlocked(use_cache=True):
+    now = time.time()
+    file_exists = os.path.exists(POSTMORTEM_DB_FILE)
+    mtime = os.path.getmtime(POSTMORTEM_DB_FILE) if file_exists else -1.0
+
+    if use_cache and _DB_MEM_CACHE["data"] is not None:
+        if _DB_MEM_CACHE["mtime"] == mtime and (now - _DB_MEM_CACHE["ts"]) < 120.0:
+            return _DB_MEM_CACHE["data"]
+
+    data = {"records": [], "wins": [], "updated_at": 0, "engine_ver": ENGINE_VER}
+    if file_exists:
         try:
             with open(POSTMORTEM_DB_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                if not isinstance(data.get("records"), list):
-                    data["records"] = []
-                if not isinstance(data.get("wins"), list):
-                    data["wins"] = []
-                return data
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                if not isinstance(raw.get("records"), list):
+                    raw["records"] = []
+                if not isinstance(raw.get("wins"), list):
+                    raw["wins"] = []
+                data = raw
         except Exception:
             pass
-    return {"records": [], "wins": [], "updated_at": 0, "engine_ver": ENGINE_VER}
+
+    _DB_MEM_CACHE.update({"mtime": mtime, "ts": now, "data": data})
+    return data
 
 
 def _save_db_unlocked(data):
@@ -47,15 +62,15 @@ def _save_db_unlocked(data):
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, POSTMORTEM_DB_FILE)
+        mtime = os.path.getmtime(POSTMORTEM_DB_FILE) if os.path.exists(POSTMORTEM_DB_FILE) else time.time()
+        _DB_MEM_CACHE.update({"mtime": mtime, "ts": time.time(), "data": data})
+        _TOXIC_MEM_CACHE.update({"updated_at": -1, "ts": 0.0, "data": {}})
     except Exception:
         pass
 
 
 def merge_postmortem_dbs(local_db, remote_db):
-    """
-    [Git 충돌/덮어쓰기 방지] 원격과 로컬 postmortem_db.json을 ID 기준 합집합 병합
-    - 동일 ID 충돌 시 autopsy_done=True 및 최신 updated 정보를 우선 보존
-    """
+    """원격과 로컬 postmortem_db.json을 ID 기준 합집합 병합 (autopsy_done=True 우선 보존)"""
     now_ts = int(time.time())
     l_db = local_db if isinstance(local_db, dict) else {}
     r_db = remote_db if isinstance(remote_db, dict) else {}
@@ -148,11 +163,12 @@ def record_sl_postmortem(sl_payload):
         "engine_ver": ENGINE_VER,
         "symbol": sym,
         "track_type": str(sl_payload.get("track_type", "TRACK_A")),
-        "score": int(_to_float(sl_payload.get("score"), 90)),
+        "score": int(_to_float(sl_payload.get("score"), 88)),
         "entry_price": _to_float(sl_payload.get("entry_price")),
         "stop_price": _to_float(sl_payload.get("stop_price")),
         "sl_trigger_price": _to_float(sl_payload.get("sl_trigger_price")),
         "sl_pct": int(round(_to_float(sl_payload.get("sl_pct"), 6))),
+        "actual_sl_pct": round(_to_float(sl_payload.get("actual_sl_pct"), -_to_float(sl_payload.get("sl_pct"), 6)), 2),
         "created_at": c_at,
         "sl_at": sl_at,
         "hold_minutes": int(_to_float(sl_payload.get("hold_minutes"), 0)),
@@ -174,7 +190,7 @@ def record_sl_postmortem(sl_payload):
     }
 
     with _DB_LOCK:
-        db = _load_db_unlocked()
+        db = dict(_load_db_unlocked(use_cache=False))
         recs = [
             r for r in db.get("records", [])
             if isinstance(r, dict)
@@ -206,7 +222,7 @@ def record_win_postmortem(win_payload):
         "engine_ver": ENGINE_VER,
         "symbol": sym,
         "track_type": str(win_payload.get("track_type", "TRACK_A")),
-        "score": int(_to_float(win_payload.get("score"), 90)),
+        "score": int(_to_float(win_payload.get("score"), 88)),
         "created_at": c_at,
         "win_at": win_at,
         "max_favorable_pct": _to_float(win_payload.get("max_favorable_pct")),
@@ -220,7 +236,7 @@ def record_win_postmortem(win_payload):
     }
 
     with _DB_LOCK:
-        db = _load_db_unlocked()
+        db = dict(_load_db_unlocked(use_cache=False))
         wins = [
             w for w in db.get("wins", [])
             if isinstance(w, dict)
@@ -237,15 +253,17 @@ def record_win_postmortem(win_payload):
 
 def run_post_sl_autopsy(fetch_klines_fn, max_checks=4):
     """
-    [손절 사후 부검 (Post-SL Rebound Autopsy)]
-    - 15분봉 limit=100 (25시간 전체 커버)로 수정하여 16~24시간 경과 종목의 초기 반등 누락 버그 해결
+    [P1-2 수정 · 손절 사후 부검 임계치 현실화 (100% NEUTRAL_CHOP 해소)]
+    - EARLY_ENTRY(스탑헌팅 헛털림): 진입가 대비 +6.0% 이상 반등 OR 손절가 대비 +12.0% 이상 반등
+    - TOXIC_BREAKOUT(구조 붕괴): 손절가 대비 -5.0% 이하 추가 하락
+    - 15분봉 limit=100 (25시간 전체 커버) 유지
     """
     if not callable(fetch_klines_fn):
         return 0
 
     now_ts = int(time.time())
     with _DB_LOCK:
-        db = _load_db_unlocked()
+        db = _load_db_unlocked(use_cache=False)
         candidates = [
             dict(r) for r in db.get("records", [])
             if isinstance(r, dict)
@@ -266,7 +284,6 @@ def run_post_sl_autopsy(fetch_klines_fn, max_checks=4):
             continue
 
         try:
-            # 15m × 100봉 = 25시간 전체 커버 (기존 60봉=15시간 절단 버그 수정)
             df_15m = fetch_klines_fn(sym, interval="15", limit=100)
             if df_15m is None or df_15m.empty or "timestamp" not in df_15m.columns:
                 continue
@@ -284,10 +301,10 @@ def run_post_sl_autopsy(fetch_klines_fn, max_checks=4):
             autopsy_type = ""
             done = False
 
-            if rebound_from_entry >= 12.0 or rebound_from_sl >= 16.0:
+            if rebound_from_entry >= 6.0 or rebound_from_sl >= 12.0:
                 autopsy_type = "EARLY_ENTRY"
                 done = True
-            elif drop_from_sl <= -10.0:
+            elif drop_from_sl <= -5.0:
                 autopsy_type = "TOXIC_BREAKOUT"
                 done = True
             elif elapsed_after_sl >= 21600:
@@ -306,7 +323,7 @@ def run_post_sl_autopsy(fetch_klines_fn, max_checks=4):
 
     if updates:
         with _DB_LOCK:
-            db = _load_db_unlocked()
+            db = dict(_load_db_unlocked(use_cache=False))
             changed = 0
             for r in db.get("records", []):
                 if isinstance(r, dict) and r.get("id") in updates:
@@ -320,17 +337,15 @@ def run_post_sl_autopsy(fetch_klines_fn, max_checks=4):
 
 
 def _time_decay_weight(event_ts, now_ts):
-    """시간 감쇠 가중치: 최근 3일 1.0 / 4~7일 0.6"""
     age_sec = max(0, now_ts - int(_to_float(event_ts, 0)))
     return 1.0 if age_sec <= (3 * 86400) else 0.6
 
 
-def _compute_toxic_patterns(recs, wins, now_ts):
-    """
-    [오답노트 v3 · 베이지안 평활 + 시간 감쇠 + 엔진 버전 격리 5D 독성 패턴 탐지]
-    - 구버전 로직 오염 데이터(engine_ver != 'v3') 자동 배제
-    - 소표본 우연 과민 감점 방지: 최소 표본 >= 5건 & 손절 >= 3건 & 평활 손실률 >= 65%
-    """
+def _compute_toxic_patterns(recs, wins, now_ts, db_updated_at=-1):
+    """베이지안 평활 + 시간 감쇠 + 엔진 버전 격리 5D 독성 패턴 탐지 (메모리 캐시 적용)"""
+    if db_updated_at >= 0 and _TOXIC_MEM_CACHE["updated_at"] == db_updated_at and (time.time() - _TOXIC_MEM_CACHE["ts"]) < 120.0:
+        return _TOXIC_MEM_CACHE["data"]
+
     r_7d = [
         r for r in recs
         if isinstance(r, dict)
@@ -367,7 +382,6 @@ def _compute_toxic_patterns(recs, wins, now_ts):
         raw_tot = len(matched_sl) + len(matched_win)
         eff_loss = sum(_loss_weight(r) for r in matched_sl)
         eff_win = sum(_win_weight(w) for w in matched_win)
-        # 베이지안 라플라스 평활 (사전 승률 50%, 가중치 3.0)
         smoothed_lr = (eff_loss + 1.5) / (eff_loss + eff_win + 3.0)
         if raw_tot >= 5 and len(matched_sl) >= 3 and smoothed_lr >= 0.65:
             active_toxic[key] = {
@@ -379,7 +393,6 @@ def _compute_toxic_patterns(recs, wins, now_ts):
                 "wins": len(matched_win),
             }
 
-    # 5번째 차원: 취약 KST 3시간 세션 블록 (최소 5건, 손절 3건+, 베이지안 평활 >= 65%)
     blocks = set(
         [str(r.get("kst_block") or get_kst_block(r.get("created_at"))) for r in r_7d]
         + [str(w.get("kst_block") or get_kst_block(w.get("created_at"))) for w in w_7d]
@@ -406,11 +419,13 @@ def _compute_toxic_patterns(recs, wins, now_ts):
             "wins": worst_w,
         }
 
+    if db_updated_at >= 0:
+        _TOXIC_MEM_CACHE.update({"updated_at": db_updated_at, "ts": time.time(), "data": active_toxic})
     return active_toxic
 
 
 def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
-    """[오답노트 v3 통합 자동 감점 엔진 (구버전 격리 · 베이지안 평활 · 최대 16점)]"""
+    """[오답노트 v3 통합 자동 감점 엔진 — 메모리 캐시로 스캔 I/O 0회, 최대 16점]"""
     sym = str(symbol or "").upper().strip()
     tk = str(track_type or "TRACK_A").upper().strip()
     rsi_v = _to_float(rsi6_15m, 50.0)
@@ -419,15 +434,16 @@ def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
     now_ts = int(time.time())
 
     with _DB_LOCK:
-        db = _load_db_unlocked()
-    recs = [r for r in db.get("records", []) if isinstance(r, dict) and r.get("engine_ver") == ENGINE_VER]
-    wins = [w for w in db.get("wins", []) if isinstance(w, dict) and w.get("engine_ver") == ENGINE_VER]
-    if not recs:
-        return 0
+        db = _load_db_unlocked(use_cache=True)
+        db_upd = int(_to_float(db.get("updated_at"), 0))
+        recs = [r for r in db.get("records", []) if isinstance(r, dict) and r.get("engine_ver") == ENGINE_VER]
+        wins = [w for w in db.get("wins", []) if isinstance(w, dict) and w.get("engine_ver") == ENGINE_VER]
+        if not recs:
+            return 0
+        toxic_map = _compute_toxic_patterns(recs, wins, now_ts, db_updated_at=db_upd)
 
     penalty = 0
 
-    # 1) 최근 48시간 내 동일 종목 반복 손절 감점 (헛털림 EARLY_ENTRY면 완화)
     recent_sym_sls = [
         r for r in recs
         if str(r.get("symbol", "")).upper() == sym
@@ -437,7 +453,6 @@ def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
         sym_pen = sum(3 if r.get("autopsy_type") == "EARLY_ENTRY" else 6 for r in recent_sym_sls)
         penalty += min(10, sym_pen)
 
-    # 2) 최근 7일 내 동일 트랙의 과열/저거래량 손절 패턴 학습 감점 (최소 3건 이상 누적 시)
     recent_tk_sls = [
         r for r in recs
         if str(r.get("track_type", "")).upper() == tk
@@ -451,7 +466,6 @@ def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
         if vol_v < 1.8 and lowvol_cnt >= 3:
             penalty += 4
 
-    # 3) 48시간 내 사후 부검 '구조 붕괴(TOXIC_BREAKOUT)' 2회 이상 발생 트랙 경계 감점
     recent_toxic_bo = [
         r for r in recent_tk_sls
         if r.get("autopsy_type") == "TOXIC_BREAKOUT"
@@ -460,8 +474,6 @@ def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
     if len(recent_toxic_bo) >= 2:
         penalty += 4
 
-    # 4) 5차원 독성 패턴(베이지안 평활) 자동 감점
-    toxic_map = _compute_toxic_patterns(recs, wins, now_ts)
     if meta and toxic_map:
         fund_v = _to_float(meta.get("funding_pct"), 0.0)
         chg_24 = _to_float(meta.get("change_24h"), 0.0)
@@ -484,50 +496,47 @@ def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
 
 
 def build_daily_postmortem_summary(sls_recent=None):
-    """일간·주간 리포트용 오답노트 v3 대시보드 요약"""
+    """주간 리포트용 오답노트 v3 전용 대시보드 요약 (구버전 sl_history 혼용 제거)"""
     now_ts = int(time.time())
-    merged = {}
 
     with _DB_LOCK:
-        db = _load_db_unlocked()
+        db = _load_db_unlocked(use_cache=False)
     recs = db.get("records", [])
     wins = db.get("wins", [])
 
-    for r in recs:
-        if isinstance(r, dict) and (now_ts - int(_to_float(r.get("sl_at"), 0))) <= 604800:
-            k = r.get("id") or f"{r.get('symbol')}_{r.get('created_at')}"
-            merged[k] = r
+    v3_items = [
+        r for r in recs
+        if isinstance(r, dict)
+        and r.get("engine_ver") == ENGINE_VER
+        and (now_ts - int(_to_float(r.get("sl_at"), 0))) <= 604800
+    ]
+    v3_items.sort(key=lambda x: int(_to_float(x.get("sl_at"), 0)), reverse=True)
 
-    if isinstance(sls_recent, list):
-        for s in sls_recent:
-            if isinstance(s, dict) and (now_ts - int(_to_float(s.get("sl_at"), 0))) <= 604800:
-                k = f"{s.get('symbol')}_{s.get('created_at')}"
-                if k not in merged:
-                    item = dict(s)
-                    item["cause"] = classify_sl_cause(item)
-                    merged[k] = item
+    v3_wins = [
+        w for w in wins
+        if isinstance(w, dict)
+        and w.get("engine_ver") == ENGINE_VER
+        and (now_ts - int(_to_float(w.get("win_at"), 0))) <= 604800
+    ]
 
-    items = sorted(merged.values(), key=lambda x: int(_to_float(x.get("sl_at"), 0)), reverse=True)
-    if not items:
-        return ["• 📓 [오답노트 v3]: 최근 7일 내 손절 기록이 없습니다."]
+    if not v3_items:
+        return [f"• 📓 [오답노트 v3]: 최근 7일 v3 학습 표본 {len(v3_wins)}승 0패 (손절 기록 없음)"]
 
-    cause_counts = Counter(str(x.get("cause") or classify_sl_cause(x)) for x in items)
-    tk_counts = Counter(str(x.get("track_type", "TRACK_A")) for x in items)
+    cause_counts = Counter(str(x.get("cause") or classify_sl_cause(x)) for x in v3_items)
+    tk_counts = Counter(str(x.get("track_type", "TRACK_A")) for x in v3_items)
     top_cause, top_c_n = cause_counts.most_common(1)[0]
     top_tk, top_tk_n = tk_counts.most_common(1)[0]
 
-    v3_sl_cnt = sum(1 for x in items if x.get("engine_ver") == ENGINE_VER)
-    v3_win_cnt = sum(1 for w in wins if isinstance(w, dict) and w.get("engine_ver") == ENGINE_VER and (now_ts - int(_to_float(w.get("win_at"), 0))) <= 604800)
-
-    toxic_map = _compute_toxic_patterns(list(merged.values()), wins, now_ts)
+    toxic_map = _compute_toxic_patterns(v3_items, v3_wins, now_ts, db_updated_at=-1)
     toxic_sorted = sorted(toxic_map.values(), key=lambda x: (x["loss_rate_pct"], x["losses"]), reverse=True)[:2]
 
-    early_cnt = sum(1 for x in items if x.get("autopsy_type") == "EARLY_ENTRY")
-    toxic_bo_cnt = sum(1 for x in items if x.get("autopsy_type") == "TOXIC_BREAKOUT")
-    pending_cnt = sum(1 for x in items if not x.get("autopsy_done"))
+    early_cnt = sum(1 for x in v3_items if x.get("autopsy_type") == "EARLY_ENTRY")
+    toxic_bo_cnt = sum(1 for x in v3_items if x.get("autopsy_type") == "TOXIC_BREAKOUT")
+    chop_cnt = sum(1 for x in v3_items if x.get("autopsy_type") == "NEUTRAL_CHOP")
+    pending_cnt = sum(1 for x in v3_items if not x.get("autopsy_done"))
 
     lines = [
-        f"• 📓 [오답노트 v3 자가 학습 & 베이지안 감점 ({len(items)}건 | v3 학습표본 {v3_win_cnt}승 {v3_sl_cnt}패)]:",
+        f"• 📓 [오답노트 v3 자가 학습 & 베이지안 감점 (최근 7일 v3 표본 {len(v3_wins)}승 {len(v3_items)}패)]:",
         f"  ↳ 📌 주요 손절 원인: [{top_cause}] ({top_c_n}건) | 최다 손절 트랙: {top_tk} ({top_tk_n}건)",
     ]
 
@@ -538,20 +547,20 @@ def build_daily_postmortem_summary(sls_recent=None):
         lines.append("  ↳ 🛡️ 작동 중인 독성 패턴 감점: v3 표본 축적 중 / 임계치 초과 패턴 없음")
 
     lines.append(
-        f"  ↳ 🔬 손절 사후 부검(25h): 스탑헌팅 헛털림 {early_cnt}건 vs 구조 붕괴 {toxic_bo_cnt}건 (대기 {pending_cnt}건)"
+        f"  ↳ 🔬 손절 사후 부검(25h): 스탑헌팅 헛털림 {early_cnt}건 | 구조 붕괴 {toxic_bo_cnt}건 | 횡보 {chop_cnt}건 (대기 {pending_cnt}건)"
     )
 
-    for s in items[:3]:
+    for s in v3_items[:3]:
         sym = str(s.get("symbol", "")).replace("USDT", "")
         tk = str(s.get("track_type", "TRACK_A"))
         hold_m = int(_to_float(s.get("hold_minutes"), 0))
         max_f = _to_float(s.get("max_favorable_pct"), 0.0)
-        sl_p_val = int(round(_to_float(s.get("sl_pct"), 20 if tk == "TRACK_D" else 6)))
+        act_sl = _to_float(s.get("actual_sl_pct"), -_to_float(s.get("sl_pct"), 20 if tk == "TRACK_D" else 6))
         cause = str(s.get("cause") or classify_sl_cause(s))
         at = s.get("autopsy_type", "")
         at_tag = " [부검:헛털림]" if at == "EARLY_ENTRY" else (" [부검:구조붕괴]" if at == "TOXIC_BREAKOUT" else "")
         lines.append(
-            f"  ↳ ⚠️ ${sym} ({tk}): 보유 {hold_m}분 후 -{sl_p_val}% 손절 (최고 +{max_f:.1f}% | {cause}{at_tag})"
+            f"  ↳ ⚠️ ${sym} ({tk}): 보유 {hold_m}분 후 {act_sl:+.2f}% 손절 (최고 +{max_f:.1f}% | {cause}{at_tag})"
         )
 
     return lines
