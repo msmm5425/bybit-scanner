@@ -1,4 +1,4 @@
-import os, re, json, time, urllib.parse, requests
+import os, re, json, time, threading, urllib.parse, requests
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pandas as pd
@@ -7,6 +7,7 @@ import config as cfg
 from config import (
     BROWSER_HEADERS,
     STATE_FILE,
+    MARKET_CAP_CACHE_FILE,
     to_float,
     normalize_funding_pct,
     is_tradfi_ticker,
@@ -14,7 +15,7 @@ from config import (
 )
 
 SCHEME = "ht" + "tps://"
-MARKET_CAP_CACHE_FILE = "market_cap_cache.json"
+BYBIT_PROXY_URL = str(getattr(cfg, "BYBIT_PROXY_URL", "") or os.getenv("BYBIT_PROXY_URL", "")).strip()
 
 BYBIT_HOST_NAMES = (
     "api.bytick.com",
@@ -22,23 +23,23 @@ BYBIT_HOST_NAMES = (
     "api.bybit-tr.com",
 )
 
-# 주식 · ETF · 원자재 정적 백업 블랙리스트
+# 주식 · ETF · 원자재 정적 백업 블랙리스트 (정상 크립토 단글자·일반 영단어 오탐 제거)
 STOCK_TRADFI_EXACT_BLACKLIST = {
-    "SAMSUNG", "HYNIX", "SKHYNIX", "SKHY", "SKH", "SSNLF", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
-    "CELLTRION", "LGCHEM", "LGES", "KIA", "KB", "SHINHAN", "HANA", "WOORI", "COUPANG",
-    "KOSPI", "KOSDAQ", "LITE", "SNDK", "SOXL", "SOXS", "KORU", "CIEN",
+    "SAMSUNG", "HYNIX", "SKHYNIX", "SKHY", "SSNLF", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
+    "CELLTRION", "LGCHEM", "LGES", "COUPANG",
+    "KOSPI", "KOSDAQ", "SNDK", "SOXL", "SOXS", "KORU", "CIEN",
     "COHR", "MSI", "TSLL", "NVDL", "NVDX", "TQQQ", "SQQQ", "CONL", "MSTU", "MSTX", "ANTA",
     "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "GOOGL", "AMZN", "META", "NFLX", "AMD",
-    "INTC", "TSM", "ASML", "ARM", "PLTR", "COIN", "MSTR", "HOOD", "BABA", "BIDU",
-    "JD", "PDD", "NIO", "XPEV", "LI", "SPY", "QQQ", "IWM", "DIA", "TLT", "ARKK", "SMH",
+    "INTC", "TSM", "ASML", "PLTR", "COIN", "MSTR", "HOOD", "BABA", "BIDU",
+    "PDD", "NIO", "XPEV", "SPY", "QQQ", "IWM", "DIA", "TLT", "ARKK", "SMH",
     "GLD", "SLV", "USO", "UNG", "XAU", "XAG", "XPD", "XPT", "WTI", "BRENT", "OIL",
     "NATGAS", "COPPER", "GOLD", "SILVER", "PAXG", "XAUT", "XAUM", "KAU", "KAG", "DGX", "PMGT",
     "SPX", "NDX", "NAS100", "US500", "US30", "DJI", "VIX", "NIKKEI", "FTSE",
-    "DAX", "CAC", "HSI", "BRK", "JPM", "BAC", "WFC", "GS", "MS", "V", "MA", "UNH", "JNJ",
-    "LLY", "NVO", "PFE", "MRK", "ABBV", "WMT", "COST", "HD", "PG", "KO", "PEP", "MCD",
-    "SBUX", "NKE", "DIS", "XOM", "CVX", "BA", "CAT", "GE", "LMT", "RTX", "UBER", "ABNB",
+    "DAX", "CAC", "HSI", "BRK", "JPM", "BAC", "WFC", "UNH", "JNJ",
+    "LLY", "NVO", "PFE", "MRK", "ABBV", "WMT", "COST", "SBUX", "NKE", "DIS",
+    "XOM", "CVX", "LMT", "RTX", "UBER", "ABNB",
     "SNOW", "CRWD", "PANW", "SMCI", "AVGO", "ORCL", "CRM", "ADBE", "CSCO", "QCOM", "TXN",
-    "MU", "AMAT", "LRCX", "KLAC", "MRVL", "SONY", "TOYOTA", "SOFTBANK", "TENCENT", "XIAOMI", "BYD",
+    "AMAT", "LRCX", "KLAC", "MRVL", "SONY", "TOYOTA", "SOFTBANK", "TENCENT", "XIAOMI", "BYD",
     "CRCL", "RKLB", "ASTS", "IONQ", "RGTI", "OKLO", "HIMS", "RDDT", "VST", "CEG", "GEV",
     "DELL", "HPE", "WDC", "STX", "ANET", "VRT", "ALAB", "EWY", "EWJ", "FXI", "KWEB",
 }
@@ -73,29 +74,36 @@ STABLECOIN_FIAT_EXACT_BLACKLIST = {
     "ARS", "ARST", "CLP", "COP", "PEN", "AED", "AECOIN", "SAR", "ILS", "NGN", "NGNT", "KES", "EGP",
 }
 
+# 정밀화된 스테이블·법정화폐 정규식 (일반 알트코인 오탐 최소화)
 STABLE_FIAT_REGEX = re.compile(
     r"^(?:"
-    r"USD[A-Z0-9]*|"
-    r"[A-Z0-9]*USD|"
-    r"EUR[A-Z0-9]*|"
-    r"[A-Z0-9]*EUR|"
-    r"(?:GBP|JPY|KRW|CNY|CNH|CHF|HKD|SGD|NZD|TRY|BRL|MXN|ZAR|IDR|VND|THB|AED|SAR)(?:[CTSBDRQXENP])?"
+    r"USD[A-Z0-9]{0,3}|"
+    r"[A-Z]{1,4}USD|"
+    r"EUR[CTSIQR]?|"
+    r"[ACJSE]EUR|"
+    r"(?:GBP|JPY|KRW|CNY|CNH|CHF|HKD|SGD|NZD|TRY|BRL|MXN|ZAR|IDR|VND|THB|AED|SAR)[CTSBDRQX]?"
     r")$"
 )
 
 STOCK_SUBSTRING_KEYWORDS = (
     "SAMSUNG", "HYNIX", "SKHY", "HYUNDAI", "POSCO", "NAVER", "KAKAO", "KOSPI", "NASDAQ",
     "TSLA", "NVDA", "AAPL", "MSFT", "AMZN", "GOOG", "META", "NFLX", "MSTR", "COIN",
-    "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX", "STOCK", "XSTOCK",
+    "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX", "XSTOCK",
 )
 
 TRADFI_SYMBOL_TYPE_KEYWORDS = (
     "stock", "etf", "commod", "forex", "fx", "tradfi", "equity", "metal", "index", "rwa",
 )
 
+# 타 프로젝트 시총 충돌 빈발 단글자·중복 티커 목록 (이상치 검증 대상)
+AMBIGUOUS_MC_TICKERS = {"H", "B", "M", "S", "Q", "W", "G", "T", "F", "C", "V", "K", "LIT", "RAIN"}
+
+# 스레드 안전성 보호 Lock (ThreadPoolExecutor 8워커 경합 원천 차단)
+_CACHE_LOCK = threading.RLock()
 _VALID_BYBIT_SYMBOLS_CACHE = {"ts": 0, "symbols": set(), "bases": set()}
 _DYNAMIC_TRADFI_CACHE = {"ts": 0, "symbols": set(), "bases": set()}
 _MARKET_CAP_MEM_CACHE = {"ts": 0, "caps": {}}
+_ON_DEMAND_MC_CACHE = {}
 _LS_RATIO_MEM_CACHE = {}
 _BYBIT_DIRECT_BLOCKED = False
 _BINANCE_FAPI_DIRECT_BLOCKED = False
@@ -108,6 +116,28 @@ def clean_url(raw_url):
     if not s.startswith("http"):
         s = SCHEME + s.lstrip("/")
     return s
+
+
+def _is_bybit_direct_blocked():
+    with _CACHE_LOCK:
+        return _BYBIT_DIRECT_BLOCKED
+
+
+def _set_bybit_direct_blocked(val=True):
+    global _BYBIT_DIRECT_BLOCKED
+    with _CACHE_LOCK:
+        _BYBIT_DIRECT_BLOCKED = bool(val)
+
+
+def _is_binance_fapi_blocked():
+    with _CACHE_LOCK:
+        return _BINANCE_FAPI_DIRECT_BLOCKED
+
+
+def _set_binance_fapi_blocked(val=True):
+    global _BINANCE_FAPI_DIRECT_BLOCKED
+    with _CACHE_LOCK:
+        _BINANCE_FAPI_DIRECT_BLOCKED = bool(val)
 
 
 def _is_bybit_item_tradfi(it):
@@ -169,9 +199,12 @@ def _fetch_okx_tradfi_blocklist():
 
 def _ensure_dynamic_tradfi_blocklist():
     now = time.time()
-    if now - _DYNAMIC_TRADFI_CACHE["ts"] < 900 and _DYNAMIC_TRADFI_CACHE["bases"]:
-        return
-    _DYNAMIC_TRADFI_CACHE["ts"] = now
+    with _CACHE_LOCK:
+        if now - _DYNAMIC_TRADFI_CACHE["ts"] < 900 and _DYNAMIC_TRADFI_CACHE["bases"]:
+            return
+        _DYNAMIC_TRADFI_CACHE["ts"] = now
+
+    new_syms, new_bases = set(), set()
     try:
         with ThreadPoolExecutor(max_workers=2) as ex:
             f_bg = ex.submit(_fetch_bitget_rwa_blocklist)
@@ -179,22 +212,28 @@ def _ensure_dynamic_tradfi_blocklist():
             for fut in (f_bg, f_okx):
                 try:
                     s_set, b_set = fut.result(timeout=5)
-                    _DYNAMIC_TRADFI_CACHE["symbols"].update(s_set)
-                    _DYNAMIC_TRADFI_CACHE["bases"].update(b_set)
+                    new_syms.update(s_set)
+                    new_bases.update(b_set)
                 except Exception:
                     pass
     except Exception:
         pass
 
+    if new_syms or new_bases:
+        with _CACHE_LOCK:
+            _DYNAMIC_TRADFI_CACHE["symbols"].update(new_syms)
+            _DYNAMIC_TRADFI_CACHE["bases"].update(new_bases)
+
 
 def _register_dynamic_tradfi(sym, base=None):
     s = str(sym or "").upper().strip()
     b = str(base or (s[:-4] if s.endswith("USDT") else s)).upper().strip()
-    if s:
-        _DYNAMIC_TRADFI_CACHE["symbols"].add(s)
-    if b:
-        _DYNAMIC_TRADFI_CACHE["bases"].add(b)
-        _DYNAMIC_TRADFI_CACHE["symbols"].add(f"{b}USDT")
+    with _CACHE_LOCK:
+        if s:
+            _DYNAMIC_TRADFI_CACHE["symbols"].add(s)
+        if b:
+            _DYNAMIC_TRADFI_CACHE["bases"].add(b)
+            _DYNAMIC_TRADFI_CACHE["symbols"].add(f"{b}USDT")
 
 
 def is_stablecoin_or_fiat_symbol(sym_or_base):
@@ -213,6 +252,7 @@ def is_stablecoin_or_fiat_symbol(sym_or_base):
 
 
 def is_stock_or_tradfi_symbol(sym_or_base):
+    """전 모듈 단일 통합 비대상(스테이블·법정화폐·주식·RWA) 차단 필터"""
     if is_stablecoin_or_fiat_symbol(sym_or_base):
         return True
     _ensure_dynamic_tradfi_blocklist()
@@ -222,12 +262,13 @@ def is_stock_or_tradfi_symbol(sym_or_base):
     base = s[:-4] if s.endswith("USDT") else s
     base_clean = re.sub(r"^(1000000|100000|10000|1000|100|10)", "", base)
 
-    if (
-        s in _DYNAMIC_TRADFI_CACHE["symbols"]
-        or base in _DYNAMIC_TRADFI_CACHE["bases"]
-        or base_clean in _DYNAMIC_TRADFI_CACHE["bases"]
-    ):
-        return True
+    with _CACHE_LOCK:
+        if (
+            s in _DYNAMIC_TRADFI_CACHE["symbols"]
+            or base in _DYNAMIC_TRADFI_CACHE["bases"]
+            or base_clean in _DYNAMIC_TRADFI_CACHE["bases"]
+        ):
+            return True
     if base in STOCK_TRADFI_EXACT_BLACKLIST or base_clean in STOCK_TRADFI_EXACT_BLACKLIST:
         return True
     for kw in STOCK_SUBSTRING_KEYWORDS:
@@ -239,11 +280,21 @@ def is_stock_or_tradfi_symbol(sym_or_base):
 
 
 def _fetch_json_via_proxy(target_url, timeout=4.5):
-    encoded = urllib.parse.quote(clean_url(target_url), safe="")
-    proxy_urls = (
+    """
+    프록시 조회:
+    1순위: 본인 소유 프라이빗 릴레이(BYBIT_PROXY_URL, 예: Cloudflare Worker)
+    2순위: 공용 프록시 백업 (프라이빗 미설정 시에만 최후 수단으로 사용)
+    """
+    cleaned = clean_url(target_url)
+    encoded = urllib.parse.quote(cleaned, safe="")
+    proxy_urls = []
+    if BYBIT_PROXY_URL:
+        sep = "" if BYBIT_PROXY_URL.endswith(("=", "/")) else ("&url=" if "?" in BYBIT_PROXY_URL else "?url=")
+        proxy_urls.append(f"{BYBIT_PROXY_URL}{sep}{encoded}")
+    proxy_urls.extend([
         clean_url(f"{SCHEME}api.codetabs.com/v1/proxy?quest={encoded}"),
         clean_url(f"{SCHEME}api.allorigins.win/raw?url={encoded}"),
-    )
+    ])
     for purl in proxy_urls:
         try:
             resp = requests.get(purl, headers=BROWSER_HEADERS, timeout=timeout)
@@ -261,150 +312,246 @@ def _fetch_bybit_json_via_proxy(path_and_query, timeout=4.5):
     return None
 
 
-def _fetch_binance_fapi_json(path_and_query, timeout=3.5):
-    """바이낸스 선물 공개 통계 API 조회 (미국 IP 451 차단 시 프록시 자동 우회)"""
-    global _BINANCE_FAPI_DIRECT_BLOCKED
+def _fetch_binance_fapi_json(path_and_query, timeout=3.0):
     full_url = clean_url(f"{SCHEME}fapi.binance.com{path_and_query}")
-    if not _BINANCE_FAPI_DIRECT_BLOCKED:
+    if not _is_binance_fapi_blocked():
         try:
             resp = requests.get(full_url, headers=BROWSER_HEADERS, timeout=timeout)
             if resp.status_code == 200:
                 return resp.json()
             if resp.status_code in (403, 451):
-                _BINANCE_FAPI_DIRECT_BLOCKED = True
+                _set_binance_fapi_blocked(True)
         except Exception:
-            _BINANCE_FAPI_DIRECT_BLOCKED = True
+            _set_binance_fapi_blocked(True)
 
-    return _fetch_json_via_proxy(full_url, timeout=max(4.0, timeout))
+    return _fetch_json_via_proxy(full_url, timeout=max(3.5, timeout))
 
 
-def get_market_cap_m(symbol_or_base):
+def _fetch_on_demand_market_cap_m(base_clean):
+    if not base_clean:
+        return 0.0
+    now = time.time()
+    with _CACHE_LOCK:
+        cached = _ON_DEMAND_MC_CACHE.get(base_clean)
+        if cached and (now - cached["ts"]) < 21600:
+            return cached["mc_m"]
+
+    mc_m = 0.0
+    try:
+        s_url = clean_url(f"{SCHEME}api.coingecko.com/api/v3/search")
+        r_s = requests.get(s_url, params={"query": base_clean}, headers=BROWSER_HEADERS, timeout=3.0)
+        if r_s.status_code == 200:
+            coins = r_s.json().get("coins") or []
+            matched = [c for c in coins if str(c.get("symbol") or "").upper().strip() == base_clean]
+            if matched:
+                matched.sort(key=lambda x: int(to_float(x.get("market_cap_rank"), 999999)))
+                cg_id = str(matched[0].get("id") or "").strip()
+                if cg_id:
+                    p_url = clean_url(f"{SCHEME}api.coingecko.com/api/v3/simple/price")
+                    r_p = requests.get(
+                        p_url,
+                        params={"ids": cg_id, "vs_currencies": "usd", "include_market_cap": "true"},
+                        headers=BROWSER_HEADERS,
+                        timeout=3.0,
+                    )
+                    if r_p.status_code == 200:
+                        mc_usd = to_float((r_p.json().get(cg_id) or {}).get("usd_market_cap"), 0.0)
+                        if mc_usd > 0:
+                            mc_m = round(mc_usd / 1e6, 3)
+    except Exception:
+        pass
+
+    with _CACHE_LOCK:
+        _ON_DEMAND_MC_CACHE[base_clean] = {"ts": now, "mc_m": mc_m}
+    return mc_m
+
+
+def get_market_cap_m(symbol_or_base, allow_on_demand=True, turnover_m=0.0):
     """
-    [방안 1 · 로컬 시총 캐시 조회 (5분 스캔 API 호출 0회)]
-    - market_cap_cache.json에서 시가총액(백만 달러, $M) 반환
-    - 1000PEPEUSDT 같은 배수 심볼도 자동으로 본진 티커(PEPE)에 매핑
+    [스레드 안전 시가총액 조회 ($M)]
+    1) 로컬 market_cap_cache.json 우선 조회 (0.001초, API 0회)
+    2) 단글자·중복 티커(H, B, M, S, Q, W 등)의 명백한 이상치 매핑 방어
+    3) allow_on_demand=True 시 미등록 정예 후보만 단발 온디맨드 보완
     """
     now = time.time()
-    if (now - _MARKET_CAP_MEM_CACHE["ts"]) >= 600:
-        _MARKET_CAP_MEM_CACHE["ts"] = now
-        if os.path.exists(MARKET_CAP_CACHE_FILE):
-            try:
-                with open(MARKET_CAP_CACHE_FILE, "r", encoding="utf-8") as f:
-                    raw = json.load(f)
-                caps = raw.get("caps") if isinstance(raw, dict) else {}
-                if isinstance(caps, dict):
-                    _MARKET_CAP_MEM_CACHE["caps"] = caps
-            except Exception:
-                pass
-
-    caps = _MARKET_CAP_MEM_CACHE.get("caps") or {}
-    if not caps:
-        return 0.0
+    with _CACHE_LOCK:
+        if (now - _MARKET_CAP_MEM_CACHE["ts"]) >= 600:
+            _MARKET_CAP_MEM_CACHE["ts"] = now
+            if os.path.exists(MARKET_CAP_CACHE_FILE):
+                try:
+                    with open(MARKET_CAP_CACHE_FILE, "r", encoding="utf-8") as f:
+                        raw = json.load(f)
+                    caps = raw.get("caps") if isinstance(raw, dict) else {}
+                    if isinstance(caps, dict):
+                        _MARKET_CAP_MEM_CACHE["caps"] = dict(caps)
+                except Exception:
+                    pass
+        caps = _MARKET_CAP_MEM_CACHE.get("caps") or {}
 
     s = str(symbol_or_base or "").upper().strip()
     base = s[:-4] if s.endswith("USDT") else s
-    if base in caps:
-        return round(to_float(caps.get(base), 0.0), 3)
-
     base_clean = re.sub(r"^(1000000|100000|10000|1000|100|10)", "", base)
-    if base_clean and base_clean in caps:
-        return round(to_float(caps.get(base_clean), 0.0), 3)
 
+    mc_val = 0.0
+    if base in caps:
+        mc_val = round(to_float(caps.get(base), 0.0), 3)
+    elif base_clean and base_clean in caps:
+        mc_val = round(to_float(caps.get(base_clean), 0.0), 3)
+
+    # 단글자/중복 티커 시총 충돌 이상치 방어
+    if mc_val > 0 and (len(base_clean) <= 1 or base_clean in AMBIGUOUS_MC_TICKERS):
+        t_m = to_float(turnover_m, 0.0)
+        if t_m > 0 and (mc_val > 5000.0 and t_m < 25.0):
+            mc_val = 0.0
+        elif mc_val < 0.2:
+            mc_val = 0.0
+
+    if mc_val > 0:
+        return mc_val
+
+    if allow_on_demand and base_clean and len(base_clean) >= 2:
+        return _fetch_on_demand_market_cap_m(base_clean)
+    return 0.0
+
+
+def _parse_bitget_ls_ratio(resp_json):
+    if not isinstance(resp_json, dict):
+        return 0.0
+    data = resp_json.get("data")
+    if isinstance(data, list) and data:
+        row = data[-1]
+        if isinstance(row, dict):
+            direct_r = to_float(row.get("longShortRatio"), 0.0)
+            if direct_r > 0:
+                return round(direct_r, 2)
+            lr = to_float(row.get("longRatio"), 0.0)
+            sr = to_float(row.get("shortRatio"), 0.0)
+            if lr > 0 and sr > 0:
+                return round(lr / sr, 2)
     return 0.0
 
 
 def fetch_smart_money_ls_ratio(symbol):
     """
-    [방안 1 · 스마트머니(고래) vs 개미 롱숏비율 3중 자동 폴백 조회]
-    - 최종 정예 후보(스캔당 0~3종목)에만 호출 + 10분 메모리 캐시
-    - 1순위: 바이낸스 선물 topLongShortPositionRatio(S) + globalLongShortAccountRatio(T)
-    - 2순위: 바이비트 공식 account-ratio (전체 리테일 계정 T)
-    - 3순위: OKX 공식 long-short-account-ratio (전체 리테일 계정 T, 미국 IP 무차단)
+    [스레드 안전 스마트머니(고래) vs 개미 롱숏비율 4중 자동 폴백 엔진]
+    1순위: 바이낸스 선물 topLongShortPositionRatio(S) + globalLongShortAccountRatio(T)
+    2순위: Gate.io 선물 contract_stats (미국 IP 무차단 직통 · S/T 동시 제공)
+    3순위: Bitget V2 선물 position-long-short(S) + account-long-short(T) (미국 IP 무차단 직통)
+    4순위: OKX 리테일 계정 비율 백업
     """
     sym = str(symbol or "").upper().strip()
     if not sym.endswith("USDT") or is_stock_or_tradfi_symbol(sym):
         return {"source": "NONE", "top_ls": 0.0, "retail_ls": 0.0, "divergence": 0.0}
 
     now = time.time()
-    cached = _LS_RATIO_MEM_CACHE.get(sym)
-    if cached and (now - cached["ts"]) < 600:
-        return dict(cached["data"])
+    with _CACHE_LOCK:
+        cached = _LS_RATIO_MEM_CACHE.get(sym)
+        if cached and (now - cached["ts"]) < 600:
+            return dict(cached["data"])
 
     result = {"source": "NONE", "top_ls": 0.0, "retail_ls": 0.0, "divergence": 0.0}
     base = sym[:-4]
     base_clean = re.sub(r"^(1000000|100000|10000|1000|100|10)", "", base)
 
-    # 1순위: 바이낸스 선물 탑트레이더 포지션(S) + 일반투자자 계정(T)
-    bn_syms = [sym]
-    if base_clean and f"{base_clean}USDT" != sym:
-        bn_syms.append(f"{base_clean}USDT")
+    # 1순위: 바이낸스 선물 (직통 가능하거나 프라이빗 릴레이 설정 시)
+    if (not _is_binance_fapi_blocked()) or BYBIT_PROXY_URL:
+        bn_syms = [sym]
+        if base_clean and f"{base_clean}USDT" != sym:
+            bn_syms.append(f"{base_clean}USDT")
+        for b_sym in bn_syms:
+            try:
+                top_data = _fetch_binance_fapi_json(
+                    f"/futures/data/topLongShortPositionRatio?symbol={b_sym}&period=1h&limit=1",
+                    timeout=2.8,
+                )
+                ret_data = _fetch_binance_fapi_json(
+                    f"/futures/data/globalLongShortAccountRatio?symbol={b_sym}&period=1h&limit=1",
+                    timeout=2.8,
+                )
+                if isinstance(top_data, list) and top_data and isinstance(ret_data, list) and ret_data:
+                    s_val = round(to_float(top_data[-1].get("longShortRatio"), 0.0), 2)
+                    t_val = round(to_float(ret_data[-1].get("longShortRatio"), 0.0), 2)
+                    if s_val > 0 and t_val > 0:
+                        result = {
+                            "source": "BINANCE",
+                            "top_ls": s_val,
+                            "retail_ls": t_val,
+                            "divergence": round(s_val / max(t_val, 0.05), 2),
+                        }
+                        break
+            except Exception:
+                continue
 
-    for b_sym in bn_syms:
-        try:
-            top_data = _fetch_binance_fapi_json(
-                f"/futures/data/topLongShortPositionRatio?symbol={b_sym}&period=1h&limit=1",
-                timeout=3.2,
-            )
-            ret_data = _fetch_binance_fapi_json(
-                f"/futures/data/globalLongShortAccountRatio?symbol={b_sym}&period=1h&limit=1",
-                timeout=3.2,
-            )
-            if isinstance(top_data, list) and top_data and isinstance(ret_data, list) and ret_data:
-                s_val = round(to_float(top_data[-1].get("longShortRatio"), 0.0), 2)
-                t_val = round(to_float(ret_data[-1].get("longShortRatio"), 0.0), 2)
-                if s_val > 0 and t_val > 0:
+    # 2순위: Gate.io 선물 contract_stats (미국 IP 무차단 직통 · 고래 S + 개미 T 동시 제공)
+    if result["source"] == "NONE":
+        gate_contracts = list(dict.fromkeys([f"{base}_USDT", f"{base_clean}_USDT"]))
+        for g_ct in gate_contracts:
+            if not g_ct or g_ct.startswith("_"):
+                continue
+            try:
+                g_url = clean_url(f"{SCHEME}api.gateio.ws/api/v4/futures/usdt/contract_stats")
+                g_resp = requests.get(g_url, params={"contract": g_ct, "limit": 1}, headers=BROWSER_HEADERS, timeout=3.0)
+                if g_resp.status_code == 200:
+                    g_rows = g_resp.json()
+                    if isinstance(g_rows, list) and g_rows:
+                        row = g_rows[-1]
+                        s_g = round(to_float(row.get("top_lsr_size"), 0.0), 2)
+                        if s_g <= 0:
+                            s_g = round(to_float(row.get("top_lsr_account"), 0.0), 2)
+                        t_g = round(to_float(row.get("lsr_account"), 0.0), 2)
+                        if s_g > 0 and t_g > 0:
+                            result = {
+                                "source": "GATE",
+                                "top_ls": s_g,
+                                "retail_ls": t_g,
+                                "divergence": round(s_g / max(t_g, 0.05), 2),
+                            }
+                            break
+                        elif t_g > 0:
+                            result = {
+                                "source": "GATE",
+                                "top_ls": 0.0,
+                                "retail_ls": t_g,
+                                "divergence": 0.0,
+                            }
+                            break
+            except Exception:
+                continue
+
+    # 3순위: Bitget V2 선물 position-long-short(S) + account-long-short(T) (미국 IP 무차단 직통)
+    if result["source"] == "NONE":
+        bg_syms = list(dict.fromkeys([sym, f"{base_clean}USDT"]))
+        for bg_s in bg_syms:
+            if not bg_s or bg_s == "USDT":
+                continue
+            try:
+                p_url = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/position-long-short")
+                a_url = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/account-long-short")
+                bg_p = {"symbol": bg_s, "productType": "USDT-FUTURES", "period": "1H"}
+                r_pos = requests.get(p_url, params=bg_p, headers=BROWSER_HEADERS, timeout=3.0)
+                r_acc = requests.get(a_url, params=bg_p, headers=BROWSER_HEADERS, timeout=3.0)
+                s_bg = _parse_bitget_ls_ratio(r_pos.json()) if r_pos.status_code == 200 else 0.0
+                t_bg = _parse_bitget_ls_ratio(r_acc.json()) if r_acc.status_code == 200 else 0.0
+                if s_bg > 0 and t_bg > 0:
                     result = {
-                        "source": "BINANCE",
-                        "top_ls": s_val,
-                        "retail_ls": t_val,
-                        "divergence": round(s_val / max(t_val, 0.05), 2),
+                        "source": "BITGET",
+                        "top_ls": s_bg,
+                        "retail_ls": t_bg,
+                        "divergence": round(s_bg / max(t_bg, 0.05), 2),
                     }
                     break
-        except Exception:
-            continue
-
-    # 2순위: 바이비트 공식 account-ratio (전체 계정 롱숏비율 T)
-    if result["source"] == "NONE":
-        try:
-            bybit_items = None
-            if not _BYBIT_DIRECT_BLOCKED:
-                for host in BYBIT_HOST_NAMES:
-                    try:
-                        u = clean_url(f"{SCHEME}{host}/v5/market/account-ratio")
-                        r = requests.get(
-                            u,
-                            params={"category": "linear", "symbol": sym, "period": "1h", "limit": 1},
-                            headers=BROWSER_HEADERS,
-                            timeout=2.5,
-                        )
-                        if r.status_code == 200:
-                            bybit_items = (r.json().get("result") or {}).get("list")
-                            if bybit_items:
-                                break
-                    except Exception:
-                        continue
-            if not bybit_items:
-                pdata = _fetch_bybit_json_via_proxy(
-                    f"/v5/market/account-ratio?category=linear&symbol={sym}&period=1h&limit=1",
-                    timeout=3.8,
-                )
-                if pdata:
-                    bybit_items = (pdata.get("result") or {}).get("list")
-
-            if isinstance(bybit_items, list) and bybit_items:
-                buy_r = to_float(bybit_items[0].get("buyRatio"), 0.0)
-                sell_r = to_float(bybit_items[0].get("sellRatio"), 0.0)
-                if buy_r > 0 and sell_r > 0:
+                elif t_bg > 0:
                     result = {
-                        "source": "BYBIT",
+                        "source": "BITGET",
                         "top_ls": 0.0,
-                        "retail_ls": round(buy_r / sell_r, 2),
+                        "retail_ls": t_bg,
                         "divergence": 0.0,
                     }
-        except Exception:
-            pass
+                    break
+            except Exception:
+                continue
 
-    # 3순위: OKX 공식 long-short-account-ratio (미국 IP 무차단 백업)
+    # 4순위: OKX 공식 long-short-account-ratio (미국 IP 무차단 백업)
     if result["source"] == "NONE" and base_clean:
         try:
             u_okx = clean_url(
@@ -425,7 +572,8 @@ def fetch_smart_money_ls_ratio(symbol):
         except Exception:
             pass
 
-    _LS_RATIO_MEM_CACHE[sym] = {"ts": now, "data": dict(result)}
+    with _CACHE_LOCK:
+        _LS_RATIO_MEM_CACHE[sym] = {"ts": now, "data": dict(result)}
     return result
 
 
@@ -507,11 +655,11 @@ def _normalize_kline_df(rows, expected_interval_min=None, allow_historical=False
 
 
 def get_valid_bybit_linear_symbols():
-    global _BYBIT_DIRECT_BLOCKED
     _ensure_dynamic_tradfi_blocklist()
     now = time.time()
-    if now - _VALID_BYBIT_SYMBOLS_CACHE["ts"] < 900 and len(_VALID_BYBIT_SYMBOLS_CACHE["symbols"]) >= 80:
-        return _VALID_BYBIT_SYMBOLS_CACHE["symbols"], _VALID_BYBIT_SYMBOLS_CACHE["bases"]
+    with _CACHE_LOCK:
+        if now - _VALID_BYBIT_SYMBOLS_CACHE["ts"] < 900 and len(_VALID_BYBIT_SYMBOLS_CACHE["symbols"]) >= 80:
+            return set(_VALID_BYBIT_SYMBOLS_CACHE["symbols"]), set(_VALID_BYBIT_SYMBOLS_CACHE["bases"])
 
     valid_syms, valid_bases = set(), set()
 
@@ -532,7 +680,7 @@ def get_valid_bybit_linear_symbols():
                     valid_syms.add(sym)
                     valid_bases.add(base)
 
-    if not _BYBIT_DIRECT_BLOCKED:
+    if not _is_bybit_direct_blocked():
         for host in BYBIT_HOST_NAMES:
             try:
                 cursor = ""
@@ -555,11 +703,12 @@ def get_valid_bybit_linear_symbols():
                     if not cursor:
                         break
                 if fetched_ok and len(valid_syms) >= 80:
-                    _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": valid_syms, "bases": valid_bases})
+                    with _CACHE_LOCK:
+                        _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": set(valid_syms), "bases": set(valid_bases)})
                     return valid_syms, valid_bases
             except Exception:
                 continue
-        _BYBIT_DIRECT_BLOCKED = True
+        _set_bybit_direct_blocked(True)
 
     cursor = ""
     for _ in range(3):
@@ -579,7 +728,8 @@ def get_valid_bybit_linear_symbols():
             break
 
     if len(valid_syms) >= 80:
-        _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": valid_syms, "bases": valid_bases})
+        with _CACHE_LOCK:
+            _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": set(valid_syms), "bases": set(valid_bases)})
         return valid_syms, valid_bases
 
     try:
@@ -596,20 +746,22 @@ def get_valid_bybit_linear_symbols():
                         valid_syms.add(sym)
                         valid_bases.add(base)
             if len(valid_syms) >= 50:
-                _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": valid_syms, "bases": valid_bases})
+                with _CACHE_LOCK:
+                    _VALID_BYBIT_SYMBOLS_CACHE.update({"ts": now, "symbols": set(valid_syms), "bases": set(valid_bases)})
                 return valid_syms, valid_bases
     except Exception:
         pass
 
-    return _VALID_BYBIT_SYMBOLS_CACHE["symbols"], _VALID_BYBIT_SYMBOLS_CACHE["bases"]
+    with _CACHE_LOCK:
+        return set(_VALID_BYBIT_SYMBOLS_CACHE["symbols"]), set(_VALID_BYBIT_SYMBOLS_CACHE["bases"])
 
 
 def get_scanner_candidates():
-    global _BYBIT_DIRECT_BLOCKED
     valid_syms, valid_bases = get_valid_bybit_linear_symbols()
     candidates = []
     pure_crypto_bases = set(valid_bases)
-    rwa_blocked_bases = set(_DYNAMIC_TRADFI_CACHE["bases"])
+    with _CACHE_LOCK:
+        rwa_blocked_bases = set(_DYNAMIC_TRADFI_CACHE["bases"])
 
     def _parse_bybit_ticker_items(items):
         out = []
@@ -644,7 +796,7 @@ def get_scanner_candidates():
             })
         return out
 
-    if not _BYBIT_DIRECT_BLOCKED:
+    if not _is_bybit_direct_blocked():
         for host in BYBIT_HOST_NAMES:
             try:
                 url = clean_url(f"{SCHEME}{host}/v5/market/tickers")
@@ -717,6 +869,10 @@ def get_scanner_candidates():
 
 
 def fetch_klines(symbol, interval="5", limit=150, end_ms=None, allow_historical=False):
+    """
+    [P0-3 수정] min_bars = min(base_min_bars, lim)으로 보정해 소량 요청(limit=12 등) 폐기 버그 영구 해결
+    [P1-3 보강] 프라이빗 BYBIT_PROXY_URL 설정 시 Bybit 단일 거래소 시세 일관성 최우선 보장
+    """
     sym = str(symbol).upper().strip()
     if not sym.endswith("USDT") or is_stock_or_tradfi_symbol(sym):
         return pd.DataFrame()
@@ -730,11 +886,13 @@ def fetch_klines(symbol, interval="5", limit=150, end_ms=None, allow_historical=
         "1": 1, "3": 3, "5": 5, "15": 15, "30": 30,
         "60": 60, "120": 120, "240": 240, "360": 360, "720": 720, "D": 1440, "W": 10080,
     }.get(iv_str, 5)
-    lim = int(min(max(limit, 10), 1000))
+    lim = int(min(max(limit, 2), 1000))
     hist_ok = bool(allow_historical or (end_ms is not None))
-    min_bars = 4 if iv_str == "W" else (5 if hist_ok else (10 if iv_str in ("D", "720") else 15))
+    base_min = 4 if iv_str == "W" else (5 if hist_ok else (10 if iv_str in ("D", "720") else 15))
+    min_bars = max(2, min(base_min, lim))
 
-    if not _BYBIT_DIRECT_BLOCKED:
+    # 1순위: Bybit 직통
+    if not _is_bybit_direct_blocked():
         params = {"category": "linear", "symbol": sym, "interval": iv_str, "limit": lim}
         if end_ms is not None:
             params["end"] = int(end_ms)
@@ -753,6 +911,22 @@ def fetch_klines(symbol, interval="5", limit=150, end_ms=None, allow_historical=
             except Exception:
                 continue
 
+    # 2순위: 프라이빗 Bybit 릴레이가 설정되어 있으면 이종 거래소 혼용 없이 Bybit 시세 직접 확보
+    if BYBIT_PROXY_URL:
+        proxy_q = f"/v5/market/kline?category=linear&symbol={sym}&interval={iv_str}&limit={lim}"
+        if end_ms is not None:
+            proxy_q += f"&end={int(end_ms)}"
+        proxy_data = _fetch_bybit_json_via_proxy(proxy_q, timeout=4.5)
+        if proxy_data:
+            df = _normalize_kline_df(
+                proxy_data.get("result", {}).get("list", []),
+                expected_interval_min=iv_min,
+                allow_historical=hist_ok,
+            )
+            if not df.empty and len(df) >= min_bars:
+                return df
+
+    # 3순위: 미국 IP 무차단 직통 Bitget USDT-FUTURES 백업
     bg_gran = {
         "1": "1m", "3": "3m", "5": "5m", "15": "15m", "30": "30m",
         "60": "1H", "120": "2H", "240": "4H", "360": "6H", "720": "12H", "D": "1D", "W": "1W",
@@ -784,24 +958,26 @@ def fetch_klines(symbol, interval="5", limit=150, end_ms=None, allow_historical=
         except Exception:
             continue
 
-    proxy_q = f"/v5/market/kline?category=linear&symbol={sym}&interval={iv_str}&limit={lim}"
-    if end_ms is not None:
-        proxy_q += f"&end={int(end_ms)}"
-    proxy_data = _fetch_bybit_json_via_proxy(proxy_q, timeout=5.0)
-    if proxy_data:
-        df = _normalize_kline_df(
-            proxy_data.get("result", {}).get("list", []),
-            expected_interval_min=iv_min,
-            allow_historical=hist_ok,
-        )
-        if not df.empty and len(df) >= min_bars:
-            return df
+    # 4순위: 공용 프록시 경유 Bybit 최후 백업
+    if not BYBIT_PROXY_URL:
+        proxy_q = f"/v5/market/kline?category=linear&symbol={sym}&interval={iv_str}&limit={lim}"
+        if end_ms is not None:
+            proxy_q += f"&end={int(end_ms)}"
+        proxy_data = _fetch_bybit_json_via_proxy(proxy_q, timeout=5.0)
+        if proxy_data:
+            df = _normalize_kline_df(
+                proxy_data.get("result", {}).get("list", []),
+                expected_interval_min=iv_min,
+                allow_historical=hist_ok,
+            )
+            if not df.empty and len(df) >= min_bars:
+                return df
 
     return pd.DataFrame()
 
 
 def fetch_klines_window(symbol, interval="5", start_ms=0, end_ms=None, max_bars=850):
-    """리플레이 영상 전용 역방향 페이지네이션 캔들 로더"""
+    """역방향 자동 페이지네이션 캔들 로더 (장기 보유 추적 창구 단절 방지 & 30초 리플레이 공용)"""
     iv_str = str(interval).upper().strip()
     iv_min = {
         "1": 1, "3": 3, "5": 5, "15": 15, "30": 30,
