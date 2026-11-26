@@ -2260,52 +2260,6 @@
       "exit_price": 0.02424,
       "realized_weighted_pct": 8.94
     },
-    "ZKCUSDT": {
-      "created_at": 1795122403,
-      "track_type": "TRACK_D",
-      "is_long_term": true,
-      "score": 91,
-      "entry_price": 0.02591,
-      "swing_high_line": 0.03916,
-      "entry_low": 0.025703,
-      "entry_high": 0.02604,
-      "initial_stop_price": 0.020728,
-      "stop_price": 0.020728,
-      "sl_pct": 20,
-      "tps": [
-        0.036274,
-        0.050524,
-        0.075139
-      ],
-      "tp_pcts": [
-        40.0,
-        95.0,
-        190.0
-      ],
-      "vol_mult": 2.2,
-      "rsi6_15m": 50.5,
-      "oi_m": 1.1,
-      "turnover_m": 18.0,
-      "funding_pct": -0.002347,
-      "reasons": [
-        "장기 전략: D2 · 매집봉 출현 후 거래량 건조 눌림",
-        "최근 5일 내 4H 매집봉(거래량 16.8배) 출현",
-        "조정 구간 거래량 70% 이상 건조(세력 이탈 없음)",
-        "매집봉 지지선 & 4H 20MA 위 양봉 반등 턴"
-      ],
-      "max_high_price": 0.02796,
-      "peak_ts_ms": 1795140000000,
-      "max_favorable_pct": 7.91,
-      "hold_minutes": 8223,
-      "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0,
-      "tp3_at": 0,
-      "sl_at": 1795615792,
-      "sl_alerted": true,
-      "closed_alerted": true,
-      "expired_at": 0,
-      "last_checked_ts": 0
-    },
     "YBUSDT": {
       "created_at": 1795197629,
       "track_type": "TRACK_D",
