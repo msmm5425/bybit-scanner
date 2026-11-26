@@ -711,57 +711,6 @@
       "expired_at": 0,
       "last_checked_ts": 1795686991
     },
-    "HYPEUSDT": {
-      "created_at": 1795292781,
-      "track_type": "TRACK_A",
-      "is_long_term": false,
-      "score": 95,
-      "entry_price": 61.492,
-      "swing_high_line": 61.551,
-      "entry_low": 61.307524,
-      "entry_high": 61.584238,
-      "initial_stop_price": 57.80248,
-      "stop_price": 57.80248,
-      "sl_pct": 6,
-      "tps": [
-        67.395232,
-        73.113988,
-        77.78738
-      ],
-      "tp_pcts": [
-        9.6,
-        18.9,
-        26.5
-      ],
-      "vol_mult": 2.35,
-      "rsi6_15m": 70.4,
-      "oi_m": 98.8,
-      "oi_ratio": 40.3,
-      "turnover_m": 245.0,
-      "change_24h": 0.83,
-      "funding_pct": -0.0021,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "TTM Squeeze(BB<KC) 발사(응축폭 1.2%) + 15m PPO(+0.53%) 상방",
-        "15m 매수 델타(CVD)·OBV 바닥 흡수 확인",
-        "OI 집중도 최상(40%)",
-        "⚠️ 1W·1D 상위 역배열 구간(단기 저항 주의)"
-      ],
-      "max_high_price": 69.745,
-      "peak_ts_ms": 1795443300000,
-      "max_favorable_pct": 13.42,
-      "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0,
-      "hold_minutes": 5132,
-      "tp3_at": 0,
-      "sl_at": 1795600732,
-      "tp1_hit": true,
-      "tp1_alerted": true,
-      "sl_alerted": true,
-      "closed_alerted": true,
-      "expired_at": 0,
-      "last_checked_ts": 0
-    },
     "ENSOUSDT": {
       "created_at": 1795204931,
       "track_type": "TRACK_D",
