@@ -55,10 +55,10 @@
       "btc_1h_pct": 0.0,
       "kst_block": "00-03",
       "cause": "+8.2% 반등 후 차익 매물 출회",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -3.9,
+      "autopsy_post_low_pct": 4.8
     },
     {
       "id": "SKRUSDT_1794987363",
@@ -85,10 +85,10 @@
       "btc_1h_pct": 0.0,
       "kst_block": "15-18",
       "cause": "+10.0% 반등 후 차익 매물 출회",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -5.1,
+      "autopsy_post_low_pct": 6.5
     },
     {
       "id": "EULUSDT_1795209009",
@@ -115,10 +115,10 @@
       "btc_1h_pct": 0.0,
       "kst_block": "06-09",
       "cause": "+10.5% 반등 후 차익 매물 출회",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -0.5,
+      "autopsy_post_low_pct": 5.4
     },
     {
       "id": "MAGMAUSDT_1795293727",
@@ -564,6 +564,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795694124,
+  "updated_at": 1795702115,
   "engine_ver": "v3"
 }
