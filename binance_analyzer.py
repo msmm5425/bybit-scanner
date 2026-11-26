@@ -23,6 +23,14 @@ from api import (
     clean_url,
 )
 
+AMBIGUOUS_MC_TICKERS = set(
+    getattr(
+        cfg,
+        "AMBIGUOUS_MC_TICKERS",
+        {"H", "B", "M", "S", "Q", "W", "G", "T", "F", "C", "V", "K", "LIT", "RAIN"},
+    )
+)
+
 SCHEME = "ht" + "tps://"
 HISTORY_FILE = ANALYZER_HISTORY_FILE
 DNA_RETENTION_SEC = 14 * 86400
@@ -103,10 +111,30 @@ def save_json_safe(path, data):
         pass
 
 
+def _is_valid_mc_ticker(sym_b):
+    b = str(sym_b or "").upper().strip()
+    if not b or not b.isascii():
+        return False
+    if len(b) <= 1 or b in AMBIGUOUS_MC_TICKERS:
+        return False
+    if is_stock_or_tradfi_symbol(b):
+        return False
+    return True
+
+
 def update_market_cap_cache(now_ts):
-    """CoinPaprika 상위 2,000개 단발 수집 + CoinGecko 상위 750개 보완 병합"""
+    """
+    [2-2단계 수정]
+    - 1글자 티커 및 AMBIGUOUS_MC_TICKERS(M, RAIN, LIT, Q, S, B, W, T, H 등) 수집 원천 배제
+    - 기존 market_cap_cache.json에 남아 있는 충돌·비대상 티커도 자동 삭제(purge)
+    - CoinPaprika 상위 2,000개 + CoinGecko 상위 750개 병합
+    """
     existing = load_json_safe(MARKET_CAP_CACHE_FILE, {"updated_at": 0, "count": 0, "caps": {}})
-    caps = dict(existing.get("caps") or {})
+    caps = {
+        str(k).upper().strip(): round(to_float(v, 0.0), 3)
+        for k, v in (existing.get("caps") or {}).items()
+        if _is_valid_mc_ticker(k) and to_float(v, 0.0) >= 0.5
+    }
     fresh_caps = {}
 
     try:
@@ -119,12 +147,10 @@ def update_market_cap_cache(now_ts):
                     sym_b = str(it.get("symbol") or "").upper().strip()
                     usd_q = (it.get("quotes") or {}).get("USD") or {}
                     mc_usd = to_float(usd_q.get("market_cap"), 0.0)
-                    if not sym_b or not sym_b.isascii() or mc_usd <= 0:
-                        continue
-                    if is_stock_or_tradfi_symbol(sym_b):
+                    if not _is_valid_mc_ticker(sym_b) or mc_usd <= 0:
                         continue
                     mc_m = round(mc_usd / 1e6, 3)
-                    if sym_b not in fresh_caps or mc_m > fresh_caps[sym_b]:
+                    if mc_m >= 0.5 and (sym_b not in fresh_caps or mc_m > fresh_caps[sym_b]):
                         fresh_caps[sym_b] = mc_m
     except Exception as e:
         print(f"[CoinPaprika 시총 수집 예외] {e}")
@@ -148,12 +174,10 @@ def update_market_cap_cache(now_ts):
             for it in rows:
                 sym_b = str(it.get("symbol") or "").upper().strip()
                 mc_usd = to_float(it.get("market_cap"), 0.0)
-                if not sym_b or not sym_b.isascii() or mc_usd <= 0:
-                    continue
-                if is_stock_or_tradfi_symbol(sym_b):
+                if not _is_valid_mc_ticker(sym_b) or mc_usd <= 0:
                     continue
                 mc_m = round(mc_usd / 1e6, 3)
-                if sym_b not in fresh_caps or mc_m > fresh_caps[sym_b]:
+                if mc_m >= 0.5 and (sym_b not in fresh_caps or mc_m > fresh_caps[sym_b]):
                     fresh_caps[sym_b] = mc_m
             if page < 3:
                 time.sleep(1.5)
@@ -162,6 +186,9 @@ def update_market_cap_cache(now_ts):
 
     if fresh_caps:
         caps.update(fresh_caps)
+
+    # 기존 캐시에서 충돌 티커가 정리된 경우에도 변경본을 저장
+    if fresh_caps or len(caps) != len(existing.get("caps") or {}):
         save_json_safe(
             MARKET_CAP_CACHE_FILE,
             {
@@ -256,7 +283,6 @@ def _find_launchpad_index(df_15m):
         gain_2bar = ((closes[min(i + 1, n - 1)] - opens[i]) / max(opens[i], 1e-8)) * 100.0
         rng = max(highs[i] - lows[i], 1e-12)
         uwick = (highs[i] - max(opens[i], closes[i])) / rng
-        # [P1-2 수정] 이미 과열된 구간(직전 RSI >= 65)은 발사 기점으로 선택하지 않음
         pre_rsi_val = float(rsi6_arr[i - 1]) if i > 0 else 50.0
         if pre_rsi_val < 65.0 and v_ratio >= 1.8 and bar_gain >= 1.0 and gain_2bar >= 2.2 and uwick <= 0.45:
             return i
@@ -354,7 +380,6 @@ def analyze_top_gainer_with_dna(coin, caught_map):
             pattern_tag = "1H 지지 추세가속"
             pattern_note = f"1H 추세선(이격 {pre_1h_ma20_dist:+.1f}%) 지지 + 발사 거래량 {launch_vol_mult:.1f}배 가속"
 
-        # [P1-2 사후 편향 필터] 이미 과열(RSI>=65)되거나 거래량 건조가 깨진(>1.0) 발사 표본은 학습에서 배제
         is_clean_sample = (pre_rsi6 < 65.0) and (pre_vol_dry_ratio <= 1.0) and (launch_vol_mult >= 1.6)
         if is_clean_sample:
             caught_info = caught_map.get(sym)
@@ -382,7 +407,7 @@ def analyze_top_gainer_with_dna(coin, caught_map):
 
 
 def update_top5_dna_profile(analyzed_top5, now_ts):
-    """[P1-2 수정] 과열 오염 표본을 배제한 v4_clean_launchpad 표본만으로 Track H DNA 공식 산출"""
+    """과열 오염 표본을 배제한 v4_clean_launchpad 표본만으로 Track H DNA 공식 산출"""
     profile = load_json_safe(DNA_PROFILE_FILE, {"samples": [], "active_dna_formula": {}, "updated_at": 0})
     samples = [
         s for s in (profile.get("samples") or [])
@@ -455,9 +480,10 @@ def update_top5_dna_profile(analyzed_top5, now_ts):
 
 def compute_realistic_tp_from_own_episodes(state, now_ts):
     """
-    [P1-2 수정 · 역선택 해소]
-    - 외부 24h Top 5 고점 대신 우리 스캐너 자체 포착 단기 에피소드(최근 14일 MFE 분포)로
-      도달 가능한 현실적 백업 TP(TP1 7.0~9.5%, TP2 12.5~16.5%, TP3 19.5~27.0%) 산출
+    [2-2단계 수정 · MFE 생존자 편향 완전 제거]
+    - 기존 if fav >= 3.0 필터로 하위 44% 표본을 절단하던 편향을 제거
+    - 최근 14일 내 '이미 마감된 모든 단기 에피소드' + '6시간 이상 경과한 단기 에피소드' 전체(fav >= 0.0 포함)를
+      모집단으로 사용해 현실적인 65 / 82 / 92 분위수 백업 TP 산출
     """
     eps = (state.get("signal_episodes") or {}).values()
     short_mfes = []
@@ -469,14 +495,23 @@ def compute_realistic_tp_from_own_episodes(state, now_ts):
         c_at = int(to_float(ep.get("created_at"), 0))
         if c_at <= 0 or (now_ts - c_at) > (14 * 86400):
             continue
-        fav = to_float(ep.get("max_favorable_pct"), 0.0)
-        if fav >= 3.0:
-            short_mfes.append(fav)
+        is_closed = bool(
+            ep.get("sl_alerted")
+            or ep.get("tp3_completed")
+            or ep.get("trailing_closed")
+            or ep.get("expired_closed")
+            or ep.get("closed_alerted")
+        )
+        age_sec = now_ts - c_at
+        if not is_closed and age_sec < 21600:
+            continue
+        fav = max(0.0, to_float(ep.get("max_favorable_pct"), 0.0))
+        short_mfes.append(fav)
 
-    if len(short_mfes) >= 12:
-        p1 = float(np.clip(np.percentile(short_mfes, 55), 7.0, 9.5))
-        p2 = float(np.clip(np.percentile(short_mfes, 78), max(p1 + 4.5, 12.5), 16.5))
-        p3 = float(np.clip(np.percentile(short_mfes, 90), max(p2 + 6.0, 19.5), 27.0))
+    if len(short_mfes) >= 20:
+        p1 = float(np.clip(np.percentile(short_mfes, 65), 6.8, 9.2))
+        p2 = float(np.clip(np.percentile(short_mfes, 82), max(p1 + 4.5, 12.0), 16.0))
+        p3 = float(np.clip(np.percentile(short_mfes, 92), max(p2 + 6.0, 19.0), 26.0))
         return round(p1, 1), round(p2, 1), round(p3, 1), len(short_mfes)
 
     return 7.8, 14.0, 21.5, len(short_mfes)
@@ -588,10 +623,9 @@ def main():
                 "max_high_48h": info["price"], "max_gain_pct": 0.0, "timestamp": now_ts,
             })
 
-    # [P1-2] 자체 포착 에피소드 MFE 기반 현실적 백업 TP 학습 (외부 Top 5 역선택 제거)
     p1_l, p2_l, p3_l, ep_n = compute_realistic_tp_from_own_episodes(state, now_ts)
     tp_obj = {
-        "source": "own_episodes_mfe",
+        "source": "own_episodes_mfe_unbiased",
         "sample_count": ep_n,
         "tp1_min_pct": p1_l,
         "tp2_min_pct": p2_l,
@@ -604,7 +638,7 @@ def main():
 
     log_lines = [
         f"🧬 [Bybit 백그라운드 학습 완료 ({DNA_VERSION})] ({now_str})",
-        f"• 시가총액 캐시: 총 {mc_total}종목 (금회 {mc_fresh}종목) | 자체 MFE({ep_n}건) 백업 TP: +{p1_l:.1f}% / +{p2_l:.1f}% / +{p3_l:.1f}%",
+        f"• 시가총액 캐시(충돌티커 배제): 총 {mc_total}종목 (금회 {mc_fresh}종목) | 자체 MFE({ep_n}건·무편향) 백업 TP: +{p1_l:.1f}% / +{p2_l:.1f}% / +{p3_l:.1f}%",
         f"• 48h 검증 {len(verified_48h_lines)}건 | 정제 DNA 표본: {dna_formula.get('sample_count', 0)}건 (활성={dna_formula.get('enabled')})",
     ]
     for idx, it in enumerate(analyzed_top5, 1):
