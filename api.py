@@ -276,12 +276,7 @@ def is_stock_or_tradfi_symbol(sym_or_base):
 
 
 def _build_private_proxy_url(encoded_target):
-    """
-    [P1-3 수정] BYBIT_PROXY_URL 말단 '/' 포함 여부와 무관하게 '?url=' 쿼리를 정확히 조합
-    - '...url=' 으로 끝남 → 그대로 부착
-    - '?' 포함 (예: '...?token=abc') → '&url=' 부착
-    - 일반 도메인 또는 '/' 끝 (예: 'https://my-worker.workers.dev/') → rstrip('/') + '?url=' 부착
-    """
+    """BYBIT_PROXY_URL 말단 '/' 포함 여부와 무관하게 '?url=' 쿼리를 정확히 조합"""
     base_p = str(BYBIT_PROXY_URL or "").strip()
     if not base_p:
         return ""
@@ -377,11 +372,7 @@ def _fetch_on_demand_market_cap_m(base_clean):
 
 
 def get_market_cap_m(symbol_or_base, allow_on_demand=True, turnover_m=0.0):
-    """
-    [P1-4 수정 · 스레드 안전 시가총액 조회 ($M)]
-    - 1글자 티커 및 AMBIGUOUS_MC_TICKERS(M, RAIN, LIT, Q, S, B, W, T, H 등)는
-      타 프로젝트 시총 오매핑으로 인한 OI/시총 가산점·Tier 왜곡을 막기 위해 중립(0.0) 반환
-    """
+    """스레드 안전 시가총액 조회 ($M) — 1글자·중복 충돌 티커 중립(0.0) 처리"""
     s = str(symbol_or_base or "").upper().strip()
     base = s[:-4] if s.endswith("USDT") else s
     base_clean = re.sub(r"^(1000000|100000|10000|1000|100|10)", "", base)
@@ -649,11 +640,7 @@ def _normalize_kline_df(rows, expected_interval_min=None, allow_historical=False
 
 
 def get_valid_bybit_linear_symbols():
-    """
-    [P0-1 수정] CoinGecko 폴백에서 conv_vol >= 500000 유동성 컷 제거!
-    - 상장 유효성 검증(valid_syms)과 신규 진입 거래대금 컷(turnover_m >= 2.0M)을 완전히 분리해
-      진입 후 거래량이 줄어든 정상 보유 포지션이 감시에서 누락되는 현상 원천 차단
-    """
+    """상장 유효성 검증(valid_syms) — CoinGecko $500k 컷 제거 유지"""
     _ensure_dynamic_tradfi_blocklist()
     now = time.time()
     with _CACHE_LOCK:
@@ -738,7 +725,6 @@ def get_valid_bybit_linear_symbols():
             for t in cg_resp.json().get("tickers", []):
                 sym = str(t.get("symbol", "")).upper().strip()
                 c_type = str(t.get("contract_type", "perpetual")).lower().strip()
-                # [P0-1] 거래대금 $500k 컷 제거: 정상 상장된 Bybit 선물이면 거래량과 무관하게 valid_syms 포함
                 if sym.endswith("USDT") and c_type == "perpetual" and not t.get("expired_at"):
                     base = sym[:-4]
                     if base.isascii() and not is_stock_or_tradfi_symbol(sym):
@@ -757,8 +743,11 @@ def get_valid_bybit_linear_symbols():
 
 def get_scanner_candidates():
     """
-    [P0-1 수정] rwa_blocked_bases에는 오직 실제 비크립토(is_stock_or_tradfi_symbol)만 등록하고
-    단순 sym not in valid_syms는 rwa_blocked_bases에 추가하지 않도록 분리
+    [2차 교정 · 4중 후보군 수집 폴백]
+    1순위: Bybit 직통
+    2순위: 프라이빗/공용 프록시 경유 Bybit
+    3순위: CoinGecko Bybit 파생 티커
+    4순위: 미국 IP 무차단 Bitget USDT-FUTURES 직통 폴백 (CoinGecko 429 제한 시에도 스캔 무중단 보장!)
     """
     valid_syms, valid_bases = get_valid_bybit_linear_symbols()
     candidates = []
@@ -801,6 +790,7 @@ def get_scanner_candidates():
             })
         return out
 
+    # 1순위: Bybit 직통
     if not _is_bybit_direct_blocked():
         for host in BYBIT_HOST_NAMES:
             try:
@@ -813,11 +803,13 @@ def get_scanner_candidates():
             except Exception:
                 continue
 
+    # 2순위: 프록시 경유 Bybit
     if not candidates:
         proxy_data = _fetch_bybit_json_via_proxy("/v5/market/tickers?category=linear", timeout=4.5)
         if proxy_data:
             candidates = _parse_bybit_ticker_items(proxy_data.get("result", {}).get("list", []))
 
+    # 3순위: CoinGecko Bybit 파생 티커
     if not candidates:
         chg_backup_map, fund_backup_map = _fetch_24h_change_and_funding_backup_map()
         try:
@@ -868,8 +860,50 @@ def get_scanner_candidates():
                         "turnover_m": turnover_m, "oi_m": oi_m,
                         "change_24h": round(change_24h, 2), "funding_pct": funding_pct,
                     })
+            else:
+                print(f"[후보군 CoinGecko HTTP {cg_resp.status_code}] 4순위 Bitget 직통 폴백 전환")
         except Exception as e:
-            print(f"[후보군 수집 백업 예외] {e}")
+            print(f"[후보군 CoinGecko 예외] {e} — 4순위 Bitget 직통 폴백 전환")
+
+    # 4순위: 미국 IP 무차단 Bitget USDT-FUTURES 직통 폴백 (CoinGecko 429 대응)
+    if not candidates:
+        try:
+            bg_url = clean_url(f"{SCHEME}api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES")
+            bg_resp = requests.get(bg_url, headers=BROWSER_HEADERS, timeout=5.0)
+            if bg_resp.status_code == 200:
+                for it in bg_resp.json().get("data", []):
+                    sym = str(it.get("symbol", "")).upper().strip()
+                    if not sym.endswith("USDT"):
+                        continue
+                    base = sym[:-4]
+                    if is_stock_or_tradfi_symbol(sym):
+                        rwa_blocked_bases.add(base)
+                        continue
+                    if (valid_syms and sym not in valid_syms) or not base.isascii():
+                        continue
+                    if is_heavy_major_coin(base):
+                        continue
+
+                    price = to_float(it.get("lastPr") or it.get("lastPrice"))
+                    turnover_m = to_float(it.get("usdtVolume") or it.get("quoteVolume")) / 1e6
+                    hold_amt = to_float(it.get("holdingAmount"))
+                    oi_m = (hold_amt * price) / 1e6 if (hold_amt > 0 and price > 0) else 0.0
+                    change_24h = to_float(it.get("change24h")) * 100.0
+                    funding_pct = normalize_funding_pct(to_float(it.get("fundingRate")) * 100.0)
+
+                    if price <= 0 or turnover_m < 2.0 or oi_m <= 0.1:
+                        continue
+
+                    pure_crypto_bases.add(base)
+                    candidates.append({
+                        "symbol": sym, "base_coin": base, "price": price,
+                        "turnover_m": turnover_m, "oi_m": oi_m,
+                        "change_24h": round(change_24h, 2), "funding_pct": funding_pct,
+                    })
+                if candidates:
+                    print(f"[후보군 4순위 Bitget 직통 폴백 성공] {len(candidates)}종목 확보")
+        except Exception as e:
+            print(f"[후보군 4순위 Bitget 폴백 예외] {e}")
 
     candidates.sort(key=lambda x: x["change_24h"], reverse=True)
     return candidates, pure_crypto_bases, rwa_blocked_bases
