@@ -1,3 +1,4 @@
+python
 import os, sys, json, time, subprocess, requests
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -68,7 +69,10 @@ TP_CLOSE_REENTRY_COOLDOWN_SEC = 21600
 HISTORY_RETENTION_SEC = 259200
 EPISODE_RETENTION_SEC = 604800
 MAX_NEW_ALERTS_PER_SCAN = 2
-ELITE_SCORE_THRESHOLD = max(90, int(getattr(cfg, "SCORE_THRESHOLD", 90)))
+
+# [v3 영점 최적화] 보유 종목 수 소프트 캡 제거 · 신규 88점 / 손절 후 재진입 90점 고정
+ELITE_SCORE_THRESHOLD = 88
+REENTRY_SCORE_THRESHOLD = 90
 
 DEFAULT_FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
 DEFAULT_LONGTERM_SL_PCT = 20
@@ -89,6 +93,7 @@ ALL_LOCK_FLAGS = (
 
 
 def send_telegram_reliable(text, reply_markup=None):
+    """텔레그램 메시지 재시도 전송 (429 레이트 리밋 자동 대기 포함)"""
     if not text:
         return False
     token = (getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or os.getenv("TELEGRAM_TOKEN", "") or os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
@@ -128,6 +133,12 @@ def _read_json(path):
 
 
 def check_btc_market_regime():
+    """
+    [BTC 3단계 마켓 레짐 게이트 · A안]
+    - OPEN: 정상 구간 → 전체 트랙 탐색
+    - COUNTER_TREND_ONLY: 완만 조정 → Track E(SFP) · Track F(RS)만 예외 허용
+    - FULL_LOCK: 폭락 구간 → 신규 진입 전면 차단
+    """
     regime = {
         "gate_mode": "OPEN",
         "gate_locked": False,
@@ -172,6 +183,7 @@ def check_btc_market_regime():
 
 
 def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
+    """종목별 OI 스냅샷 8개 보관 & 15~45분 전(30분 근접) 기준 스냅샷 매칭"""
     ref_map = {}
     for sym in list(oi_snapshot.keys()):
         if is_stock_or_tradfi_symbol(sym):
@@ -223,6 +235,7 @@ def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
 
 
 def sanitize_flags_by_mfe(item):
+    """단순 윗꼬리 MFE로 tp2_hit을 강제 승격하지 않고 확정 종가 플래그 유지"""
     if not isinstance(item, dict):
         return item
     entry_p = to_float(item.get("entry_price"))
@@ -248,6 +261,7 @@ def sanitize_flags_by_mfe(item):
 
 
 def _merge_state_dicts(base_state, incoming_state):
+    """다중 상태 파일 및 Git 원격 상태의 단방향 안전 합집합 병합"""
     if not isinstance(incoming_state, dict):
         return base_state
     for s, ts_v in (incoming_state.get("alert_history") or {}).items():
@@ -365,7 +379,7 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
     signal_episodes[ep_key] = {
         "symbol": symbol, "created_at": c_at, "track_type": t_item.get("track_type", "TRACK_A"),
         "is_long_term": bool(t_item.get("is_long_term", False)),
-        "score": int(t_item.get("score", 90)), "entry_price": to_float(t_item.get("entry_price")),
+        "score": int(t_item.get("score", ELITE_SCORE_THRESHOLD)), "entry_price": to_float(t_item.get("entry_price")),
         "initial_stop_price": to_float(t_item.get("initial_stop_price") or t_item.get("stop_price")),
         "stop_price": to_float(t_item.get("stop_price")), "sl_pct": to_float(t_item.get("sl_pct", DEFAULT_FIXED_SL_PCT)),
         "exit_price": to_float(t_item.get("exit_price") or prev.get("exit_price"), 0.0),
@@ -392,7 +406,7 @@ def _record_pm_win(symbol, t_item, now_ts, max_fav):
             postmortem.record_win_postmortem({
                 "symbol": symbol,
                 "track_type": t_item.get("track_type", "TRACK_A"),
-                "score": int(t_item.get("score", 90)),
+                "score": int(t_item.get("score", ELITE_SCORE_THRESHOLD)),
                 "created_at": int(t_item.get("created_at", now_ts)),
                 "win_at": now_ts,
                 "max_favorable_pct": max_fav,
@@ -408,7 +422,7 @@ def _record_pm_win(symbol, t_item, now_ts, max_fav):
 
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
-    """[방어선 캔들 마감 확정 + 요청된 돌파·익절 문구 5종 + 전량 수익 마감 시 30초 리플레이 영상]"""
+    """[방어선 캔들 마감 확정 + 돌파·익절 문구 5종 + 전량 수익 마감 시 30초 리플레이 영상]"""
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("closed_alerted"):
         return None
     entry_ref = to_float(t_item.get("entry_price"))
@@ -660,7 +674,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 oi_r_val = round(to_float(t_item.get("oi_m"), 0.0) / to_float(t_item.get("turnover_m"), 1.0) * 100.0, 1)
             sl_payload = {
                 "symbol": symbol, "track_type": t_item.get("track_type", "TRACK_A"),
-                "score": int(t_item.get("score", 90)), "entry_price": entry_ref,
+                "score": int(t_item.get("score", ELITE_SCORE_THRESHOLD)), "entry_price": entry_ref,
                 "stop_price": init_stop_p, "sl_trigger_price": trig,
                 "sl_pct": sl_pct_use, "created_at": created_at, "sl_at": now_ts,
                 "hold_minutes": hold_min, "max_high_price": max_high, "max_favorable_pct": max_fav,
@@ -807,6 +821,7 @@ def run_latest_profit_video_test():
 
 
 def _git_sync_state():
+    """bot_state.json · scanner_state.json · postmortem_db.json 원격 합집합 병합 및 동기화"""
     is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
     try:
         subprocess.run(["git", "config", "--local", "user.email", "actions@github.com"], check=False)
@@ -991,7 +1006,7 @@ def main(scan_long_term=True):
     if market_regime["gate_mode"] == "COUNTER_TREND_ONLY":
         print(f"[{now_str}] ⚠️ {market_regime['reason']}")
 
-    # 참고 로그용 활성 보유 종목 수 집계 (커트라인 상향 없음 · 항상 ELITE_SCORE_THRESHOLD 고정)
+    # 참고 로그용 활성 보유 종목 수 집계 (소프트 캡 없음 · 항상 88점 고정)
     active_short_cnt = 0
     active_long_cnt = 0
     for s_k, t_v in tracked.items():
@@ -1094,7 +1109,7 @@ def main(scan_long_term=True):
         sl_cnt = _recent_sl_count(sym)
 
         if was_sl and elapsed_alert < RE_ALERT_COOLDOWN_SEC:
-            if sl_cnt >= 2 or elapsed_alert < SL_RECOVERY_COOLDOWN_SEC or res["score"] < 92 or to_float(res.get("rsi6_15m"), 50.0) >= 68.0:
+            if sl_cnt >= 2 or elapsed_alert < SL_RECOVERY_COOLDOWN_SEC or res["score"] < REENTRY_SCORE_THRESHOLD or to_float(res.get("rsi6_15m"), 50.0) >= 68.0:
                 continue
             orig_title = str(res.get("track_title", "🚀 [타점 포착]"))
             if "재진입" not in orig_title:
@@ -1138,7 +1153,7 @@ def main(scan_long_term=True):
     lt_lbl = "장기ON" if scan_long_term else "단기전용"
     print(
         f"[{now_str}] 스캔 완료 ({time.time() - start_t:.1f}초 | {lt_lbl} | "
-        f"보유 단기{active_short_cnt}·장기{active_long_cnt} · 고정컷{ELITE_SCORE_THRESHOLD} | "
+        f"보유 단기{active_short_cnt}·장기{active_long_cnt} · 고정컷{ELITE_SCORE_THRESHOLD}/재진입{REENTRY_SCORE_THRESHOLD} | "
         f"BTC 15m {market_regime['btc_15m_pct']:+.2f}% / 4H {market_regime['btc_4h_pct']:+.2f}%) - 전송 {sent_count}건"
     )
 
