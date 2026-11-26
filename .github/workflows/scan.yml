@@ -13,7 +13,6 @@ on:
 
 concurrency:
   group: bybit-scanner-main
-  # 시간 예산 루프(매시 :53 이전 정상 종료)와 결합해 Git 푸시/알림 도중 강제 종료(SIGTERM) 방지
   cancel-in-progress: false
 
 permissions:
@@ -60,6 +59,20 @@ jobs:
           else
             playwright install-deps chromium
           fi
+
+      - name: Cache lightweight-charts JS asset
+        id: lw-js-cache
+        uses: actions/cache@v4
+        with:
+          path: assets/lightweight-charts.standalone.production.js
+          key: lw-charts-js-4.2.0
+
+      - name: Download lightweight-charts JS asset (if cache miss)
+        if: ${{ steps.lw-js-cache.outputs.cache-hit != 'true' }}
+        run: |
+          mkdir -p assets
+          curl -fsSL https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js -o assets/lightweight-charts.standalone.production.js || \
+          curl -fsSL https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js -o assets/lightweight-charts.standalone.production.js || true
 
       - name: Ensure ffmpeg is available
         run: which ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
