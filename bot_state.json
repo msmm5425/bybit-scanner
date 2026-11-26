@@ -2954,33 +2954,6 @@
     "ICPUSDT": 1795674732
   },
   "sl_history": {
-    "MMTUSDT_1795419132": {
-      "symbol": "MMTUSDT",
-      "track_type": "TRACK_A",
-      "score": 97,
-      "entry_price": 0.2177,
-      "stop_price": 0.204638,
-      "sl_trigger_price": 0.2046,
-      "sl_pct": 6,
-      "created_at": 1795419132,
-      "sl_at": 1795436154,
-      "hold_minutes": 283,
-      "max_high_price": 0.2325,
-      "max_favorable_pct": 6.8,
-      "vol_mult": 3.17,
-      "rsi6_15m": 75.0,
-      "oi_m": 2.2,
-      "oi_ratio": 10.8,
-      "funding_pct": -0.0046,
-      "change_24h": -0.37,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "볼린저/켈트너 초응축(2.8%) + 15m PPO(-0.08%) 전환",
-        "15m 매수 델타(CVD)·OBV 바닥 흡수 확인",
-        "런던 유동성 세션(+4점)",
-        "PPO 파동 정렬(15m PPO 히스토그램 확장)"
-      ]
-    },
     "ICNTUSDT_1795308759": {
       "symbol": "ICNTUSDT",
       "track_type": "TRACK_A",
