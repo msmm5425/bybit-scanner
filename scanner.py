@@ -198,7 +198,7 @@ def check_btc_market_regime():
 
 
 def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
-    """종목별 OI 스냅샷 8개 보관 (/tmp 런타임 전용, Git 비대화 방지)"""
+    """종목별 OI 스냅샷 8개 보관 (/tmp 런타임 전용, 5시간 15분 연속 유지)"""
     ref_map = {}
     for sym in list(oi_snapshot.keys()):
         if is_stock_or_tradfi_symbol(sym):
@@ -283,7 +283,6 @@ def _record_pruned_tracked(state, sym, created_at, now_ts):
 
 def _apply_state_cleanup(state, now_ts, rwa_blocked=None):
     """
-    [최종 보강]
     - 장기 포지션(Track D): tracked 최대 추적 365일(1년) + 원장 보존 마감일 기준 365일(1년)
     - 단기 포지션: tracked 안전상한 90일 + 원장 보존 마감일 기준 35일
     - tracked에 살아 있는 에피소드 키는 기간과 무관하게 signal_episodes 선삭제 원천 차단
@@ -309,7 +308,6 @@ def _apply_state_cleanup(state, now_ts, rwa_blocked=None):
         if is_stock_or_tradfi_symbol(sl_v.get("symbol", "")) or (now_ts - int(to_float(sl_v.get("sl_at"), 0)) > HISTORY_RETENTION_SEC):
             del sl_history[sl_k]
 
-    # 1) tracked 정리 먼저 수행 (장기 365일 / 단기 90일 · 마감+24h · TradFi)
     for sym in list(tracked.keys()):
         t_item = tracked.get(sym)
         if not isinstance(t_item, dict):
@@ -347,7 +345,6 @@ def _apply_state_cleanup(state, now_ts, rwa_blocked=None):
             del tracked[sym]
             continue
 
-    # 2) 현재 tracked에 살아 있는 키 집합 수집 (signal_episodes 선삭제 보호)
     active_tracked_ep_keys = set()
     for s_k, t_v in tracked.items():
         if isinstance(t_v, dict):
@@ -355,7 +352,6 @@ def _apply_state_cleanup(state, now_ts, rwa_blocked=None):
             if c_v > 0:
                 active_tracked_ep_keys.add(f"{s_k}_{c_v}")
 
-    # 3) signal_episodes 정리 (tracked 생존 키 보호 + 마감일 기준 단기 35일 / 장기 365일 보존)
     for ep_k in list(signal_episodes.keys()):
         ep = signal_episodes.get(ep_k) or {}
         sym_ep = str(ep.get("symbol", "")).upper()
@@ -1366,23 +1362,27 @@ def main(scan_long_term=True):
     )
 
 
-def run_loop_mode(max_iterations=10, sleep_sec=285, max_budget_sec=2640, min_runtime_sec=900):
-    """크론 지연 안전 시간 예산 루프 (최소 15분 가동 보장 · 정시 시작 시 :52 이전 정상 종료)"""
+def run_loop_mode(max_iterations=80, sleep_sec=285, max_budget_sec=18900):
+    """
+    [1안 · 무공백 5시간 15분(315분) 연속 릴레이 루프]
+    - 24시간 4시간 간격 6슬롯(cron: 17 0,4,8,12,16,20 * * *)과 결합하여
+      최소 75분 이상의 크론 지연 흡수 마진 & 수동 재시작 시에도 자동 바통 터치 보장
+    - 장기 포지션(Track D)은 3회차마다(약 15분 주기) 탐색, OI 스냅샷 5시간 연속 유지
+    """
     loop_start = time.time()
+    budget_min = max_budget_sec / 60.0
 
     for i in range(1, max_iterations + 1):
         elapsed = time.time() - loop_start
-        now_kst = datetime.now(KST)
-        if i > 1:
-            if elapsed >= max_budget_sec:
-                print(f"[시간 예산 도달] {elapsed / 60.0:.1f}분 경과로 정각 전 안전 종료합니다.")
-                break
-            if elapsed >= min_runtime_sec and now_kst.minute >= 52:
-                print(f"[정각 안전 종료] {now_kst.strftime('%H:%M KST')} ({elapsed / 60.0:.1f}분 경과) 정상 종료합니다.")
-                break
+        if i > 1 and elapsed >= max_budget_sec:
+            print(f"[릴레이 예산 도달] {elapsed / 60.0:.1f}분 / {budget_min:.0f}분 경과 — 대기 중인 다음 슬롯으로 바통 터치합니다.")
+            break
 
         scan_lt = (i % 3 == 1)
-        print(f"=== [회차 {i}/{max_iterations} | 경과 {elapsed / 60.0:.1f}분] 5분 주기 스캔 시작 ({'단기+장기' if scan_lt else '단기전용'}) ===")
+        print(
+            f"=== [회차 {i}/{max_iterations} | 경과 {elapsed / 60.0:.1f}분 / {budget_min:.0f}분] "
+            f"5분 주기 스캔 시작 ({'단기+장기' if scan_lt else '단기전용'}) ==="
+        )
         _git_sync_state()
         try:
             main(scan_long_term=scan_lt)
@@ -1391,16 +1391,10 @@ def run_loop_mode(max_iterations=10, sleep_sec=285, max_budget_sec=2640, min_run
         _git_sync_state()
 
         if i < max_iterations:
-            elapsed_after = time.time() - loop_start
-            rem_budget = max_budget_sec - elapsed_after
-            now_after = datetime.now(KST)
-            sec_to_52 = max(0, (52 - now_after.minute) * 60 - now_after.second)
-            if now_after.minute < 52 and (elapsed_after + sec_to_52) >= min_runtime_sec:
-                max_wait_allowed = min(rem_budget - 45.0, sec_to_52 - 20.0)
-            else:
-                max_wait_allowed = rem_budget - 45.0
+            rem_budget = max_budget_sec - (time.time() - loop_start)
+            max_wait_allowed = rem_budget - 45.0
             if max_wait_allowed < 60.0:
-                print(f"[루프 정상 마무리] 잔여 시간 여유 부족({max_wait_allowed:.0f}초)으로 안전 종료합니다.")
+                print(f"[릴레이 정상 마무리] 잔여 시간 {rem_budget:.0f}초 — 대기 중인 다음 슬롯으로 바통 터치합니다.")
                 break
             time.sleep(min(sleep_sec, max_wait_allowed))
 
