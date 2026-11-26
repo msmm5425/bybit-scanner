@@ -164,7 +164,8 @@ def _evaluate_supply_overlay(symbol, oi_m, turnover_m, market_cap_m, ls_info=Non
     [전 전략 공통 수급 오버레이 (-6 ~ +5점 캡)]
     1) Bybit 단일 스케일 보정 OI/시총(화약고 압축도) & 거래대금/시총(회전율) 가산
     2) Binance · Gate.io · Bitget 통합 스마트머니(고래 S) vs 개미(T) 롱숏 괴리 가감점
-    3) 단일 리테일 비율 백업(Bybit · OKX 등) 자동 적용
+       - 진짜 개미 롱 함정(S<=1.05 & T>=2.20 / S<0.90 & T>=1.90) -5점 차단 유지
+       - 알트코인 구조적 롱 편향을 고려해 경계/단일 리테일 임계치만 현실화
     """
     out = {
         "score_adj": 0,
@@ -219,20 +220,20 @@ def _evaluate_supply_overlay(symbol, oi_m, turnover_m, market_cap_m, ls_info=Non
         elif s_val >= 1.30 and div >= 1.35:
             adj += 2
             out["reasons"].append(f"[{src_lbl}] 스마트머니 롱 우위(고래 {s_val:.2f} / 개미 {t_val:.2f}, +2점)")
-        elif (s_val <= 1.05 and t_val >= 2.20) or (s_val < 0.90 and t_val >= 1.80) or (t_val >= 3.00 and div <= 0.65):
+        elif (s_val <= 1.05 and t_val >= 2.20) or (s_val < 0.90 and t_val >= 1.90) or (t_val >= 3.20 and div <= 0.60):
             adj -= 5
             out["reasons"].append(f"⚠️ [{src_lbl}] 개미 롱 쏠림 함정 경계(고래 {s_val:.2f} vs 개미 {t_val:.2f}, -5점)")
-        elif s_val <= 1.15 and t_val >= 1.80 and div <= 0.65:
+        elif s_val <= 1.10 and t_val >= 2.10 and div <= 0.60:
             adj -= 3
             out["reasons"].append(f"⚠️ [{src_lbl}] 고래 관망·개미 롱 편중(고래 {s_val:.2f} vs 개미 {t_val:.2f}, -3점)")
     elif src in ("BINANCE", "GATE", "BITGET", "BYBIT", "OKX") and t_val > 0:
         if t_val <= 0.75:
             adj += 2
             out["reasons"].append(f"[{src_lbl}] 리테일 숏 쏠림(L/S {t_val:.2f}, +2점)")
-        elif t_val >= 2.80:
+        elif t_val >= 3.30:
             adj -= 4
             out["reasons"].append(f"⚠️ [{src_lbl}] 리테일 극단 롱 쏠림(L/S {t_val:.2f}, -4점)")
-        elif t_val >= 2.10:
+        elif t_val >= 2.50:
             adj -= 2
             out["reasons"].append(f"⚠️ [{src_lbl}] 리테일 롱 과밀 경계(L/S {t_val:.2f}, -2점)")
 
@@ -526,13 +527,13 @@ def _evaluate_weekly_daily_pro_filter(
                 return out
 
             if ppo1w_zero_up:
-                out["score_adj"] += 3
+                out["score_adj"] += 4
                 out["reasons"].append("1W 주봉 PPO 0선 위 상승체제 안착")
             elif weekly_spring_hammer:
                 out["score_adj"] += 4
                 out["reasons"].append("1W 주봉 신저가 스윕 후 긴 아래꼬리 스프링 복귀")
             elif weekly_ma10_reclaim:
-                out["score_adj"] += 3
+                out["score_adj"] += 4
                 out["reasons"].append("1W 주봉 10MA 추세 전환 초입 확인")
             elif weekly_floor_hold and (obv1w_rising or ppo1w_turn_up):
                 out["score_adj"] += 3
@@ -567,7 +568,8 @@ def _evaluate_weekly_daily_pro_filter(
         elif has_1d and obv1d_alive and not out["reasons"]:
             out["reasons"].append("1D 일봉 OBV 매집 생존 확인")
 
-        out["score_adj"] = int(min(4, out["score_adj"]))
+        # 장기 1W/1D 가산점 상한 5점 (99점 포화는 방지하면서 A급 88~92점 정상 진입 복원)
+        out["score_adj"] = int(min(5, out["score_adj"]))
         return out
 
     tk = str(track_type or "TRACK_A").upper()
@@ -812,7 +814,11 @@ def _calculate_macro_longterm_tps(price, turnover_m, oi_m, df_4h, df_1d, df_1w=N
 
 
 def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, funding_pct, df_4h):
-    """[장기 포지션 Track D1~D6 (기본 81~86점)]"""
+    """
+    [장기 포지션 Track D1~D6 정밀 영점 (기본 84~88점)]
+    - 1W/1D(+2~5) + 수급오버레이(-5~+4) + Q1(+2) + 세션(+1) 결합 시
+      A급 88~92점 · S급 93~97점 분포 (오전 $XPL/$MOODENG 수준 정상 포착 + 99점 포화 방지)
+    """
     if df_4h is None or df_4h.empty or len(df_4h) < 55:
         return None
     if change_24h >= 22.0:
@@ -864,7 +870,7 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
     sell_v4_12 = float(v4_win12[c4.iloc[-12:] < o4.iloc[-12:]].sum())
     if -3.0 <= change_24h <= 11.0 and oi_m >= 1.2 and oi_ratio >= 28.0 and funding_pct <= 0.008 and buy_v4_12 >= sell_v4_12:
         if (hi_10d * 0.86 <= price < hi_10d * 0.995) and to_float(obv4.iloc[-1]) > obv_hi_10d and price >= ma20_4h * 0.985 and (ppo4_bull or ppo4_turn_up):
-            score_d1 = int(np.clip(81 + min(2, int((oi_ratio - 28) / 8)) + (2 if funding_pct < 0 else 0) + (1 if ppo4_zero_up else 0), 81, 86))
+            score_d1 = int(np.clip(84 + min(2, int((oi_ratio - 28) / 8)) + (1 if funding_pct < 0 else 0) + (1 if ppo4_zero_up else 0), 84, 88))
             candidates_d.append({
                 "sub_strategy": "D1 · 스텔스 OI·OBV 선행 매집",
                 "score": score_d1,
@@ -912,7 +918,7 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
                 is_turn_up = turn_4h_ok and price >= max(pump_open * 0.99, ma20_4h * 0.985) and price <= pump_high * 1.02
 
                 if pump_span_pct >= 2.0 and no_heavy_dump and held_pump_base and is_dry_up and is_turn_up and (ppo4_turn_up or ppo4_zero_up):
-                    score_d2 = int(np.clip(81 + (2 if price >= pump_mid else 1) + (2 if oi_ratio >= 15.0 else 0) + (1 if ppo4_zero_up else 0), 81, 86))
+                    score_d2 = int(np.clip(84 + (2 if price >= pump_mid else 1) + (1 if oi_ratio >= 15.0 else 0) + (1 if ppo4_zero_up else 0), 84, 88))
                     candidates_d.append({
                         "sub_strategy": "D2 · 매집봉 출현 후 거래량 건조 눌림",
                         "score": score_d2,
@@ -939,7 +945,7 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
             and 5.0 <= range_30d_pct <= 55.0
             and ppo4_bull
         ):
-            score_d3 = int(np.clip(82 + min(2, int(bull_v4_2 - 1.8)) + (1 if price >= ma50_4h else 0) + (1 if ppo4_zero_up else 0), 82, 86))
+            score_d3 = int(np.clip(84 + min(2, int(bull_v4_2 - 1.8)) + (1 if price >= ma50_4h else 0) + (1 if ppo4_zero_up else 0), 84, 88))
             candidates_d.append({
                 "sub_strategy": "D3 · 4H 30일 장기 박스권 첫 돌파",
                 "score": score_d3,
@@ -972,7 +978,7 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
         obv_14d_break = to_float(obv4.iloc[-1]) >= obv_14d_hi
 
         if dd_30d_pct >= 25.0 and higher_low_4h and fresh_ma50_break and bull_v4_2 >= 2.2 and ma20_turning and obv_14d_break and ppo4_bull:
-            score_d4 = int(np.clip(82 + min(2, int(bull_v4_2 - 1.5)) + (1 if ma20_4h >= ma50_4h else 0) + (1 if ppo4_zero_up else 0), 82, 86))
+            score_d4 = int(np.clip(84 + min(2, int(bull_v4_2 - 1.5)) + (1 if ma20_4h >= ma50_4h else 0) + (1 if ppo4_zero_up else 0), 84, 88))
             candidates_d.append({
                 "sub_strategy": "D4 · 4H 장기 하락추세 탈출 & 50MA 돌파",
                 "score": score_d4,
@@ -1015,7 +1021,7 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
             strong_bull_4h = _is_healthy_bull_candle(curr_o4, curr_h4, curr_l4, curr_c4, max_uwick=0.35, min_clv=0.25, min_body_pct=1.5) and curr_v4_r >= 1.2
 
             if in_bottom_zone and bull_div_4h and strong_bull_4h and oi_ratio >= 20.0 and funding_pct <= 0.005:
-                score_d5 = int(np.clip(82 + min(2, int((rsi_rec_v - rsi_prev_v) / 4.0)) + (2 if funding_pct < 0 else 1), 82, 86))
+                score_d5 = int(np.clip(84 + min(2, int((rsi_rec_v - rsi_prev_v) / 4.0)) + (2 if funding_pct < 0 else 1), 84, 88))
                 candidates_d.append({
                     "sub_strategy": "D5 · 4H 매크로 PPO·RSI 강세 다이버전스 바닥 매집",
                     "score": score_d5,
@@ -1041,11 +1047,11 @@ def _evaluate_macro_track_d(price, change_24h, turnover_m, oi_m, oi_ratio, fundi
 
         if had_spring_sweep and reclaimed_floor and fresh_reclaim_6 and turn_4h_ok and bull_v4_3 >= 2.2 and obv4_reclaim and (ppo4_turn_up or ppo4_bull):
             score_d6 = int(np.clip(
-                81
+                84
                 + (2 if funding_pct <= -0.002 else 0)
-                + (2 if bull_v4_3 >= 3.0 else 1)
+                + (1 if bull_v4_3 >= 3.0 else 0)
                 + (1 if oi_ratio >= 25.0 else 0),
-                81, 86,
+                84, 88,
             ))
             candidates_d.append({
                 "sub_strategy": "D6 · 와이코프 스프링(신저가 개미털기 후 바닥 재탈환)",
@@ -1340,13 +1346,15 @@ def analyze_symbol(
 
     swing_high_ref = to_float(highs.iloc[-min(len(highs) - 1, 48):-1].max(), price * 1.03)
 
-    supply_score = (6 if oi_ratio >= 22.0 else (4 if oi_ratio >= 10.0 else 2)) + (5 if funding_pct < -0.008 else (3 if funding_pct <= 0.010 else 1))
-    rsi_chase_pen = -2 if rsi6_15m >= 70.0 else 0
-    # [1안 균형 완화] 미세 BTC 역풍 감점 기준 -0.60% → -1.20% 완화 (일상 흔들림 통과)
+    # [영점 복원] 수급 점수 평범 8~9점 / 최상 11점 (99점 포화는 방지하면서 디플레이션 해소)
+    supply_score = (6 if oi_ratio >= 20.0 else (5 if oi_ratio >= 9.0 else 3)) + (5 if funding_pct < -0.008 else (4 if funding_pct <= 0.012 else 2))
+    # [이중 감점 해소] 정상 돌파 RSI(69~73) 중복 차감 제거 → 극단 과열(74+)에만 -2점 적용
+    rsi_chase_pen = -2 if rsi6_15m >= 74.0 else 0
+    # [1안 균형 완화] 미세 BTC 역풍 감점 기준 -1.20% 유지
     btc_tail_bonus = 1 if btc_1h_pct >= 0.30 else (-2 if btc_1h_pct <= -1.20 else 0)
 
     base_supply_reasons = []
-    if oi_ratio >= 22.0:
+    if oi_ratio >= 20.0:
         base_supply_reasons.append(f"OI 집중도 최상({oi_ratio:.0f}%)")
     if funding_pct < -0.008:
         base_supply_reasons.append(f"음수 펀딩 숏스퀴즈({funding_pct:+.4f}%)")
@@ -1362,7 +1370,7 @@ def analyze_symbol(
     short_candidates = []
 
     def _register_candidate(tk, title, tech_sc, tk_reasons, vol_metric):
-        capped_tech = min(80, int(tech_sc))
+        capped_tech = min(83, int(tech_sc))
         btc_adj = 0 if tk in ("TRACK_E", "TRACK_F") else btc_tail_bonus
         raw_sc = (
             capped_tech
@@ -1424,11 +1432,11 @@ def analyze_symbol(
 
         if swept_support and reclaimed_support and max_wick_3 >= 0.42 and bull_vol_2 >= 2.2 and (ppo_bull_div or rsi_bull_div or kdj_sharp_turn):
             sc_e = (
-                40
-                + (13 if max_wick_3 >= 0.52 else 9)
-                + (12 if bull_vol_2 >= 2.8 else 9)
-                + (10 if (ppo_bull_div and (rsi_bull_div or kdj_sharp_turn)) else 7)
-                + (5 if (recent_delta_sum > 0 and obv_strong) else 2)
+                43
+                + (13 if max_wick_3 >= 0.52 else 10)
+                + (13 if bull_vol_2 >= 2.8 else 10)
+                + (11 if (ppo_bull_div and (rsi_bull_div or kdj_sharp_turn)) else 8)
+                + (6 if (recent_delta_sum > 0 or obv_strong) else 3)
                 + (2 if counter_trend_only else 0)
             )
             div_lbl = "PPO·RSI 강세 다이버전스" if ppo_bull_div else ("RSI 강세 다이버전스" if rsi_bull_div else "KDJ 바닥 급반전")
@@ -1443,7 +1451,7 @@ def analyze_symbol(
                 vol_metric=bull_vol_2,
             )
 
-    # [Track F] ⚡ BTC 역행 상대강도 대장주 (완화된 2단계 구간과 연동해 4H -3.5%까지 허용)
+    # [Track F] ⚡ BTC 역행 상대강도 대장주
     btc_weak_for_f = (-3.5 <= btc_4h_pct <= 0.4) or (btc_1h_pct <= -0.5)
     if len(closes) >= 20 and btc_weak_for_f and ppo1h_bull and change_24h <= 28.0:
         p_4h_ago = to_float(closes.iloc[-17], price)
@@ -1468,11 +1476,11 @@ def analyze_symbol(
             and bull_vol_2 >= 1.5
         ):
             sc_f = (
-                (34 if rs_vs_btc >= 7.0 else 30)
-                + 15
-                + (12 if obv_break_f else 7)
-                + (11 if bull_vol_2 >= 2.2 else 8)
-                + (5 if recent_delta_sum > 0 else 2)
+                (36 if rs_vs_btc >= 7.0 else 32)
+                + 16
+                + (13 if obv_break_f else 8)
+                + (12 if bull_vol_2 >= 2.2 else 9)
+                + (6 if recent_delta_sum > 0 else 3)
                 + (2 if counter_trend_only else 0)
             )
             _register_candidate(
@@ -1505,11 +1513,11 @@ def analyze_symbol(
             )
             if higher_low_g and break_res_g and recent_delta_sum > 0 and curr_bar_delta > 0 and bull_vol_2 >= 1.6:
                 sc_g = (
-                    (35 if funding_pct <= -0.040 else 31)
-                    + (15 if oi_ratio >= 25.0 else 12)
-                    + (13 if htf_aligned else 10)
-                    + (11 if bull_vol_2 >= 2.2 else 8)
-                    + (6 if obv_strong else 3)
+                    (36 if funding_pct <= -0.040 else 33)
+                    + (16 if oi_ratio >= 25.0 else 13)
+                    + (14 if htf_aligned else 11)
+                    + (12 if bull_vol_2 >= 2.2 else 9)
+                    + (7 if obv_strong else 4)
                 )
                 _register_candidate(
                     "TRACK_G",
@@ -1552,11 +1560,11 @@ def analyze_symbol(
             b_vol_show = bull_vol_2 if close_confirmed_b else max(bull_vol_2, bull_vol_5)
             flip_lbl = "S-R Flip 리테스트 지지(눌림건조·반등양봉)" if sr_flip_retest_b else "24H 전고점 종가 안착 돌파"
             sc_b = (
-                (35 if b_vol_show >= 2.8 else 31)
-                + (15 if htf_aligned else (12 if htf_bull else 4))
-                + (12 if obv_strong else 5)
-                + (10 if (curr_c > ma20_15m_val and to_float(ma7.iloc[-1]) >= ma20_15m_val) else 4)
-                + (6 if 48.0 <= rsi6_15m <= 68.0 else 3)
+                (35 if b_vol_show >= 2.8 else 32)
+                + (16 if htf_aligned else (13 if htf_bull else 5))
+                + (13 if obv_strong else 6)
+                + (10 if (curr_c > ma20_15m_val and to_float(ma7.iloc[-1]) >= ma20_15m_val) else 5)
+                + (7 if 48.0 <= rsi6_15m <= 74.0 else 4)
                 + (3 if sr_flip_retest_b else 1)
             )
             _register_candidate(
@@ -1610,11 +1618,11 @@ def analyze_symbol(
                                 mss_ok = _check_5m_mss_trigger(symbol)
                                 if mss_ok is True or (mss_ok is None and is_curr_healthy_bull and curr_c > prev_o):
                                     sc_c = (
-                                        (32 if 0.52 <= fib_ret_c <= 0.72 else 28)
-                                        + (15 if price >= ma20_1h * 0.985 else 11)
-                                        + (12 if obv_strong else 8)
-                                        + (11 if (min_rsi6_6 <= 30.0 or max_lwick >= 0.35) else 8)
-                                        + (9 if mss_ok else 5)
+                                        (34 if 0.52 <= fib_ret_c <= 0.72 else 30)
+                                        + (16 if price >= ma20_1h * 0.985 else 12)
+                                        + (13 if obv_strong else 9)
+                                        + (12 if (min_rsi6_6 <= 30.0 or max_lwick >= 0.35) else 9)
+                                        + (9 if mss_ok else 6)
                                         + (2 if oi_q["quadrant"] == "Q4" else 0)
                                     )
                                     _register_candidate(
@@ -1643,11 +1651,11 @@ def analyze_symbol(
 
             if breaking_squeeze_box and (ttm_fired or (was_squeezed and cvd_absorption) or (min_bw <= 4.5 and cvd_absorption)):
                 sc_a = (
-                    (32 if ttm_fired else (27 if was_squeezed else 23))
-                    + (15 if bull_vol_2 >= 2.4 else 12)
-                    + (14 if htf_aligned else 11)
-                    + (13 if (cvd_absorption and obv_strong) else (8 if obv_strong else 4))
-                    + (6 if (kdj_j_15m > kdj_j_prev and 35.0 <= rsi6_15m <= 68.0) else 3)
+                    (33 if ttm_fired else (29 if was_squeezed else 26))
+                    + (16 if bull_vol_2 >= 2.3 else 13)
+                    + (15 if htf_aligned else 12)
+                    + (14 if (cvd_absorption and obv_strong) else (9 if obv_strong else 5))
+                    + (7 if (kdj_j_15m > kdj_j_prev and 35.0 <= rsi6_15m <= 70.0) else 4)
                 )
                 r_a = [
                     f"TTM Squeeze(BB<KC) 상단 돌파(응축폭 {min_bw:.1f}%) + 건전 양봉 {bull_vol_2:.1f}배"
@@ -1706,11 +1714,11 @@ def analyze_symbol(
 
                     if match_cnt >= 3:
                         sc_h = (
-                            (32 if match_cnt == 4 else 28)
-                            + (15 if bull_vol_2 >= req_lvol * 1.25 else 11)
-                            + (12 if obv_strong else 7)
-                            + (12 if htf_aligned else 9)
-                            + (7 if (kdj_j_15m > kdj_j_prev and rsi6_15m > rsi6_prev) else 3)
+                            (34 if match_cnt == 4 else 30)
+                            + (16 if bull_vol_2 >= req_lvol * 1.25 else 12)
+                            + (13 if obv_strong else 8)
+                            + (13 if htf_aligned else 10)
+                            + (7 if (kdj_j_15m > kdj_j_prev and rsi6_15m > rsi6_prev) else 4)
                         )
                         dom_tag = str(dna_f.get("dominant_tag") or "Top 5 급등 DNA")
                         _register_candidate(
