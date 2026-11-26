@@ -2814,33 +2814,6 @@
     "OPUSDT": 1795697036
   },
   "sl_history": {
-    "QUSDT_1795443452": {
-      "symbol": "QUSDT",
-      "track_type": "TRACK_A",
-      "score": 96,
-      "entry_price": 0.028042,
-      "stop_price": 0.026359,
-      "sl_trigger_price": 0.0263,
-      "sl_pct": 6,
-      "created_at": 1795443452,
-      "sl_at": 1795449396,
-      "hold_minutes": 99,
-      "max_high_price": 0.028195,
-      "max_favorable_pct": 0.55,
-      "vol_mult": 2.43,
-      "rsi6_15m": 49.5,
-      "oi_m": 1.2,
-      "oi_ratio": 45.5,
-      "funding_pct": 0.005,
-      "change_24h": 9.29,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "볼린저/켈트너 초응축(3.1%) + 15m PPO(+0.75%) 전환",
-        "15m 매수 델타(CVD)·OBV 바닥 흡수 확인",
-        "OI 집중도 최상(46%)",
-        "뉴욕 유동성 세션(+4점)"
-      ]
-    },
     "MMTUSDT_1795443452": {
       "symbol": "MMTUSDT",
       "track_type": "TRACK_E",
