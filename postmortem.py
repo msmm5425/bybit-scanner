@@ -7,8 +7,12 @@ from config import KST, POSTMORTEM_DB_FILE, to_float as _to_float
 
 RETENTION_SEC = 14 * 86400
 ENGINE_VER = "v3"
-_DB_LOCK = threading.RLock()
+# [1차 교정] 오답 학습 감점 최대 캡을 8점으로 제한해 신호 전체 동결(Death Spiral) 방지
+MAX_PENALTY_CAP = 8
+# 구조상 거래량 배수 < 1.8x가 정상인 전략(장기 스텔스 D1 · 눌림 C · RS F · 숏스퀴즈 G)은 lowvol 감점 제외
+LOWVOL_EXEMPT_TRACKS = {"TRACK_D", "TRACK_C", "TRACK_F", "TRACK_G"}
 
+_DB_LOCK = threading.RLock()
 _DB_MEM_CACHE = {"mtime": -1.0, "ts": 0.0, "data": None}
 _TOXIC_MEM_CACHE = {"updated_at": -1, "ts": 0.0, "data": {}}
 
@@ -69,11 +73,7 @@ def _save_db_unlocked(data):
 
 
 def merge_postmortem_dbs(local_db, remote_db):
-    """
-    원격과 로컬 postmortem_db.json을 ID 기준 합집합 병합
-    - [중복 커밋 방지] records/wins에 실제 변화가 없으면 updated_at을 기존 값으로 유지해
-      5분마다 의미 없는 1줄 커밋이 중복 생성되지 않도록 최적화
-    """
+    """원격과 로컬 postmortem_db.json ID 기준 합집합 병합 (내용 무변경 시 updated_at 유지로 중복 커밋 차단)"""
     now_ts = int(time.time())
     l_db = local_db if isinstance(local_db, dict) else {}
     r_db = remote_db if isinstance(remote_db, dict) else {}
@@ -143,7 +143,7 @@ def classify_sl_cause(sl_item):
         return "펀딩비 과열 롱 쏠림 함정"
     if chg_24 >= 25.0 and max_f < 3.0:
         return "기상승 고점 추격 진입"
-    if rsi_v >= 70.0:
+    if rsi_v >= 72.0:
         return "단기 고점 RSI 과열 추격"
     if btc_1h <= -1.0 and hold_m <= 60:
         return "BTC 역풍 구간 진입"
@@ -262,11 +262,7 @@ def record_win_postmortem(win_payload):
 
 
 def run_post_sl_autopsy(fetch_klines_fn, max_checks=4):
-    """
-    손절 사후 부검 (25시간 커버)
-    - EARLY_ENTRY: 진입가 대비 +6.0% 이상 반등 OR 손절가 대비 +12.0% 이상 반등
-    - TOXIC_BREAKOUT: 손절가 대비 -5.0% 이하 추가 하락
-    """
+    """손절 사후 부검 (25시간 커버 · EARLY_ENTRY +6%/+12%, TOXIC_BREAKOUT -5%)"""
     if not callable(fetch_klines_fn):
         return 0
 
@@ -351,7 +347,7 @@ def _time_decay_weight(event_ts, now_ts):
 
 
 def _compute_toxic_patterns(recs, wins, now_ts, db_updated_at=-1):
-    """베이지안 평활 + 시간 감쇠 + 엔진 버전 격리 5D 독성 패턴 탐지 (메모리 캐시 적용)"""
+    """베이지안 평활 + 시간 감쇠 + 엔진 버전 격리 5D 독성 패턴 탐지 (감점폭 균형 정규화)"""
     if db_updated_at >= 0 and _TOXIC_MEM_CACHE["updated_at"] == db_updated_at and (time.time() - _TOXIC_MEM_CACHE["ts"]) < 120.0:
         return _TOXIC_MEM_CACHE["data"]
 
@@ -378,10 +374,10 @@ def _compute_toxic_patterns(recs, wins, now_ts, db_updated_at=-1):
         return _time_decay_weight(w.get("win_at"), now_ts)
 
     rules = [
-        ("funding_overheat", "펀딩비 과열(>=+0.02%)", 8, lambda x: _to_float(x.get("funding_pct"), 0.0) >= 0.020),
-        ("pump_chase", "기상승 추격(24h>=+25%)", 8, lambda x: _to_float(x.get("change_24h"), 0.0) >= 25.0),
-        ("low_oi_ratio", "저OI 빈수급(OI비중<8%)", 7, lambda x: 0.0 < _to_float(x.get("oi_ratio"), 0.0) < 8.0),
-        ("btc_headwind", "BTC 역풍 진입(1H<-1.0%)", 7, lambda x: _to_float(x.get("btc_1h_pct"), 0.0) < -1.0),
+        ("funding_overheat", "펀딩비 과열(>=+0.02%)", 5, lambda x: _to_float(x.get("funding_pct"), 0.0) >= 0.020),
+        ("pump_chase", "기상승 추격(24h>=+25%)", 5, lambda x: _to_float(x.get("change_24h"), 0.0) >= 25.0),
+        ("low_oi_ratio", "저OI 빈수급(OI비중<8%)", 4, lambda x: 0.0 < _to_float(x.get("oi_ratio"), 0.0) < 8.0),
+        ("btc_headwind", "BTC 역풍 진입(1H<-1.0%)", 4, lambda x: _to_float(x.get("btc_1h_pct"), 0.0) < -1.0),
     ]
 
     active_toxic = {}
@@ -422,7 +418,7 @@ def _compute_toxic_patterns(recs, wins, now_ts, db_updated_at=-1):
             "key": "weak_session",
             "block": worst_blk,
             "label": f"취약 시간대({worst_blk}시 KST)",
-            "penalty": 4,
+            "penalty": 2,
             "loss_rate_pct": round(worst_rate * 100.0, 1),
             "losses": worst_l,
             "wins": worst_w,
@@ -434,7 +430,7 @@ def _compute_toxic_patterns(recs, wins, now_ts, db_updated_at=-1):
 
 
 def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
-    """[오답노트 v3 통합 자동 감점 엔진 — 메모리 캐시로 스캔 I/O 0회, 최대 16점]"""
+    """[오답노트 v3 통합 자동 감점 엔진 — 최대 8점 캡 · 정상 저거래량 트랙 오폭 차단]"""
     sym = str(symbol or "").upper().strip()
     tk = str(track_type or "TRACK_A").upper().strip()
     rsi_v = _to_float(rsi6_15m, 50.0)
@@ -459,8 +455,8 @@ def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
         and (now_ts - int(_to_float(r.get("sl_at"), 0))) <= 172800
     ]
     if recent_sym_sls:
-        sym_pen = sum(3 if r.get("autopsy_type") == "EARLY_ENTRY" else 6 for r in recent_sym_sls)
-        penalty += min(10, sym_pen)
+        sym_pen = sum(2 if r.get("autopsy_type") == "EARLY_ENTRY" else 4 for r in recent_sym_sls)
+        penalty += min(6, sym_pen)
 
     recent_tk_sls = [
         r for r in recs
@@ -468,20 +464,21 @@ def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
         and (now_ts - int(_to_float(r.get("sl_at"), 0))) <= 604800
     ]
     if len(recent_tk_sls) >= 3:
-        overheat_cnt = sum(1 for r in recent_tk_sls if _to_float(r.get("rsi6_15m"), 50.0) >= 68.0)
-        lowvol_cnt = sum(1 for r in recent_tk_sls if _to_float(r.get("vol_mult"), 1.0) < 1.8)
-        if rsi_v >= 68.0 and overheat_cnt >= 3:
-            penalty += 4
-        if vol_v < 1.8 and lowvol_cnt >= 3:
-            penalty += 4
+        overheat_cnt = sum(1 for r in recent_tk_sls if _to_float(r.get("rsi6_15m"), 50.0) >= 70.0)
+        if rsi_v >= 70.0 and overheat_cnt >= 3:
+            penalty += 3
+        if tk not in LOWVOL_EXEMPT_TRACKS:
+            lowvol_cnt = sum(1 for r in recent_tk_sls if _to_float(r.get("vol_mult"), 1.0) < 1.8)
+            if vol_v < 1.8 and lowvol_cnt >= 3:
+                penalty += 3
 
     recent_toxic_bo = [
         r for r in recent_tk_sls
         if r.get("autopsy_type") == "TOXIC_BREAKOUT"
         and (now_ts - int(_to_float(r.get("sl_at"), 0))) <= 172800
     ]
-    if len(recent_toxic_bo) >= 2:
-        penalty += 4
+    if len(recent_toxic_bo) >= 3:
+        penalty += 2
 
     if meta and toxic_map:
         fund_v = _to_float(meta.get("funding_pct"), 0.0)
@@ -501,7 +498,7 @@ def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
         if "weak_session" in toxic_map and kst_blk == toxic_map["weak_session"].get("block"):
             penalty += toxic_map["weak_session"]["penalty"]
 
-    return int(min(16, max(0, penalty)))
+    return int(min(MAX_PENALTY_CAP, max(0, penalty)))
 
 
 def build_daily_postmortem_summary(sls_recent=None):
@@ -545,7 +542,7 @@ def build_daily_postmortem_summary(sls_recent=None):
     pending_cnt = sum(1 for x in v3_items if not x.get("autopsy_done"))
 
     lines = [
-        f"• 📓 [오답노트 v3 자가 학습 & 베이지안 감점 (최근 7일 v3 표본 {len(v3_wins)}승 {len(v3_items)}패)]:",
+        f"• 📓 [오답노트 v3 자가 학습 & 베이지안 감점 (최근 7일 v3 표본 {len(v3_wins)}승 {len(v3_items)}패 · 최대 -{MAX_PENALTY_CAP}점)]:",
         f"  ↳ 📌 주요 손절 원인: [{top_cause}] ({top_c_n}건) | 최다 손절 트랙: {top_tk} ({top_tk_n}건)",
     ]
 
