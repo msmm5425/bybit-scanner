@@ -2910,60 +2910,6 @@
     "SANDUSDT": 1795715963
   },
   "sl_history": {
-    "GRASSUSDT_1795447561": {
-      "symbol": "GRASSUSDT",
-      "track_type": "TRACK_H",
-      "score": 95,
-      "entry_price": 0.40284,
-      "stop_price": 0.37867,
-      "sl_trigger_price": 0.37866,
-      "sl_pct": 6,
-      "created_at": 1795447561,
-      "sl_at": 1795463624,
-      "hold_minutes": 267,
-      "max_high_price": 0.40774,
-      "max_favorable_pct": 1.22,
-      "vol_mult": 6.62,
-      "rsi6_15m": 67.9,
-      "oi_m": 8.7,
-      "oi_ratio": 229.8,
-      "funding_pct": -0.0034,
-      "change_24h": 3.74,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "최근 14일 Top 5 발사직전 DNA 5/6 일치 (응축, 직전RSI, 1H이격, OI비중)",
-        "1H·15m 20MA 안착 + 발사 거래량(6.6x) + PPO(+1.53%) 상방",
-        "OI 집중도 최상(230%)",
-        "뉴욕 유동성 세션(+4점)"
-      ]
-    },
-    "CHIPUSDT_1795450499": {
-      "symbol": "CHIPUSDT",
-      "track_type": "TRACK_F",
-      "score": 99,
-      "entry_price": 0.02982,
-      "stop_price": 0.028031,
-      "sl_trigger_price": 0.02779,
-      "sl_pct": 6,
-      "created_at": 1795450499,
-      "sl_at": 1795463624,
-      "hold_minutes": 218,
-      "max_high_price": 0.02982,
-      "max_favorable_pct": 0.0,
-      "vol_mult": 1.04,
-      "rsi6_15m": 58.7,
-      "oi_m": 1.7,
-      "oi_ratio": 54.3,
-      "funding_pct": 0.005,
-      "change_24h": 10.81,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "BTC 4H(+0.0%) 대비 상대강도 +10.2% 독주 강세",
-        "1H 정배열·PPO(+2.88%) 강세 + OBV 신고가 + OI 54%",
-        "OI 집중도 최상(54%)",
-        "PPO 파동 정렬(1H PPO 0선강세)"
-      ]
-    },
     "IRYSUSDT_1795441126": {
       "symbol": "IRYSUSDT",
       "track_type": "TRACK_E",
