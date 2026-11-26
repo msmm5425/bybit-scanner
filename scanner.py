@@ -61,8 +61,13 @@ RE_ALERT_COOLDOWN_SEC = 86400
 SL_RECOVERY_COOLDOWN_SEC = 14400
 TP_CLOSE_REENTRY_COOLDOWN_SEC = 21600
 HISTORY_RETENTION_SEC = 259200
-# 한 달 실전 성과 분석용 원장 보존 기간 35일 (주간 리포트는 자체 7일 필터 사용)
+
+# 원장·추적 보존 기간: 단기 원장 35일(추적 안전상한 90일) / 장기(Track D) 원장·추적 모두 365일(1년)
 EPISODE_RETENTION_SEC = 35 * 86400
+LONGTERM_EPISODE_RETENTION_SEC = 365 * 86400
+SHORT_TRACK_MAX_AGE_SEC = 90 * 86400
+LONGTERM_TRACK_MAX_AGE_SEC = 365 * 86400
+
 MAX_NEW_ALERTS_PER_SCAN = 2
 
 # config.py 단일 원천 기준 (신규 88점 / 손절 후 재진입 90점 · 소프트 캡 없음)
@@ -278,8 +283,10 @@ def _record_pruned_tracked(state, sym, created_at, now_ts):
 
 def _apply_state_cleanup(state, now_ts, rwa_blocked=None):
     """
-    [P0-1 수정] 의도적 삭제 심볼 부활 방지 및 마감+24h·만료 이력 결정론적 정리
-    - _git_sync_state() 원격 병합 직후에도 호출되어, 삭제 대상 52건 등이 원격에서 되살아나는 현상 원천 차단
+    [최종 보강]
+    - 장기 포지션(Track D): tracked 최대 추적 365일(1년) + 원장 보존 마감일 기준 365일(1년)
+    - 단기 포지션: tracked 안전상한 90일 + 원장 보존 마감일 기준 35일
+    - tracked에 살아 있는 에피소드 키는 기간과 무관하게 signal_episodes 선삭제 원천 차단
     """
     rwa_set = set(rwa_blocked or ())
     tracked = state.setdefault("tracked", {})
@@ -302,17 +309,7 @@ def _apply_state_cleanup(state, now_ts, rwa_blocked=None):
         if is_stock_or_tradfi_symbol(sl_v.get("symbol", "")) or (now_ts - int(to_float(sl_v.get("sl_at"), 0)) > HISTORY_RETENTION_SEC):
             del sl_history[sl_k]
 
-    for ep_k in list(signal_episodes.keys()):
-        ep = signal_episodes.get(ep_k) or {}
-        sym_ep = str(ep.get("symbol", "")).upper()
-        c_at = int(to_float(ep.get("created_at"), 0))
-        if is_stock_or_tradfi_symbol(sym_ep) or (c_at > 0 and (now_ts - c_at) > EPISODE_RETENTION_SEC):
-            del signal_episodes[ep_k]
-            continue
-        signal_episodes[ep_k] = sanitize_flags_by_mfe(ep)
-        if sym_ep and c_at > int(to_float(alert_history.get(sym_ep), 0)) and (now_ts - c_at) <= 172800:
-            alert_history[sym_ep] = c_at
-
+    # 1) tracked 정리 먼저 수행 (장기 365일 / 단기 90일 · 마감+24h · TradFi)
     for sym in list(tracked.keys()):
         t_item = tracked.get(sym)
         if not isinstance(t_item, dict):
@@ -320,8 +317,8 @@ def _apply_state_cleanup(state, now_ts, rwa_blocked=None):
             continue
         base_c = sym[:-4].upper() if sym.endswith("USDT") else sym
         c_at = int(to_float(t_item.get("created_at"), 0))
+        is_long_t = bool(t_item.get("is_long_term") or t_item.get("track_type") == "TRACK_D")
 
-        # 툼스톤 일치 시(동일 이하 created_at) 원격에서 복원되지 않도록 즉시 제거
         p_rec = pruned.get(sym)
         if isinstance(p_rec, dict) and c_at <= int(to_float(p_rec.get("created_at"), 0)):
             del tracked[sym]
@@ -344,10 +341,43 @@ def _apply_state_cleanup(state, now_ts, rwa_blocked=None):
             del tracked[sym]
             continue
 
-        if c_at > 0 and (now_ts - c_at) > (90 * 86400):
+        track_max_age = LONGTERM_TRACK_MAX_AGE_SEC if is_long_t else SHORT_TRACK_MAX_AGE_SEC
+        if c_at > 0 and (now_ts - c_at) > track_max_age:
             _record_pruned_tracked(state, sym, c_at, now_ts)
             del tracked[sym]
             continue
+
+    # 2) 현재 tracked에 살아 있는 키 집합 수집 (signal_episodes 선삭제 보호)
+    active_tracked_ep_keys = set()
+    for s_k, t_v in tracked.items():
+        if isinstance(t_v, dict):
+            c_v = int(to_float(t_v.get("created_at"), 0))
+            if c_v > 0:
+                active_tracked_ep_keys.add(f"{s_k}_{c_v}")
+
+    # 3) signal_episodes 정리 (tracked 생존 키 보호 + 마감일 기준 단기 35일 / 장기 365일 보존)
+    for ep_k in list(signal_episodes.keys()):
+        ep = signal_episodes.get(ep_k) or {}
+        sym_ep = str(ep.get("symbol", "")).upper()
+        c_at = int(to_float(ep.get("created_at"), 0))
+        if is_stock_or_tradfi_symbol(sym_ep):
+            del signal_episodes[ep_k]
+            continue
+        if ep_k not in active_tracked_ep_keys:
+            is_long_ep = bool(ep.get("is_long_term") or ep.get("track_type") == "TRACK_D")
+            ret_limit = LONGTERM_EPISODE_RETENTION_SEC if is_long_ep else EPISODE_RETENTION_SEC
+            anchor_ts = max(
+                c_at,
+                int(to_float(ep.get("sl_at"), 0)),
+                int(to_float(ep.get("tp3_at"), 0)),
+                int(to_float(ep.get("expired_at"), 0)),
+            )
+            if anchor_ts > 0 and (now_ts - anchor_ts) > ret_limit:
+                del signal_episodes[ep_k]
+                continue
+        signal_episodes[ep_k] = sanitize_flags_by_mfe(ep)
+        if sym_ep and c_at > int(to_float(alert_history.get(sym_ep), 0)) and (now_ts - c_at) <= 172800:
+            alert_history[sym_ep] = c_at
 
 
 def _merge_state_dicts(base_state, incoming_state):
@@ -402,7 +432,6 @@ def _merge_state_dicts(base_state, incoming_state):
             continue
         tv = sanitize_flags_by_mfe(dict(tv))
         c_t = int(tv.get("created_at", 0))
-        # [P0-1] 로컬에서 의도적으로 정리(삭제)한 동일 에피소드는 원격 병합 시 부활 금지
         p_rec = pruned.get(s)
         if isinstance(p_rec, dict) and c_t <= int(to_float(p_rec.get("created_at"), 0)):
             continue
@@ -457,7 +486,6 @@ def load_state():
         "tracked": {}, "alert_history": {}, "sl_history": {},
         "signal_episodes": {}, "oi_snapshot": {}, "_pruned_tracked": {},
     }
-    # 로컬 런타임 캐시(툼스톤 포함)를 먼저 읽어 삭제 심볼이 파일 병합 시 부활하지 않도록 보장
     _merge_state_dicts(merged, _read_json(LOCAL_RUNTIME_CACHE))
     for path in READ_STATE_FILES:
         if path != LOCAL_RUNTIME_CACHE:
@@ -594,7 +622,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     hist_last_close, hist_last_ts_ms = 0.0, 0
 
     if is_long:
-        # [P2 수정] 장기 포지션은 1H 캔들만 조회·평가하여 15m 손절 혼입 원천 차단 + API 절감
         df_confirm = _fetch_post_candles_no_gap(
             symbol, "60", created_ms, last_checked_ts, now_ms,
             fast_limit_sec=5 * 86400, max_bars=750,
@@ -829,8 +856,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             )
 
     # [2차 확정 전]: 고정 손절선 이탈 감시
-    # - 장기(is_long=True): 오직 확정된 1H 종가(closed_post_tf) 기준으로만 -20% 손절 판정 (15m/1m 노이즈 배제)
-    # - 단기(is_long=False): 15m/1m 저가·종가 기준 -6% 손절 판정
     sl_triggered = False
     trig = 0.0
     if is_long:
@@ -1037,7 +1062,6 @@ def _git_sync_state():
                         loc_dict = _merge_state_dicts(loc_dict, json.loads(show_res.stdout))
                     except Exception:
                         pass
-            # 원격 병합 직후에도 툼스톤 및 마감+24h 정리 재적용 (삭제 심볼 부활 원천 방지)
             _apply_state_cleanup(loc_dict, now_sync)
             _write_json_atomic(LOCAL_RUNTIME_CACHE, loc_dict)
             _write_json_atomic(GIT_STATE_STAGE_TMP, _build_git_clean_state(loc_dict))
@@ -1119,7 +1143,6 @@ def main(scan_long_term=True):
     candidates, _, rwa_blocked = get_scanner_candidates()
     sent_count = 0
 
-    # [P0-1] 이력 및 마감+24h·실제 TradFi 항목 정리 (툼스톤 기록 포함)
     _apply_state_cleanup(state, now_ts, rwa_blocked=rwa_blocked)
 
     # [1단계] 기존 보유 포지션 감시 (만료 자동 정산 없이 실제 SL 또는 익절 마감까지 끝까지 추적)
@@ -1344,11 +1367,7 @@ def main(scan_long_term=True):
 
 
 def run_loop_mode(max_iterations=10, sleep_sec=285, max_budget_sec=2640, min_runtime_sec=900):
-    """
-    [P2 수정 · 크론 지연 안전 시간 예산 루프]
-    - :48~:55 지연 시작 런이 1회만 돌고 조기 종료되지 않도록 최소 가동 시간(15분) 보장
-    - 정시 시작 런은 매시 :52 이전(또는 최대 44분)에 정상 종료
-    """
+    """크론 지연 안전 시간 예산 루프 (최소 15분 가동 보장 · 정시 시작 시 :52 이전 정상 종료)"""
     loop_start = time.time()
 
     for i in range(1, max_iterations + 1):
