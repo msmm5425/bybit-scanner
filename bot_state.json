@@ -2814,34 +2814,6 @@
     "OPUSDT": 1795697036
   },
   "sl_history": {
-    "MMTUSDT_1795443452": {
-      "symbol": "MMTUSDT",
-      "track_type": "TRACK_E",
-      "score": 99,
-      "entry_price": 0.2014,
-      "stop_price": 0.189316,
-      "sl_trigger_price": 0.1888,
-      "sl_pct": 6,
-      "created_at": 1795443452,
-      "sl_at": 1795449773,
-      "hold_minutes": 105,
-      "max_high_price": 0.2021,
-      "max_favorable_pct": 0.35,
-      "vol_mult": 2.63,
-      "rsi6_15m": 44.3,
-      "oi_m": 2.4,
-      "oi_ratio": 17.8,
-      "funding_pct": -0.0045000000000000005,
-      "change_24h": -15.33,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "스탑헌팅 바닥 확인 후 비과열 V자 재탈환",
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 57%)",
-        "바닥 반전 거래량 2.6배 폭발 + KDJ 바닥 급반전",
-        "[건전한 롱 매집] OI +7.4% 동반 상승(+15점)",
-        "뉴욕 유동성 세션(+4점)"
-      ]
-    },
     "ICNTUSDT_1795447209": {
       "symbol": "ICNTUSDT",
       "track_type": "TRACK_E",
