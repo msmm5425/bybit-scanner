@@ -1,59 +1,33 @@
 import os, json, time, requests
 import numpy as np
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-try:
-    import config as cfg
-    STATE_FILE = getattr(cfg, "STATE_FILE", "bot_state.json")
-    KST = getattr(cfg, "KST", timezone(timedelta(hours=9)))
-    FIXED_SL_PCT = int(getattr(cfg, "FIXED_SL_PCT", 6))
-except Exception:
-    cfg = None
-    STATE_FILE = "bot_state.json"
-    KST = timezone(timedelta(hours=9))
-    FIXED_SL_PCT = 6
+import config as cfg
+from config import (
+    STATE_FILE,
+    KST,
+    FIXED_SL_PCT,
+    LONGTERM_SL_PCT,
+    ROUNDTRIP_FEE_SLIPPAGE_PCT,
+    DNA_PROFILE_FILE,
+    to_float,
+)
+from api import (
+    get_scanner_candidates,
+    fetch_klines,
+    is_stock_or_tradfi_symbol,
+    clean_url,
+)
 
 try:
     import postmortem
 except Exception:
     postmortem = None
 
-from api import get_scanner_candidates, fetch_klines
-
-try:
-    from api import is_stock_or_tradfi_symbol, clean_url
-except ImportError:
-    import re
-    _FALLBACK_STOCKS = {
-        "SAMSUNG", "HYNIX", "SKHYNIX", "HYUNDAI", "POSCO", "NAVER", "KAKAO",
-        "KOSPI", "LITE", "ANTA", "TSLA", "NVDA", "AAPL", "MSFT", "GOOG", "AMZN",
-        "META", "NFLX", "MSTR", "COIN", "SPY", "QQQ", "XAU", "XAG", "WTI", "BRENT", "SPX", "NDX",
-        "USDC", "USDT", "USDE", "FDUSD", "DAI", "TUSD", "BUSD", "PYUSD", "RLUSD", "USDS",
-        "EUR", "EURC", "EURT", "EURI", "GBP", "JPY", "KRW", "AUD", "CAD", "CHF", "CNH", "HKD", "SGD",
-    }
-    def is_stock_or_tradfi_symbol(sym_or_base):
-        s = str(sym_or_base or "").upper().strip()
-        base = s[:-4] if s.endswith("USDT") else s
-        if not base or base in _FALLBACK_STOCKS:
-            return True
-        return any(k in base for k in ("SAMSUNG", "HYNIX", "HYUNDAI", "KOSPI", "TSLA", "NVDA", "AAPL"))
-
-    def clean_url(raw_url):
-        s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\2", str(raw_url or "").strip())
-        return s.replace("[", "").replace("]", "")
-
 SCHEME = "ht" + "tps://"
-DNA_PROFILE_FILE = "top5_dna_profile.json"
-STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json", "scanner_state.json"]))
-
-
-def to_float(val, default=0.0):
-    try:
-        v = float(val)
-        return default if np.isnan(v) or np.isinf(v) else v
-    except Exception:
-        return default
+FEE_SLIPPAGE_PCT = float(ROUNDTRIP_FEE_SLIPPAGE_PCT)
+STATE_CANDIDATE_FILES = list(dict.fromkeys([STATE_FILE, "bot_state.json"]))
 
 
 def fmt_price(price):
@@ -64,17 +38,35 @@ def fmt_price(price):
 
 
 def calc_weighted_realized_pct(e, c):
-    """실제 체결 플래그 및 확정 수익률 우선 합산 수익률 산출"""
+    """
+    [P1-1 수정] 실체결가(exit_price) 및 왕복 수수료·슬리피지(0.15%)가 반영된 실현 수익률 산출
+    - 손절: 원장 realized_weighted_pct / exit_price 최우선 사용 (고정 -6.0% 왜곡 제거)
+    - 익절/만료: 원장 확정 수익률 최우선 사용
+    """
     is_long = bool(e.get("is_long_term") or e.get("track_type") == "TRACK_D")
-    if c["sl"]:
-        return -float(int(round(to_float(e.get("sl_pct"), 20 if is_long else FIXED_SL_PCT))))
-
+    entry_ref = max(to_float(e.get("entry_price")), 1e-8)
     saved_w = to_float(e.get("realized_weighted_pct"), 0.0)
-    if saved_w > 0:
+    exit_p = to_float(e.get("exit_price"), 0.0)
+
+    if c["sl"]:
+        if saved_w < 0:
+            return round(saved_w, 2)
+        if exit_p > 0 and entry_ref > 0:
+            return round(((exit_p - entry_ref) / entry_ref * 100.0) - FEE_SLIPPAGE_PCT, 2)
+        sl_base = float(int(round(to_float(e.get("sl_pct"), LONGTERM_SL_PCT if is_long else FIXED_SL_PCT))))
+        return round(-sl_base - FEE_SLIPPAGE_PCT, 2)
+
+    if c["expired"]:
+        if abs(saved_w) > 0:
+            return round(saved_w, 2)
+        if exit_p > 0 and entry_ref > 0:
+            return round(((exit_p - entry_ref) / entry_ref * 100.0) - FEE_SLIPPAGE_PCT, 2)
+        return 0.0
+
+    if abs(saved_w) > 0:
         return round(saved_w, 2)
 
     trail_drop = 10.0 if is_long else 4.0
-    entry_ref = max(to_float(e.get("entry_price")), 1e-8)
     tps = e.get("tps") or []
     tp1_p = to_float(tps[0]) if (len(tps) > 0 and to_float(tps[0]) > entry_ref) else entry_ref * 1.08
     tp2_p = to_float(tps[1]) if (len(tps) > 1 and to_float(tps[1]) > entry_ref) else entry_ref * 1.15
@@ -85,25 +77,33 @@ def calc_weighted_realized_pct(e, c):
     g3 = round((tp3_p - entry_ref) / entry_ref * 100.0, 1)
 
     if c["tp3"]:
-        exit_p = to_float(e.get("exit_price"), 0.0)
-        if c["trailing_closed"] and exit_p > entry_ref:
-            trail_exit_g = max(g2, round((exit_p - entry_ref) / entry_ref * 100.0, 1))
-        else:
-            trail_exit_g = max(g2, round(c["fav"] - trail_drop, 1))
-        return round(g3 * 0.50 + trail_exit_g * 0.50, 2)
+        if c["trailing_closed"] and exit_p > 0:
+            trail_exit_g = round((exit_p - entry_ref) / entry_ref * 100.0, 2)
+            return round((g3 * 0.50 + trail_exit_g * 0.50) - FEE_SLIPPAGE_PCT, 2)
+        trail_est_g = max(g2, round(c["fav"] - trail_drop, 1))
+        return round((g3 * 0.50 + trail_est_g * 0.50) - FEE_SLIPPAGE_PCT, 2)
+
     if c["tp2"]:
         if c["trailing_closed"]:
-            exit_p = to_float(e.get("exit_price"), 0.0)
-            if exit_p > entry_ref:
-                return round(max(g1, (exit_p - entry_ref) / entry_ref * 100.0), 2)
-            return g1
+            if exit_p > 0:
+                return round(((exit_p - entry_ref) / entry_ref * 100.0) - FEE_SLIPPAGE_PCT, 2)
+            return round(g1 - FEE_SLIPPAGE_PCT, 2)
         return round(c["fav"], 2)
+
+    if c["is_closed"] and exit_p > 0:
+        return round(((exit_p - entry_ref) / entry_ref * 100.0) - FEE_SLIPPAGE_PCT, 2)
+
     return round(c["fav"], 2) if c["tp1"] else 0.0
 
 
 def load_merged_state_readonly():
-    """완전 읽기 전용 상태 병합 (디스크 및 GitHub에 절대 쓰지 않음)"""
+    """완전 읽기 전용 상태 로드 (디스크 및 GitHub에 절대 쓰지 않음)"""
     merged = {"tracked": {}, "alert_history": {}, "sl_history": {}, "signal_episodes": {}}
+    lock_flags = (
+        "tp1_hit", "tp2_hit", "tp3_hit",
+        "tp1_alerted", "tp2_alerted", "tp3_alerted",
+        "tp3_completed", "trailing_closed", "sl_alerted", "expired_closed", "closed_alerted",
+    )
     for path in STATE_CANDIDATE_FILES:
         if not os.path.exists(path):
             continue
@@ -123,11 +123,10 @@ def load_merged_state_readonly():
                         if prev_sv is None:
                             merged[k][sk] = dict(sv) if isinstance(sv, dict) else sv
                         elif isinstance(sv, dict) and isinstance(prev_sv, dict):
-                            # 단방향 잠금 플래그와 최고가를 안전하게 합집합 병합
                             cand = dict(prev_sv)
                             if to_float(sv.get("max_favorable_pct")) >= to_float(prev_sv.get("max_favorable_pct")):
                                 cand.update(sv)
-                            for fg in ("tp1_hit", "tp2_hit", "tp3_hit", "tp1_alerted", "tp2_alerted", "tp3_alerted", "tp3_completed", "trailing_closed", "sl_alerted", "closed_alerted"):
+                            for fg in lock_flags:
                                 if prev_sv.get(fg) or sv.get(fg):
                                     cand[fg] = True
                             cand["max_high_price"] = max(to_float(prev_sv.get("max_high_price")), to_float(sv.get("max_high_price")))
@@ -145,13 +144,16 @@ def _load_dna_summary_line():
         with open(DNA_PROFILE_FILE, "r", encoding="utf-8") as f:
             raw = json.load(f)
         af = (raw or {}).get("active_dna_formula") or {}
+        ver = str(af.get("dna_version") or "legacy")
+        n_samp = int(to_float(af.get("sample_count"), 0))
         if af.get("enabled"):
             return (
-                f"• 🧬 Top 5 순수 차트 DNA (Track H): 14일 표본 {af.get('sample_count', 0)}건(사각지대 {af.get('missed_count', 0)}건) | "
+                f"• 🧬 Top 5 정제 차트 DNA (Track H · {ver}): 14일 표본 {n_samp}건(사각지대 {af.get('missed_count', 0)}건) | "
                 f"주력 [{af.get('dominant_tag', '-')}] · 응축<={af.get('bb_width_max', 0)}% · "
                 f"건조<={af.get('vol_dry_max', 0)} · 발사양봉>={af.get('launch_vol_min', 0)}x · "
                 f"직전RSI {af.get('pre_rsi_min', 0)}~{af.get('pre_rsi_max', 0)}"
             )
+        return f"• 🧬 Top 5 정제 차트 DNA (Track H · {ver}): 정제 표본 축적 중 ({n_samp}/5건 · 과열 표본 배제)"
     except Exception:
         pass
     return ""
@@ -173,7 +175,7 @@ def _backfill_single_ep(ep_k, e):
 
 
 def backfill_in_memory_only(episodes, now_ts):
-    """리포트 MFE 표시 정확도용 메모리 내 최고가 보정 (파일 덮어쓰기 및 승패 플래그 변조 없음)"""
+    """리포트 MFE 표시 정확도용 메모리 내 최고가 보정 (파일 쓰기·승패 플래그 변조 없음)"""
     to_bf = []
     for ep_k, e in list(episodes.items()):
         if not isinstance(e, dict):
@@ -185,7 +187,15 @@ def backfill_in_memory_only(episodes, now_ts):
         entry_p = to_float(e.get("entry_price"))
         c_at = int(e.get("created_at", 0))
         fav = to_float(e.get("max_favorable_pct"))
-        if sym and entry_p > 0 and c_at > 0 and (now_ts - c_at) <= 172800 and fav < 19.5 and not e.get("sl_alerted"):
+        if (
+            sym
+            and entry_p > 0
+            and c_at > 0
+            and (now_ts - c_at) <= 172800
+            and fav < 19.5
+            and not e.get("sl_alerted")
+            and not e.get("closed_alerted")
+        ):
             to_bf.append((ep_k, e))
 
     if to_bf:
@@ -201,8 +211,7 @@ def backfill_in_memory_only(episodes, now_ts):
 
 def classify_episode_by_actual_flags(e):
     """
-    [3단계 정합성 보정] 단순 윗꼬리 MFE로 TP2를 오판하지 않고,
-    scanner.py의 실제 체결 플래그(15m/1H 종가 확정 tp2_hit/tp2_alerted 및 sl_alerted)를 최우선 신뢰
+    [P1-1 수정] 실제 체결 플래그 최우선 분류 + 만료/레거시 마감·실시간 활성 포지션 정확 분리
     """
     fav = to_float(e.get("max_favorable_pct"))
     entry_p = to_float(e.get("entry_price"))
@@ -212,22 +221,26 @@ def classify_episode_by_actual_flags(e):
     tps = e.get("tps") or []
     tp1_req = ((to_float(tps[0]) - entry_p) / entry_p * 100.0 - 0.3) if (len(tps) > 0 and entry_p > 0 and to_float(tps[0]) > entry_p) else 6.8
 
-    # 1) 실제 손절 알림이 발송된 종목은 윗꼬리 MFE와 무관하게 무조건 손절로 집계
     is_sl = bool(e.get("sl_alerted"))
-    # 2) TP2/TP3는 실제 종가 확정/알림 플래그가 켜진 경우에만 수익 확보로 인정
+    is_expired = (not is_sl) and bool(e.get("expired_closed"))
     tp3 = (not is_sl) and bool(e.get("tp3_hit") or e.get("tp3_alerted"))
     tp2 = (not is_sl) and (tp3 or bool(e.get("tp2_hit") or e.get("tp2_alerted")))
     tp1 = tp2 or bool(e.get("tp1_hit") or e.get("tp1_alerted")) or (fav >= max(6.5, tp1_req))
-    trailing_closed = (not is_sl) and tp2 and bool(e.get("tp3_completed") or e.get("trailing_closed") or e.get("closed_alerted"))
+    trailing_closed = (not is_sl) and (not is_expired) and tp2 and bool(e.get("tp3_completed") or e.get("trailing_closed") or e.get("closed_alerted"))
+    is_closed = bool(is_sl or is_expired or trailing_closed or e.get("closed_alerted") or e.get("tp3_completed"))
+    legacy_closed = (not is_sl) and (not is_expired) and (not tp2) and is_closed
 
     return {
         "fav": fav,
         "tp1": tp1,
         "tp2": tp2,
         "tp3": tp3,
-        "be_save": False,
         "sl": is_sl,
+        "expired": is_expired,
+        "legacy_closed": legacy_closed,
         "trailing_closed": trailing_closed,
+        "is_closed": is_closed,
+        "is_active": not is_closed,
     }
 
 
@@ -259,7 +272,6 @@ def main():
     state = load_merged_state_readonly()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
-    sl_history = state.get("sl_history") or {}
 
     for sym, t_item in list(tracked.items()):
         if is_stock_or_tradfi_symbol(sym):
@@ -288,10 +300,22 @@ def main():
     tp3_hits = sum(1 for _, c in weekly_eps if c["tp3"])
     trail_closes = sum(1 for _, c in weekly_eps if c["trailing_closed"])
     sl_hits = sum(1 for _, c in weekly_eps if c["sl"])
-    active_cnt = max(0, total_signals - (tp2_hits + sl_hits))
+    expired_cnt = sum(1 for _, c in weekly_eps if c["expired"])
+    legacy_cnt = sum(1 for _, c in weekly_eps if c["legacy_closed"])
+    # [P1-1 수정] 실제 미마감 포지션만 직접 집계 (만료/레거시 마감 착시 제거)
+    active_cnt = sum(1 for _, c in weekly_eps if c["is_active"])
 
-    closed_cnt = tp2_hits + sl_hits
-    win_rate = round((tp2_hits / closed_cnt) * 100.0, 1) if closed_cnt > 0 else 0.0
+    closed_win_loss_cnt = tp2_hits + sl_hits
+    win_rate = round((tp2_hits / closed_win_loss_cnt) * 100.0, 1) if closed_win_loss_cnt > 0 else 0.0
+
+    # [P1-1] 확정 마감 종목 기준 실현 손익 및 거래당 기대값(Expectancy · 비용반영) 산출
+    closed_pnls = [calc_weighted_realized_pct(e, c) for e, c in weekly_eps if c["is_closed"]]
+    cum_realized_pct = round(sum(closed_pnls), 2) if closed_pnls else 0.0
+    expectancy_pct = round(float(np.mean(closed_pnls)), 2) if closed_pnls else 0.0
+    win_pnls = [p for p in closed_pnls if p > 0]
+    loss_pnls = [p for p in closed_pnls if p <= 0]
+    avg_win_pct = round(float(np.mean(win_pnls)), 2) if win_pnls else 0.0
+    avg_loss_pct = round(float(np.mean(loss_pnls)), 2) if loss_pnls else 0.0
 
     fav_list = [c["fav"] for _, c in weekly_eps if c["fav"] > 0]
     avg_mfe = round(float(np.mean(fav_list)), 1) if fav_list else 0.0
@@ -309,7 +333,7 @@ def main():
         "TRACK_E": "Track E (SFP 유동성 스윕)",
         "TRACK_F": "Track F (BTC 역행 RS 대장주)",
         "TRACK_G": "Track G (숏스퀴즈 강제청산)",
-        "TRACK_H": "Track H (Top 5 순수 차트 DNA)",
+        "TRACK_H": "Track H (Top 5 정제 DNA)",
     }
     track_stats = {tk: [0, 0, 0, []] for tk in track_names}
     for e, c in weekly_eps:
@@ -323,23 +347,31 @@ def main():
             track_stats[tk][2] += 1
         track_stats[tk][3].append(c["fav"])
 
-    best_5 = sorted([(e, c) for e, c in weekly_eps if not c["sl"]], key=lambda x: (calc_weighted_realized_pct(x[0], x[1]), x[1]["fav"]), reverse=True)[:5]
+    best_5 = sorted(
+        [(e, c) for e, c in weekly_eps if not c["sl"] and not c["expired"]],
+        key=lambda x: (calc_weighted_realized_pct(x[0], x[1]), x[1]["fav"]),
+        reverse=True,
+    )[:5]
     sl_eps = [(e, c) for e, c in weekly_eps if c["sl"]]
-    sls_recent = [s for s in sl_history.values() if isinstance(s, dict) and not is_stock_or_tradfi_symbol(s.get("symbol", "")) and (now_ts - int(s.get("sl_at", 0))) <= (7 * 86400)]
+
+    extra_closed_note = ""
+    if expired_cnt > 0 or legacy_cnt > 0:
+        extra_closed_note = f" / 기한만료 {expired_cnt}건" + (f" · 기타마감 {legacy_cnt}건" if legacy_cnt > 0 else "")
 
     lines = [
         f"📅 [Bybit 멀티프레임 스캐너 주간 종합 & 3파동 심층 리포트] ({now_str})",
         "",
-        "📊 [1. 최근 7일 실전 시그널 종합 성적 (실제 15m/1H 확정 기준)]",
-        f"• 주간 총 포착 종목: {total_signals}건 (확정승패 {closed_cnt}건 / 실시간 홀딩·추적 중 {active_cnt}건)",
+        "📊 [1. 최근 7일 실전 시그널 종합 성적 (실체결가 · 왕복비용 0.15% 반영)]",
+        f"• 주간 총 포착 종목: {total_signals}건 (확정승패 {closed_win_loss_cnt}건{extra_closed_note} / 실시간 홀딩 {active_cnt}건)",
         f"• 수익 확정 승률(TP2 종가안착 이상): {win_rate:.1f}% (수익확보 {tp2_hits}건 vs 손절 {sl_hits}건)",
+        f"• 마감 실현 손익({len(closed_pnls)}건): 누적 {cum_realized_pct:+.2f}% | 거래당 기대값 {expectancy_pct:+.2f}% (평균익절 {avg_win_pct:+.2f}% vs 평균손실 {avg_loss_pct:+.2f}%)",
         f"• 단계별 실제 달성: 1차돌파(전량홀딩) {tp1_hits}건 | 2차안착(TP1방어) {tp2_hits}건 | 3차돌파(50%익절+트레일링) {tp3_hits}건 | 최종수익마감 {trail_closes}건",
         f"• 포착 종목 평균 최고 상승폭(MFE): +{avg_mfe:.1f}% (중앙값 +{med_mfe:.1f}%)",
         "",
         "🧭 [2. 트랙별(Track A~H) 확정 성과 및 평균 상승폭]",
     ]
 
-    best_track_label = "Track A (TTM 스퀴즈·델타)"
+    best_track_label = "Track B (24H 돌파·S-R Flip)"
     best_track_rate = -1.0
     for tk, label in track_names.items():
         tot_t, win_t, sl_t, mfes = track_stats.get(tk, [0, 0, 0, []])
@@ -385,26 +417,27 @@ def main():
                 )
             )
             lines.append(
-                f"{idx}. {h_tag}${base} ({sym}): 진입 {fmt_price(entry_p)} → 최고 {fmt_price(max_h)} (최고 +{fav_pct:.1f}% | 합산 +{w_pct:.2f}% | {stage})"
+                f"{idx}. {h_tag}${base} ({sym}): 진입 {fmt_price(entry_p)} → 최고 {fmt_price(max_h)} (최고 +{fav_pct:.1f}% | 합산 {w_pct:+.2f}% | {stage})"
             )
     else:
         lines.append("• 집계된 주간 수익 타점 기록이 아직 없습니다.")
 
-    lines.append(f"\n📓 [5. 주간 손절(SL) 오답노트 v3 & 25h 사후 부검 (총 {len(sl_eps)}건)]")
+    lines.append(f"\n📓 [5. 주간 손절(SL) 오답노트 v3 & 25h 사후 부검 (주간 전체 SL {len(sl_eps)}건)]")
     if postmortem is not None and hasattr(postmortem, "build_daily_postmortem_summary"):
         try:
-            lines.extend(postmortem.build_daily_postmortem_summary(sls_recent))
+            # [P1-2 수정] 구버전 sl_history 혼용 없이 순수 v3 DB 기준 출력
+            lines.extend(postmortem.build_daily_postmortem_summary())
         except Exception:
             pass
     elif sl_eps:
         for s, c in sorted(sl_eps, key=lambda x: int(x[0].get("created_at", 0)), reverse=True)[:5]:
             base = str(s.get("symbol", "")).replace("USDT", "")
             fav = c["fav"]
-            sc = int(s.get("score", 90))
+            sc = int(s.get("score", 88))
             tk = str(s.get("track_type", "TRACK_A"))
-            sl_p_val = int(round(to_float(s.get("sl_pct"), 20 if tk == "TRACK_D" else FIXED_SL_PCT)))
+            act_loss = calc_weighted_realized_pct(s, c)
             cause = "돌파 직후 매수세 실종(가짜 돌파)" if fav < 1.5 else f"+{fav:.1f}% 반등 후 차익 매물 출회"
-            lines.append(f"  ↳ ⚠️ ${base} ({tk}·{sc}점): 최고 +{fav:.1f}% 도달 후 -{sl_p_val}% 이탈 ({cause})")
+            lines.append(f"  ↳ ⚠️ ${base} ({tk}·{sc}점): 최고 +{fav:.1f}% 도달 후 {act_loss:+.2f}% 이탈 ({cause})")
     else:
         lines.append("• 최근 7일 내 손절 마감된 종목이 없습니다.")
 
