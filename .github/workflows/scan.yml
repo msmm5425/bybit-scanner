@@ -13,7 +13,8 @@ on:
 
 concurrency:
   group: bybit-scanner-main
-  cancel-in-progress: true
+  # 시간 예산 루프(매시 :53 이전 정상 종료)와 결합해 Git 푸시/알림 도중 강제 종료(SIGTERM) 방지
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -21,7 +22,7 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 58
+    timeout-minutes: 55
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,15 +33,36 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
 
       - name: Install Python packages
-        run: pip install --upgrade pip requests pandas numpy playwright
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -q -r requirements.txt
+          else
+            pip install -q requests pandas numpy playwright
+          fi
 
-      - name: Install Chromium browser
-        run: playwright install --with-deps chromium
+      - name: Cache Playwright Chromium browser
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            playwright-chromium-${{ runner.os }}-
+
+      - name: Install Chromium browser & system deps
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
+            playwright install --with-deps chromium
+          else
+            playwright install-deps chromium
+          fi
 
       - name: Ensure ffmpeg is available
-        run: which ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+        run: which ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
 
       - name: Run Replay Video Test (if selected)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_video == true }}
@@ -49,6 +71,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          BYBIT_PROXY_URL: ${{ secrets.BYBIT_PROXY_URL }}
         run: python scanner.py --test-video
 
       - name: Run Scanner Loop
@@ -58,4 +81,5 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          BYBIT_PROXY_URL: ${{ secrets.BYBIT_PROXY_URL }}
         run: python scanner.py --loop
