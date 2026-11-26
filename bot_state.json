@@ -2862,33 +2862,6 @@
     "1000BONKUSDT": 1795709007
   },
   "sl_history": {
-    "ICNTUSDT_1795447209": {
-      "symbol": "ICNTUSDT",
-      "track_type": "TRACK_E",
-      "score": 99,
-      "entry_price": 0.3269,
-      "stop_price": 0.307286,
-      "sl_trigger_price": 0.3051,
-      "sl_pct": 6,
-      "created_at": 1795447209,
-      "sl_at": 1795453321,
-      "hold_minutes": 101,
-      "max_high_price": 0.3269,
-      "max_favorable_pct": 0.0,
-      "vol_mult": 2.0,
-      "rsi6_15m": 53.4,
-      "oi_m": 2.3,
-      "oi_ratio": 32.2,
-      "funding_pct": -0.0182,
-      "change_24h": -6.98,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 72%)",
-        "바닥 반전 거래량 2.0배 폭발 + KDJ 바닥 급반전",
-        "OI 집중도 최상(32%)",
-        "음수 펀딩 숏스퀴즈(-0.0182%)"
-      ]
-    },
     "GRASSUSDT_1795447561": {
       "symbol": "GRASSUSDT",
       "track_type": "TRACK_H",
