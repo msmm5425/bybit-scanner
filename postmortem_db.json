@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "WLFIUSDT_1795488133",
+      "engine_ver": "v3",
+      "symbol": "WLFIUSDT",
+      "track_type": "TRACK_E",
+      "score": 96,
+      "entry_price": 0.04107,
+      "stop_price": 0.038606,
+      "sl_trigger_price": 0.03856,
+      "sl_pct": 6,
+      "actual_sl_pct": -6.26,
+      "created_at": 1795488133,
+      "sl_at": 1795794335,
+      "hold_minutes": 5103,
+      "max_high_price": 0.04325,
+      "max_favorable_pct": 5.31,
+      "vol_mult": 4.86,
+      "rsi6_15m": 45.8,
+      "oi_m": 9.2,
+      "oi_ratio": 87.9,
+      "funding_pct": 9.999999999999999e-05,
+      "change_24h": -7.19,
+      "btc_1h_pct": 0.0,
+      "kst_block": "09-12",
+      "cause": "+5.3% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "ZROUSDT_1795763489",
       "engine_ver": "v3",
       "symbol": "ZROUSDT",
@@ -594,6 +624,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795790505,
+  "updated_at": 1795794351,
   "engine_ver": "v3"
 }
