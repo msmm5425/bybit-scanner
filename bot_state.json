@@ -3095,33 +3095,6 @@
     "MONUSDT": 1795745596
   },
   "sl_history": {
-    "INITUSDT_1795394443": {
-      "symbol": "INITUSDT",
-      "track_type": "TRACK_E",
-      "score": 97,
-      "entry_price": 0.08405,
-      "stop_price": 0.079007,
-      "sl_trigger_price": 0.07861,
-      "sl_pct": 6,
-      "created_at": 1795394443,
-      "sl_at": 1795486699,
-      "hold_minutes": 1537,
-      "max_high_price": 0.08792,
-      "max_favorable_pct": 4.6,
-      "vol_mult": 2.27,
-      "rsi6_15m": 45.6,
-      "oi_m": 2.1,
-      "oi_ratio": 23.4,
-      "funding_pct": -0.002116,
-      "change_24h": -4.1,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 60%)",
-        "바닥 반전 거래량 2.3배 폭발 + PPO·RSI 강세 다이버전스",
-        "OI 집중도 최상(23%)",
-        "⚠️ 1W·1D 상위 역배열 구간(단기 저항 주의)"
-      ]
-    },
     "WLFIUSDT_1795418415": {
       "symbol": "WLFIUSDT",
       "track_type": "TRACK_E",
