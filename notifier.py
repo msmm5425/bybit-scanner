@@ -33,8 +33,13 @@ SCHEME = "ht" + "tps://"
 WATERMARK_HANDLE = "@DnaPyung"
 JP_TTS_VOICE = "ja-JP-NanamiNeural"
 JP_TTS_RATE = "+10%"
-VIDEO_W = 960
-VIDEO_H = 1280
+
+# CSS 논리 레이아웃(3:4) vs X 풀HD 최종 출력 규격
+CHART_CSS_W = 960
+CHART_CSS_H = 1280
+VIDEO_W = 1080
+VIDEO_H = 1440
+
 LOCAL_LW_CHARTS_JS = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "assets",
@@ -499,9 +504,9 @@ def build_x_intent_reply_markup(x_post_text, button_label="🚀 X(트위터) 앱
 
 def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     """
-    [포착 알림 세로형(3:4 · 960x1280) 고해상도 트레이딩뷰 차트 렌더러]
-    - 상단 타이틀 바 + 836px 메인 차트(120봉 · 피보나치 · TP/SL선) + 하단 300px CTA & 4칸 전략 카드 + 푸터
-    - 하단 배너: @DnaPyung 팔로우+알림설정 해주세요 ❤️
+    [포착 알림 세로형(3:4) 2배 레티나 초고해상도(1920x2560) 무손실 PNG 차트 렌더러]
+    - 상단 타이틀 바 + 836px 메인 차트(120봉 · 피보나치 · TP/SL선) + 하단 CTA & 4칸 전략 카드 + 푸터
+    - device_scale_factor=2.0 (1920x2560) + sendDocument 원본 전송으로 X 업로드 시 화질 저하 원천 차단
     """
     if not _ensure_playwright():
         return None
@@ -634,7 +639,6 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     min_move = 10 ** (-decimals)
     lw_script_tags = _get_lw_charts_script_tags()
 
-    # 모든 OS/서버에서 깨짐 없이 선명하게 표시되는 빨간색 하트 SVG
     red_heart_svg = (
         '<svg width="24" height="24" viewBox="0 0 24 24" fill="#ff3b5c" '
         'style="display:inline-block;vertical-align:middle;margin-left:6px;flex-shrink:0">'
@@ -646,7 +650,7 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
     html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 {lw_script_tags}
 <style>
-*{{box-sizing:border-box;margin:0;padding:0}}
+*{{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}}
 body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Malgun Gothic',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#d1d4dc;width:960px;height:1280px;overflow:hidden}}
 .tv-wrap{{width:960px;height:1280px;background:#131722;display:flex;flex-direction:column}}
 .tv-topbar{{height:112px;background:#181c27;border-bottom:1px solid #2a2e39;display:flex;flex-direction:column;justify-content:center;gap:8px;padding:10px 20px}}
@@ -779,9 +783,9 @@ fibLevels.forEach(fl=>{{
   fs.setData([{{time:fibStartTime,value:fl.yVal}},{{time:fibEndTime,value:fl.yVal}}]);
 }});
 
-chart.addLineSeries({{color:'#00e5ff',lineWidth:1.6,priceLineVisible:false,lastValueVisible:false}}).setData({json.dumps(ma5_js)});
-chart.addLineSeries({{color:'#ffd166',lineWidth:1.6,priceLineVisible:false,lastValueVisible:false}}).setData({json.dumps(ma9_js)});
-chart.addLineSeries({{color:'#2962ff',lineWidth:2.0,priceLineVisible:false,lastValueVisible:false}}).setData({json.dumps(ma20_js)});
+chart.addLineSeries({{color:'#00e5ff',lineWidth:1.8,priceLineVisible:false,lastValueVisible:false}}).setData({json.dumps(ma5_js)});
+chart.addLineSeries({{color:'#ffd166',lineWidth:1.8,priceLineVisible:false,lastValueVisible:false}}).setData({json.dumps(ma9_js)});
+chart.addLineSeries({{color:'#2962ff',lineWidth:2.2,priceLineVisible:false,lastValueVisible:false}}).setData({json.dumps(ma20_js)});
 
 const volSeries=chart.addHistogramSeries({{priceFormat:{{type:'volume'}},priceScaleId:'vol_scale',priceLineVisible:false,lastValueVisible:false}});
 chart.priceScale('vol_scale').applyOptions({{scaleMargins:{{top:0.90,bottom:0.0}}}});
@@ -872,7 +876,8 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
             try:
-                page = browser.new_page(viewport={"width": VIDEO_W, "height": VIDEO_H}, device_scale_factor=1.25)
+                # 2배 레티나 UHD (1920x2560) 무손실 PNG 렌더링
+                page = browser.new_page(viewport={"width": CHART_CSS_W, "height": CHART_CSS_H}, device_scale_factor=2.0)
                 page.goto(Path(tmp_html_path).resolve().as_uri(), wait_until="load", timeout=25000)
                 page.wait_for_function("window.__CHART_DONE === true", timeout=10000)
                 page.wait_for_timeout(200)
@@ -997,7 +1002,7 @@ def _synth_jp_voice_segment(text, out_mp3):
                     "ffmpeg", "-y", "-loglevel", "error",
                     "-i", raw_mp3,
                     "-filter:a", "atempo=1.1",
-                    "-b:a", "128k",
+                    "-b:a", "192k",
                     out_mp3,
                 ],
                 capture_output=True,
@@ -1122,10 +1127,10 @@ def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, t
 
 def generate_profit_replay_videos_bundle(close_info, include_clean=True):
     """
-    [세로형(3:4 · 960x1280) 리플레이 영상 제작 엔진 v10]
-    - include_clean=False & TTS 정상 시: 클린 영상 캡처/인코딩을 완전 생략해 제작 속도 ~2배 단축
-    - TTS 일시 실패 시에는 자동으로 클린 영상 1개 비상 폴백 생성
-    - 진입 전 차트 봉 개수 확대 (pre_bars 44/34/26봉) + 상단 정중앙 대형 LIVE RETURN (44px)
+    [X 풀HD 최적화 세로형(3:4 · 1080x1440) 리플레이 영상 제작 엔진 v11]
+    - 1.5배 슈퍼샘플링(1440x1920) 무손실 PNG 프레임 캡처 (중간 JPEG 노이즈 0%)
+    - Lanczos 다운스케일 + 미세 선명화(unsharp) → 1080x1440 X 풀HD 티어 직행
+    - H.264 High 4.1 · CRF 15 · BT.709 · 2초 GOP · 48kHz 192k AAC 마스터 인코딩
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -1328,7 +1333,7 @@ def generate_profit_replay_videos_bundle(close_info, include_clean=True):
             html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 {lw_script_tags}
 <style>
-*{{box-sizing:border-box;margin:0;padding:0}}
+*{{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}}
 body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Malgun Gothic',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#d1d4dc;width:960px;height:1280px;overflow:hidden}}
 .tv-wrap{{width:960px;height:1280px;background:#131722;display:flex;flex-direction:column}}
 .tv-topbar{{height:112px;background:#181c27;border-bottom:1px solid #2a2e39;display:flex;flex-direction:column;justify-content:center;gap:8px;padding:10px 20px}}
@@ -1533,9 +1538,9 @@ const candleSeries=chart.addCandlestickSeries({{
   priceLineVisible:false,lastValueVisible:false,
   priceFormat:{{type:'custom',minMove:{min_move},formatter:fmtP}}
 }});
-const ma5Series=chart.addLineSeries({{color:'#00e5ff',lineWidth:1.6,priceLineVisible:false,lastValueVisible:false}});
-const ma9Series=chart.addLineSeries({{color:'#ffd166',lineWidth:1.6,priceLineVisible:false,lastValueVisible:false}});
-const ma20Series=chart.addLineSeries({{color:'#2962ff',lineWidth:2.0,priceLineVisible:false,lastValueVisible:false}});
+const ma5Series=chart.addLineSeries({{color:'#00e5ff',lineWidth:1.8,priceLineVisible:false,lastValueVisible:false}});
+const ma9Series=chart.addLineSeries({{color:'#ffd166',lineWidth:1.8,priceLineVisible:false,lastValueVisible:false}});
+const ma20Series=chart.addLineSeries({{color:'#2962ff',lineWidth:2.2,priceLineVisible:false,lastValueVisible:false}});
 const volSeries=chart.addHistogramSeries({{priceFormat:{{type:'volume'}},priceScaleId:'vol_scale',priceLineVisible:false,lastValueVisible:false}});
 chart.priceScale('vol_scale').applyOptions({{scaleMargins:{{top:0.90,bottom:0.0}}}});
 
@@ -1861,7 +1866,8 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
                 )
                 try:
-                    page = browser.new_page(viewport={"width": VIDEO_W, "height": VIDEO_H}, device_scale_factor=1)
+                    # 1.5배 슈퍼샘플링(1440x1920) + 무손실 PNG 프레임 캡처
+                    page = browser.new_page(viewport={"width": CHART_CSS_W, "height": CHART_CSS_H}, device_scale_factor=1.5)
                     page.on("pageerror", lambda err: js_errors.append(str(err)))
                     page.goto(Path(html_path).resolve().as_uri(), wait_until="load", timeout=25000)
                     page.wait_for_function("window.__REPLAY_READY === true", timeout=15000)
@@ -1876,8 +1882,8 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                         )
                         cur_sub_idx = _sub_idx_for_frame(fi) if make_voiced else 0
 
-                        clean_jpg = os.path.join(tmpdir, f"c_{fi:04d}.jpg")
-                        sub_jpg = os.path.join(tmpdir, f"s_{fi:04d}.jpg")
+                        clean_png = os.path.join(tmpdir, f"c_{fi:04d}.png")
+                        sub_png = os.path.join(tmpdir, f"s_{fi:04d}.png")
 
                         need_chart_render = not chart_is_static
                         need_clean_shot = make_clean and (fi < base_frames) and need_chart_render
@@ -1889,36 +1895,53 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                         if make_clean and fi < base_frames:
                             if need_clean_shot or fi == 0:
                                 page.evaluate("window.__setBottomMode('clean', 0)")
-                                page.screenshot(path=clean_jpg, type="jpeg", quality=88)
+                                page.screenshot(path=clean_png, type="png")
                             else:
                                 ref_fi = 0 if fi < thumb_end else (thumb_end if fi < play_start else outro_static_start)
-                                shutil.copyfile(os.path.join(tmpdir, f"c_{ref_fi:04d}.jpg"), clean_jpg)
+                                shutil.copyfile(os.path.join(tmpdir, f"c_{ref_fi:04d}.png"), clean_png)
 
                         if make_voiced and fi < voiced_frames:
                             if need_sub_shot or fi == 0:
                                 page.evaluate(f"window.__setBottomMode('sub', {cur_sub_idx})")
-                                page.screenshot(path=sub_jpg, type="jpeg", quality=88)
+                                page.screenshot(path=sub_png, type="png")
                             else:
-                                shutil.copyfile(os.path.join(tmpdir, f"s_{fi - 1:04d}.jpg"), sub_jpg)
+                                shutil.copyfile(os.path.join(tmpdir, f"s_{fi - 1:04d}.png"), sub_png)
                             prev_sub_idx = cur_sub_idx
                 finally:
                     browser.close()
+
+            # X 1080p 풀HD 티어 최적화 비디오 필터 & 인코더 공통 옵션
+            v_filter_hd = f"scale={VIDEO_W}:{VIDEO_H}:flags=lanczos+accurate_rnd+full_chroma_int,unsharp=3:3:0.35:3:3:0.0"
+            v_encode_flags = [
+                "-c:v", "libx264",
+                "-profile:v", "high",
+                "-level:v", "4.1",
+                "-pix_fmt", "yuv420p",
+                "-preset", "medium",
+                "-crf", "15",
+                "-maxrate", "8000k",
+                "-bufsize", "16000k",
+                "-r", str(out_fps),
+                "-g", "60",
+                "-keyint_min", "60",
+                "-sc_threshold", "0",
+                "-colorspace", "bt709",
+                "-color_primaries", "bt709",
+                "-color_trc", "bt709",
+                "-movflags", "+faststart",
+            ]
 
             clean_bytes = None
             if make_clean:
                 cmd_clean = [
                     "ffmpeg", "-y", "-loglevel", "error",
                     "-framerate", str(in_fps),
-                    "-i", os.path.join(tmpdir, "c_%04d.jpg"),
-                    "-c:v", "libx264",
-                    "-pix_fmt", "yuv420p",
-                    "-preset", "fast",
-                    "-crf", "21",
-                    "-r", str(out_fps),
-                    "-movflags", "+faststart",
+                    "-i", os.path.join(tmpdir, "c_%04d.png"),
+                    "-vf", v_filter_hd,
+                    *v_encode_flags,
                     out_clean_mp4,
                 ]
-                res_c = subprocess.run(cmd_clean, capture_output=True, text=True, timeout=90)
+                res_c = subprocess.run(cmd_clean, capture_output=True, text=True, timeout=180)
                 if res_c.returncode == 0 and os.path.exists(out_clean_mp4):
                     with open(out_clean_mp4, "rb") as vf:
                         clean_bytes = vf.read()
@@ -1930,20 +1953,20 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
             voiced_error = tts_err if not make_voiced else ""
             if make_voiced and segments:
                 audio_inputs = []
-                fc_parts = []
+                fc_parts = [f"[0:v]{v_filter_hd}[vout]"]
                 concat_labels = []
                 cursor = 0.0
                 for idx, seg in enumerate(segments):
                     audio_inputs.extend(["-i", seg["audio_path"]])
                     in_idx = idx + 1
                     gap = max(0.05, seg["audio_start"] - cursor)
-                    fc_parts.append(f"aevalsrc=0:s=44100:c=stereo:d={gap:.3f}[g{idx}]")
-                    fc_parts.append(f"[{in_idx}:a]aresample=44100,aformat=channel_layouts=stereo,volume=1.18[s{idx}]")
+                    fc_parts.append(f"aevalsrc=0:s=48000:c=stereo:d={gap:.3f}[g{idx}]")
+                    fc_parts.append(f"[{in_idx}:a]aresample=48000,aformat=channel_layouts=stereo,volume=1.18[s{idx}]")
                     concat_labels.extend([f"[g{idx}]", f"[s{idx}]"])
                     cursor = seg["audio_start"] + seg["audio_dur"]
 
                 trail_gap = max(0.20, final_total_sec - cursor)
-                fc_parts.append(f"aevalsrc=0:s=44100:c=stereo:d={trail_gap:.3f}[gend]")
+                fc_parts.append(f"aevalsrc=0:s=48000:c=stereo:d={trail_gap:.3f}[gend]")
                 concat_labels.append("[gend]")
                 fc_parts.append(f"{''.join(concat_labels)}concat=n={len(concat_labels)}:v=0:a=1[aout]")
                 filter_complex = ";".join(fc_parts)
@@ -1951,24 +1974,19 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 cmd_voiced = [
                     "ffmpeg", "-y", "-loglevel", "error",
                     "-framerate", str(in_fps),
-                    "-i", os.path.join(tmpdir, "s_%04d.jpg"),
+                    "-i", os.path.join(tmpdir, "s_%04d.png"),
                     *audio_inputs,
                     "-filter_complex", filter_complex,
-                    "-map", "0:v:0",
+                    "-map", "[vout]",
                     "-map", "[aout]",
-                    "-c:v", "libx264",
-                    "-pix_fmt", "yuv420p",
-                    "-preset", "fast",
-                    "-crf", "21",
-                    "-r", str(out_fps),
+                    *v_encode_flags,
                     "-c:a", "aac",
-                    "-b:a", "128k",
-                    "-ar", "44100",
+                    "-b:a", "192k",
+                    "-ar", "48000",
                     "-shortest",
-                    "-movflags", "+faststart",
                     out_voiced_mp4,
                 ]
-                res_v = subprocess.run(cmd_voiced, capture_output=True, text=True, timeout=110)
+                res_v = subprocess.run(cmd_voiced, capture_output=True, text=True, timeout=180)
                 if res_v.returncode == 0 and os.path.exists(out_voiced_mp4):
                     with open(out_voiced_mp4, "rb") as vf:
                         voiced_bytes = vf.read()
@@ -1977,7 +1995,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                     print(f"[리플레이 음성 영상 실패] {voiced_error}")
 
             print(
-                f"[세로형 리플레이 완료] {symbol} ({tf_label}, {len(df_win)}봉 · 960x1280) | "
+                f"[세로형 풀HD 리플레이 완료] {symbol} ({tf_label}, {len(df_win)}봉 · {VIDEO_W}x{VIDEO_H} CRF15) | "
                 f"클린={'SKIP' if not make_clean else ('OK' if clean_bytes else 'FAIL')} · "
                 f"자막/JP음성={'OK' if voiced_bytes else 'FAIL'} ({voiced_frames / in_fps:.1f}초)"
             )
@@ -2031,20 +2049,25 @@ def send_telegram_single(text, reply_markup=None):
 
 
 def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=None):
+    """
+    [초고화질 무손실 PNG 전송]
+    - 텔레그램 sendPhoto의 강제 960x1280 JPG 리사이즈·재압축을 우회하기 위해
+      sendDocument로 1920x2560 원본 PNG 무손실 전송 (X 업로드 시 2중 압축 흐림 현상 완전 해소)
+    """
     token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
     if not photo_bytes or not token or not chat_id:
         return False
-    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendPhoto")
+    url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendDocument")
     for attempt in range(3):
         try:
-            files = {"photo": ("tv_signal_chart_vertical.png", photo_bytes, "image/png")}
+            files = {"document": ("danpyung_chart_hd.png", photo_bytes, "image/png")}
             data = {"chat_id": chat_id}
             if caption_text:
                 data["caption"] = caption_text
             if reply_markup:
                 data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False) if isinstance(reply_markup, dict) else str(reply_markup)
-            resp = requests.post(url, data=data, files=files, timeout=18)
+            resp = requests.post(url, data=data, files=files, timeout=25)
             if resp.status_code == 200:
                 time.sleep(0.7)
                 return True
@@ -2052,9 +2075,9 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
                 wait_s = int(to_float((resp.json().get("parameters") or {}).get("retry_after"), 3))
                 time.sleep(wait_s + 0.5)
                 continue
-            print(f"[sendPhoto 오류 {attempt + 1}/3] HTTP {resp.status_code}: {resp.text[:160]}")
+            print(f"[sendDocument(HD차트) 오류 {attempt + 1}/3] HTTP {resp.status_code}: {resp.text[:160]}")
         except Exception as e:
-            print(f"[sendPhoto 예외 {attempt + 1}/3] {e}")
+            print(f"[sendDocument(HD차트) 예외 {attempt + 1}/3] {e}")
         time.sleep(1.2)
     return False
 
@@ -2068,7 +2091,7 @@ def send_telegram_video_with_caption(
     height=VIDEO_H,
     duration=30,
 ):
-    """세로형(960x1280) HD MP4 리플레이 영상을 텔레그램 sendVideo로 전송"""
+    """세로형(1080x1440) 풀HD MP4 리플레이 영상을 텔레그램 sendVideo로 무변조 원본 전송"""
     global LAST_VIDEO_ERROR
     token = (TELEGRAM_BOT_TOKEN or os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     chat_id = (TELEGRAM_CHAT_ID or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or "").strip()
@@ -2091,7 +2114,7 @@ def send_telegram_video_with_caption(
                 data["caption"] = caption_text
             if reply_markup:
                 data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False) if isinstance(reply_markup, dict) else str(reply_markup)
-            resp = requests.post(url, data=data, files=files, timeout=60)
+            resp = requests.post(url, data=data, files=files, timeout=90)
             if resp.status_code == 200:
                 time.sleep(0.8)
                 return True
