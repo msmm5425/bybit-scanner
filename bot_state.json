@@ -3004,33 +3004,6 @@
     "ARBUSDT": 1795740486
   },
   "sl_history": {
-    "IRYSUSDT_1795441126": {
-      "symbol": "IRYSUSDT",
-      "track_type": "TRACK_E",
-      "score": 92,
-      "entry_price": 0.01731,
-      "stop_price": 0.016271,
-      "sl_trigger_price": 0.01619,
-      "sl_pct": 6,
-      "created_at": 1795441126,
-      "sl_at": 1795481475,
-      "hold_minutes": 672,
-      "max_high_price": 0.01797,
-      "max_favorable_pct": 3.81,
-      "vol_mult": 2.2,
-      "rsi6_15m": 30.5,
-      "oi_m": 1.5,
-      "oi_ratio": 32.1,
-      "funding_pct": 0.0013,
-      "change_24h": -10.57,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 47%)",
-        "바닥 반전 거래량 2.2배 폭발 + KDJ 바닥 급반전",
-        "OI 집중도 최상(32%)",
-        "뉴욕 유동성 세션(+4점)"
-      ]
-    },
     "INXUSDT_1795482213": {
       "symbol": "INXUSDT",
       "track_type": "TRACK_C",
