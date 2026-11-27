@@ -33,11 +33,18 @@ from notifier import (
     build_briefing_message,
     build_x_post_message,
     build_x_intent_reply_markup,
+    build_x_hook_line,
     send_telegram_single,
     fmt_price,
     generate_signal_chart_bytes,
     send_telegram_photo_with_caption,
 )
+
+try:
+    from notifier import build_x_hook_pair
+except Exception:
+    def build_x_hook_pair(res):
+        return build_x_hook_line(res), ""
 
 try:
     from notifier import (
@@ -50,6 +57,11 @@ except Exception as _imp_e:
     generate_profit_replay_video_bytes = None
     send_telegram_video_with_caption = None
     get_last_video_error = lambda: f"notifier 영상 함수 import 실패: {_imp_e}"
+
+try:
+    from notifier import generate_profit_replay_videos_bundle
+except Exception:
+    generate_profit_replay_videos_bundle = None
 
 try:
     import postmortem
@@ -420,6 +432,9 @@ def _merge_state_dicts(base_state, incoming_state):
                 p["exit_price"] = to_float(ev.get("exit_price"))
             if abs(to_float(ev.get("realized_weighted_pct"), 0.0)) > 0 and abs(to_float(p.get("realized_weighted_pct"), 0.0)) == 0:
                 p["realized_weighted_pct"] = to_float(ev.get("realized_weighted_pct"))
+            for str_k in ("x_hook_ko", "x_hook_jp", "sub_strategy"):
+                if ev.get(str_k) and not p.get(str_k):
+                    p[str_k] = ev.get(str_k)
             for tk_ts in ("tp2_armed_ts_ms", "tp3_armed_ts_ms", "tp3_at", "sl_at", "expired_at", "last_checked_ts"):
                 p[tk_ts] = max(int(to_float(p.get(tk_ts), 0)), int(to_float(ev.get(tk_ts), 0)))
             for fg in ALL_LOCK_FLAGS:
@@ -447,6 +462,9 @@ def _merge_state_dicts(base_state, incoming_state):
                 pt["exit_price"] = to_float(tv.get("exit_price"))
             if abs(to_float(tv.get("realized_weighted_pct"), 0.0)) > 0 and abs(to_float(pt.get("realized_weighted_pct"), 0.0)) == 0:
                 pt["realized_weighted_pct"] = to_float(tv.get("realized_weighted_pct"))
+            for str_k in ("x_hook_ko", "x_hook_jp", "sub_strategy"):
+                if tv.get(str_k) and not pt.get(str_k):
+                    pt[str_k] = tv.get(str_k)
             for tk_ts in ("tp2_armed_ts_ms", "tp3_armed_ts_ms", "tp3_at", "sl_at", "expired_at", "last_checked_ts"):
                 pt[tk_ts] = max(int(to_float(pt.get(tk_ts), 0)), int(to_float(tv.get(tk_ts), 0)))
             for fg in ALL_LOCK_FLAGS:
@@ -462,6 +480,11 @@ def _merge_state_dicts(base_state, incoming_state):
                     if ep_ref.get(fg) or cur_t.get(fg):
                         cur_t[fg] = True
                         ep_ref[fg] = True
+                for str_k in ("x_hook_ko", "x_hook_jp", "sub_strategy"):
+                    if cur_t.get(str_k) and not ep_ref.get(str_k):
+                        ep_ref[str_k] = cur_t.get(str_k)
+                    elif ep_ref.get(str_k) and not cur_t.get(str_k):
+                        cur_t[str_k] = ep_ref.get(str_k)
                 for tk_ts in ("tp2_armed_ts_ms", "tp3_armed_ts_ms", "tp3_at", "sl_at", "expired_at", "last_checked_ts"):
                     m_ts = max(int(to_float(cur_t.get(tk_ts), 0)), int(to_float(ep_ref.get(tk_ts), 0)))
                     if m_ts > 0:
@@ -525,6 +548,9 @@ def sync_episode_ledger(signal_episodes, symbol, t_item, sl_history=None):
     signal_episodes[ep_key] = {
         "symbol": symbol, "created_at": c_at, "track_type": t_item.get("track_type", "TRACK_A"),
         "is_long_term": bool(t_item.get("is_long_term", False)),
+        "sub_strategy": str(t_item.get("sub_strategy") or prev.get("sub_strategy") or ""),
+        "x_hook_ko": str(t_item.get("x_hook_ko") or prev.get("x_hook_ko") or ""),
+        "x_hook_jp": str(t_item.get("x_hook_jp") or prev.get("x_hook_jp") or ""),
         "score": int(t_item.get("score", ELITE_SCORE_THRESHOLD)), "entry_price": to_float(t_item.get("entry_price")),
         "initial_stop_price": to_float(t_item.get("initial_stop_price") or t_item.get("stop_price")),
         "stop_price": to_float(t_item.get("stop_price")), "sl_pct": to_float(t_item.get("sl_pct", DEFAULT_FIXED_SL_PCT)),
@@ -741,6 +767,10 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             "base_coin": base,
             "track_type": t_item.get("track_type", "TRACK_A"),
             "is_long_term": is_long,
+            "sub_strategy": str(t_item.get("sub_strategy") or ""),
+            "x_hook_ko": str(t_item.get("x_hook_ko") or ""),
+            "x_hook_jp": str(t_item.get("x_hook_jp") or ""),
+            "reasons": t_item.get("reasons") or [],
             "close_type": close_type_str,
             "entry_price": entry_ref,
             "initial_stop_price": init_stop_p,
@@ -780,7 +810,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
         video_payload = None
         tp3_armed_ms = int(to_float(t_item.get("tp3_armed_ts_ms"), default=peak_ts_ms))
-        # [2단계 개선] 마지막 봉 1개가 아닌, 고점·활성화 이후 모든 확정봉 전수 순회 판정
         if (not just_armed_tp3) and has_closed_bar and not t_item.get("closed_alerted"):
             tp3_after = closed_post_tf[closed_post_tf["close_ts_ms"] > max(peak_ts_ms, tp3_armed_ms)]
             tp3_breach = tp3_after[
@@ -840,7 +869,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
         video_payload = None
         tp2_armed_ms = int(to_float(t_item.get("tp2_armed_ts_ms"), default=peak_ts_ms))
-        # [2단계 개선] TP2 방어선 활성화 이후 마감된 모든 확정봉 전수 순회 판정
         if (not just_armed_tp2) and has_closed_bar and not t_item.get("closed_alerted"):
             tp2_after = closed_post_tf[closed_post_tf["close_ts_ms"] > tp2_armed_ms]
             tp2_breach = tp2_after[
@@ -945,19 +973,105 @@ def _send_signal_notifications(res, now_str):
         send_telegram_reliable(f"📲 ${base} ({sym}) X 포스팅 바로가기", reply_markup=markup)
 
 
+def _send_video_compat(video_bytes, caption_text, filename, width=960, height=1280, duration=30):
+    """구/신 notifier.py send_telegram_video_with_caption 시그니처 모두 안전 호환"""
+    if not callable(send_telegram_video_with_caption):
+        return False
+    try:
+        return send_telegram_video_with_caption(
+            video_bytes,
+            caption_text=caption_text,
+            reply_markup=None,
+            filename=filename,
+            width=width,
+            height=height,
+            duration=duration,
+        )
+    except TypeError:
+        return send_telegram_video_with_caption(
+            video_bytes,
+            caption_text=caption_text,
+            reply_markup=None,
+            filename=filename,
+        )
+
+
 def _send_profit_replay_video(vp, notify_error=True):
-    """전량 수익 마감 완료 시 30초 HD MP4 리플레이 영상 전송 (버튼 없음 · 실패 시 정확한 사유 진단 출력)"""
+    """
+    전량 수익 마감 완료 시 세로형(3:4 · 960x1280) 리플레이 영상 2종 동시 발송
+    1) 클린 세로형 영상 (무음 · 요약 카드)
+    2) 한글자막 + 일본어 여성 아나운서(1.1배속) 음성 세로형 영상
+    """
     if not vp:
         return False
     sym = str(vp.get("symbol", "")).upper()
     base = vp.get("base_coin") or sym.replace("USDT", "")
-    if not callable(generate_profit_replay_video_bytes) or not callable(send_telegram_video_with_caption):
+    tot_pct = to_float(vp.get("realized_weighted_pct"))
+    max_fav = to_float(vp.get("max_favorable_pct"))
+
+    if not callable(send_telegram_video_with_caption):
         err_msg = get_last_video_error() if callable(get_last_video_error) else "notifier 영상 모듈 미로드"
         print(f"[리플레이 영상 불가] {sym}: {err_msg}")
         if notify_error:
             send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 제작 실패 진단]: {err_msg}")
         return False
+
     try:
+        # 신버전 듀얼 세로형 번들 생성 우선 사용
+        if callable(generate_profit_replay_videos_bundle):
+            bundle = generate_profit_replay_videos_bundle(vp)
+            if not isinstance(bundle, dict) or (not bundle.get("clean") and not bundle.get("voiced")):
+                err_msg = get_last_video_error() if callable(get_last_video_error) else "세로형 영상 번들 생성 실패"
+                print(f"[리플레이 영상 번들 실패] {sym}: {err_msg}")
+                if notify_error:
+                    send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 제작 실패 진단]: {err_msg}")
+                return False
+
+            w_px = int(to_float(bundle.get("width"), 960))
+            h_px = int(to_float(bundle.get("height"), 1280))
+            dur_clean = int(round(to_float(bundle.get("clean_duration"), 30)))
+            dur_voiced = int(round(to_float(bundle.get("voiced_duration"), dur_clean)))
+            sent_any = False
+
+            if bundle.get("clean"):
+                cap_clean = f"🎬 ${base} 최종 익절 리플레이 [클린 세로형] | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+                ok_c = _send_video_compat(
+                    bundle["clean"],
+                    caption_text=cap_clean,
+                    filename=f"{base.lower()}_replay_clean_vertical.mp4",
+                    width=w_px,
+                    height=h_px,
+                    duration=dur_clean,
+                )
+                if ok_c:
+                    sent_any = True
+                elif notify_error:
+                    err_msg = get_last_video_error() if callable(get_last_video_error) else "클린 영상 전송 실패"
+                    send_telegram_reliable(f"⚠️ [${base} 클린 세로형 영상 전송 실패]: {err_msg}")
+
+            if bundle.get("voiced"):
+                cap_voiced = f"🎙️ ${base} 최종 익절 리플레이 [한글자막·일본어음성] | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+                ok_v = _send_video_compat(
+                    bundle["voiced"],
+                    caption_text=cap_voiced,
+                    filename=f"{base.lower()}_replay_sub_jp_vertical.mp4",
+                    width=w_px,
+                    height=h_px,
+                    duration=dur_voiced,
+                )
+                if ok_v:
+                    sent_any = True
+                elif notify_error:
+                    err_msg = get_last_video_error() if callable(get_last_video_error) else "자막/음성 영상 전송 실패"
+                    send_telegram_reliable(f"⚠️ [${base} 자막·일본어음성 영상 전송 실패]: {err_msg}")
+            elif notify_error and bundle.get("voiced_error"):
+                send_telegram_reliable(f"⚠️ [${base} 자막·일본어음성 영상 생성 진단]: {bundle.get('voiced_error')}")
+
+            return sent_any
+
+        # 구버전 notifier.py 호환 폴백 (단일 영상)
+        if not callable(generate_profit_replay_video_bytes):
+            return False
         video_bytes = generate_profit_replay_video_bytes(vp)
         if not video_bytes:
             err_msg = get_last_video_error() if callable(get_last_video_error) else "영상 생성 결과 비어 있음"
@@ -965,16 +1079,12 @@ def _send_profit_replay_video(vp, notify_error=True):
             if notify_error:
                 send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 제작 실패 진단]: {err_msg}")
             return False
-        tot_pct = to_float(vp.get("realized_weighted_pct"))
-        max_fav = to_float(vp.get("max_favorable_pct"))
         caption = f"🎬 ${base} 최종 익절 30초 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
         fname = f"{base.lower()}_profit_replay.mp4"
-        ok = send_telegram_video_with_caption(video_bytes, caption_text=caption, reply_markup=None, filename=fname)
-        if not ok:
+        ok = _send_video_compat(video_bytes, caption_text=caption, filename=fname, width=1280, height=720, duration=30)
+        if not ok and notify_error:
             err_msg = get_last_video_error() if callable(get_last_video_error) else "텔레그램 전송 실패"
-            print(f"[리플레이 영상 전송 실패] {sym}: {err_msg}")
-            if notify_error:
-                send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 전송 실패 진단]: {err_msg}")
+            send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 전송 실패 진단]: {err_msg}")
         return ok
     except Exception as e:
         print(f"[리플레이 영상 발송 예외] {sym}: {e}")
@@ -984,7 +1094,7 @@ def _send_profit_replay_video(vp, notify_error=True):
 
 
 def run_latest_profit_video_test():
-    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목을 찾아 30초 리플레이 영상을 즉시 테스트 발송"""
+    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목을 찾아 세로형 리플레이 영상 2종을 즉시 테스트 발송"""
     state = load_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
@@ -1037,6 +1147,10 @@ def run_latest_profit_video_test():
         "base_coin": base,
         "track_type": target.get("track_type", "TRACK_A"),
         "is_long_term": bool(target.get("is_long_term") or target.get("track_type") == "TRACK_D"),
+        "sub_strategy": str(target.get("sub_strategy") or ""),
+        "x_hook_ko": str(target.get("x_hook_ko") or ""),
+        "x_hook_jp": str(target.get("x_hook_jp") or ""),
+        "reasons": target.get("reasons") or [],
         "close_type": close_type,
         "entry_price": entry_p,
         "initial_stop_price": to_float(target.get("initial_stop_price"), entry_p * 0.94),
@@ -1223,7 +1337,6 @@ def main(scan_long_term=True):
                     if _send_profit_replay_video(vp, notify_error=True):
                         sent_count += 1
             else:
-                # [1단계 핵심 수정] Git 동기화 실패 시 알림 발송 대상 플래그를 즉시 원복해 5분 뒤 누락 없이 재시도
                 for s_rb in emitted_syms:
                     if s_rb in pre_eval_tracked:
                         tracked[s_rb] = pre_eval_tracked[s_rb]
@@ -1284,7 +1397,6 @@ def main(scan_long_term=True):
         )
 
     def _latest_sl_at(sym_check):
-        """[1단계 핵심 수정] 48h+ 보유 후 손절 종목도 실제 sl_at 기준으로 쿨다운·90점 컷 정확 판정"""
         latest_ts = 0
         pt = tracked.get(sym_check)
         if isinstance(pt, dict) and pt.get("sl_alerted"):
@@ -1401,15 +1513,20 @@ def main(scan_long_term=True):
         elif elapsed_alert < RE_ALERT_COOLDOWN_SEC:
             continue
 
-        # [1단계 핵심 수정] 신규 알림 Git 동기화 실패 시 롤백용 스냅샷 확보
         prev_tracked_snap = copy.deepcopy(tracked.get(sym))
         prev_alert_ts = alert_history.get(sym)
         new_ep_key = f"{sym}_{now_ts}"
         prev_ep_snap = copy.deepcopy(signal_episodes.get(new_ep_key))
 
+        # X 양식 간략 포착근거(한글·일본어)를 원장에 영구 보존 (익절 자막·음성 영상 100% 일치)
+        hook_ko, hook_jp = build_x_hook_pair(res)
+
         tracked[sym] = {
             "created_at": now_ts, "last_checked_ts": now_ts, "track_type": res["track_type"],
             "is_long_term": is_res_long,
+            "sub_strategy": str(res.get("sub_strategy") or ""),
+            "x_hook_ko": hook_ko,
+            "x_hook_jp": hook_jp,
             "score": res["score"], "entry_price": res["price"], "swing_high_line": res["swing_high_line"],
             "entry_low": res["entry_low"], "entry_high": res["entry_high"],
             "initial_stop_price": res["stop_price"], "stop_price": res["stop_price"],
@@ -1462,11 +1579,7 @@ def main(scan_long_term=True):
 
 
 def run_loop_mode(max_iterations=70, sleep_sec=285, max_budget_sec=16200):
-    """
-    [최적 절충안 · 4시간 30분(270분) 무공백 릴레이 루프]
-    - 4시간 6슬롯(cron: 17 0,4,8,12,16,20 * * *)과 결합하여
-      최대 30분 크론 지연 공백 완벽 흡수 + 대기열 취소/코드 반영 지연 최소화
-    """
+    """4시간 30분(270분) 무공백 릴레이 루프"""
     loop_start = time.time()
     budget_min = max_budget_sec / 60.0
 
