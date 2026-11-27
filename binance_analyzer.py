@@ -49,6 +49,7 @@ def fmt_price(price):
 
 
 def send_telegram_report(text):
+    """[3-2차 보강] 429 retry_after 자동 대기 · HTTP 오류 로깅 · 전 청크 성공 시에만 True 반환"""
     if not SEND_DAILY_TELEGRAM:
         print("[일간 백그라운드 모드] 텔레그램 발송 생략 (자체 MFE TP · 정제 DNA · 시총 캐시 학습 완료)")
         return False
@@ -57,18 +58,28 @@ def send_telegram_report(text):
     if not text or not token or not chat_id:
         return False
     url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendMessage")
+    all_ok = True
     for i in range(0, len(text), 3800):
         chunk = text[i : i + 3800]
-        for _ in range(3):
+        chunk_ok = False
+        for attempt in range(3):
             try:
                 r = requests.post(url, json={"chat_id": chat_id, "text": chunk, "disable_web_page_preview": True}, timeout=12)
                 if r.status_code == 200:
+                    chunk_ok = True
                     time.sleep(0.6)
                     break
-            except Exception:
-                pass
+                if r.status_code == 429:
+                    wait_s = int(to_float((r.json().get("parameters") or {}).get("retry_after"), 3))
+                    time.sleep(wait_s + 0.5)
+                    continue
+                print(f"[daily sendMessage 오류 {attempt + 1}/3] HTTP {r.status_code}: {r.text[:160]}")
+            except Exception as e:
+                print(f"[daily sendMessage 예외 {attempt + 1}/3] {e}")
             time.sleep(1.0)
-    return True
+        if not chunk_ok:
+            all_ok = False
+    return all_ok
 
 
 def load_json_safe(path, default_val):
@@ -124,7 +135,6 @@ def _is_valid_mc_ticker(sym_b):
 
 def update_market_cap_cache(now_ts):
     """
-    [2-2단계 수정]
     - 1글자 티커 및 AMBIGUOUS_MC_TICKERS(M, RAIN, LIT, Q, S, B, W, T, H 등) 수집 원천 배제
     - 기존 market_cap_cache.json에 남아 있는 충돌·비대상 티커도 자동 삭제(purge)
     - CoinPaprika 상위 2,000개 + CoinGecko 상위 750개 병합
@@ -187,7 +197,6 @@ def update_market_cap_cache(now_ts):
     if fresh_caps:
         caps.update(fresh_caps)
 
-    # 기존 캐시에서 충돌 티커가 정리된 경우에도 변경본을 저장
     if fresh_caps or len(caps) != len(existing.get("caps") or {}):
         save_json_safe(
             MARKET_CAP_CACHE_FILE,
@@ -480,10 +489,9 @@ def update_top5_dna_profile(analyzed_top5, now_ts):
 
 def compute_realistic_tp_from_own_episodes(state, now_ts):
     """
-    [2-2단계 수정 · MFE 생존자 편향 완전 제거]
-    - 기존 if fav >= 3.0 필터로 하위 44% 표본을 절단하던 편향을 제거
-    - 최근 14일 내 '이미 마감된 모든 단기 에피소드' + '6시간 이상 경과한 단기 에피소드' 전체(fav >= 0.0 포함)를
-      모집단으로 사용해 현실적인 65 / 82 / 92 분위수 백업 TP 산출
+    [MFE 생존자 편향 제거]
+    - 최근 14일 내 이미 마감된 모든 단기 에피소드 + 6시간 이상 경과 단기 에피소드 전체(fav >= 0 포함)로
+      65 / 82 / 92 분위수 백업 TP 산출
     """
     eps = (state.get("signal_episodes") or {}).values()
     short_mfes = []
@@ -604,8 +612,8 @@ def main():
             idx = f_map[fut]
             try:
                 temp_list[idx] = fut.result()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[Top5 DNA 분석 예외] idx={idx}: {e}")
         analyzed_top5 = [x for x in temp_list if x is not None]
 
     dna_formula = update_top5_dna_profile(analyzed_top5, now_ts)
