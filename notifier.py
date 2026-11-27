@@ -109,7 +109,7 @@ def _ensure_playwright():
             return False
 
 
-def fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=10):
+def fetch_exact_bybit_klines(symbol, interval="60", limit=150, min_rows=10):
     if api_mod is not None and hasattr(api_mod, "fetch_klines"):
         for attempt in range(2):
             df = api_mod.fetch_klines(symbol, str(interval), limit=int(limit))
@@ -122,7 +122,7 @@ def fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=10):
     return pd.DataFrame()
 
 
-def _fetch_replay_klines_window(symbol, interval, start_ms, end_ms, max_bars=850):
+def _fetch_replay_klines_window(symbol, interval, start_ms, end_ms, max_bars=860):
     if api_mod is not None and hasattr(api_mod, "fetch_klines_window"):
         df = api_mod.fetch_klines_window(symbol, interval=str(interval), start_ms=start_ms, end_ms=end_ms, max_bars=max_bars)
         if isinstance(df, pd.DataFrame) and not df.empty:
@@ -267,10 +267,7 @@ def _pick_pair(pairs, symbol):
 
 
 def build_x_hook_pair(res):
-    """
-    [36종 전략별 한/일 네이티브 훅(Hook) 1:1 매핑 엔진]
-    - 반환값: (한글 간략 포착근거, 자연스러운 일본어 아나운서 번역)
-    """
+    """[36종 전략별 한/일 네이티브 훅(Hook) 1:1 매핑 엔진]"""
     symbol = str(res.get("symbol", ""))
     track_type = str(res.get("track_type", "TRACK_A")).upper()
     r_text = " ".join(str(x) for x in (res.get("reasons") or []))
@@ -501,7 +498,11 @@ def build_x_intent_reply_markup(x_post_text, button_label="🚀 X(트위터) 앱
 
 
 def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
-    """OS 공용 Path.as_uri() · 임시 HTML finally 정리 · 비선형 압축 표식 · 예외 진단 로깅"""
+    """
+    [포착 알림 세로형(3:4 · 960x1280) 고해상도 트레이딩뷰 차트 렌더러]
+    - 리플레이 세로형 영상과 동일한 패밀리 룩 (상단 타이틀 바 + 836px 메인 차트 + 300px 전략 요약 카드 + 푸터)
+    - 최근 120봉 + 피보나치 구간 + TP1~TP3/SL 가격선 + 하단 X 간략 포착근거 및 4칸 핵심 가격 카드
+    """
     if not _ensure_playwright():
         return None
     symbol = res.get("symbol", "")
@@ -528,6 +529,7 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
 
     tp1_p, tp2_p, tp3_p = to_float(tps[0]) * ratio_adj, to_float(tps[1]) * ratio_adj, to_float(tps[2]) * ratio_adj
     p1, p2, p3 = round(to_float(tp_pcts[0], 8.0), 1), round(to_float(tp_pcts[1], 15.0), 1), round(to_float(tp_pcts[2], 22.0), 1)
+    hook_ko = build_x_hook_line(res)
 
     candle_min_low = to_float(df["low"].min(), price * 0.97)
     candle_max_high = to_float(df["high"].max(), price * 1.02)
@@ -538,7 +540,7 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
 
     core_span = max(high_piv - low_piv, price * 0.018)
     up_comp = (
-        float(np.clip((core_span * 0.38) / max(tp3_p - high_piv, price * 0.02), 0.04, 1.0))
+        float(np.clip((core_span * 0.36) / max(tp3_p - high_piv, price * 0.02), 0.04, 1.0))
         if tp3_p > high_piv
         else 1.0
     )
@@ -572,7 +574,7 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
 
     tf_str = str(chart_tf).upper().strip()
     step_sec = {"720": 43200, "240": 14400, "60": 3600, "15": 900}.get(tf_str, 43200 if is_long else 3600)
-    whitespace_js = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 6)]
+    whitespace_js = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, 7)]
 
     high_idx = int(df["high"].astype(float).idxmax())
     low_idx = int(df["low"].astype(float).idxmin())
@@ -613,8 +615,8 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
                 "priority": prio,
             })
 
-    y_bot_bound = min(_fwd(sl_p), _fwd(candle_min_low)) - core_span * 0.04
-    y_top_bound = max(_fwd(tp3_p), _fwd(candle_max_high)) + core_span * 0.05
+    y_bot_bound = min(_fwd(sl_p), _fwd(candle_min_low)) - core_span * 0.05
+    y_top_bound = max(_fwd(tp3_p), _fwd(candle_max_high)) + core_span * 0.06
 
     kst_str = datetime.fromtimestamp(to_float(latest_row["timestamp"]) / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST")
     tf_name = {"720": "12H", "240": "4H", "60": "1H", "15": "15m"}.get(tf_str, "12H" if is_long else "1H")
@@ -637,37 +639,52 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
 {lw_script_tags}
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,Roboto,'Noto Sans CJK KR','Noto Sans KR',sans-serif;color:#d1d4dc;width:1160px;height:680px;overflow:hidden}}
-.tv-wrap{{width:1160px;height:680px;background:#131722;border:1px solid #2a2e39;display:flex;flex-direction:column}}
-.tv-topbar{{height:42px;background:#181c27;border-bottom:1px solid #2a2e39;display:flex;align-items:center;justify-content:space-between;padding:0 16px}}
+body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Malgun Gothic',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#d1d4dc;width:960px;height:1280px;overflow:hidden}}
+.tv-wrap{{width:960px;height:1280px;background:#131722;display:flex;flex-direction:column}}
+.tv-topbar{{height:112px;background:#181c27;border-bottom:1px solid #2a2e39;display:flex;flex-direction:column;justify-content:center;gap:8px;padding:10px 20px}}
+.tb-row{{display:flex;align-items:center;justify-content:space-between}}
 .tv-left,.tv-right{{display:flex;align-items:center;gap:10px}}
-.tv-symbol{{font-size:16px;font-weight:800;color:#fff}}
-.tv-tf-badge{{background:#2a2e39;color:#d1d4dc;font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:4px}}
-.tv-ohlc{{display:flex;gap:10px;font-size:12px;font-weight:600}}
+.tv-symbol{{font-size:26px;font-weight:900;color:#fff;letter-spacing:0.2px}}
+.tv-tf-badge{{background:#2a2e39;color:#e0e3eb;font-size:13.5px;font-weight:800;padding:4px 10px;border-radius:5px}}
+.tv-ohlc{{display:flex;gap:12px;font-size:14px;font-weight:700;color:#9598a1}}
 .tv-val-up{{color:#26a69a}}
-.tv-score-pill{{background:#2962ff;color:#fff;font-size:12px;font-weight:700;padding:4px 11px;border-radius:5px}}
-#chart-box{{position:relative;flex:1;width:100%;height:638px}}
-.tv-ma-legend{{position:absolute;top:10px;left:14px;z-index:20;display:flex;gap:14px;font-size:12px;font-weight:700;background:rgba(19,23,34,0.86);padding:5px 11px;border-radius:4px;border:1px solid #2a2e39}}
+.tv-score-pill{{background:#2962ff;color:#fff;font-size:13px;font-weight:800;padding:5px 12px;border-radius:6px}}
+.tv-handle-pill{{background:rgba(255,255,255,0.08);border:1px solid #3d4354;color:#f0f3fa;font-size:13.5px;font-weight:800;padding:5px 11px;border-radius:6px}}
+#chart-box{{position:relative;width:960px;height:836px;overflow:hidden}}
+.tv-ma-legend{{position:absolute;top:12px;left:14px;z-index:20;display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;font-weight:700;background:rgba(19,23,34,0.88);padding:6px 12px;border-radius:6px;border:1px solid #2a2e39}}
 #fib-overlay{{position:absolute;inset:0;pointer-events:none;z-index:12;overflow:hidden}}
 .fib-band{{position:absolute;pointer-events:none}}
-.fib-lbl{{position:absolute;font-size:10.5px;font-weight:700;line-height:1;padding:2px 6px;border-radius:3px;background:rgba(19,23,34,0.84);border:1px solid rgba(255,255,255,0.08);white-space:nowrap;letter-spacing:0.2px}}
+.fib-lbl{{position:absolute;font-size:11px;font-weight:700;line-height:1;padding:2px 6px;border-radius:3px;background:rgba(19,23,34,0.86);border:1px solid rgba(255,255,255,0.10);white-space:nowrap;letter-spacing:0.2px}}
+#bottom-panel{{height:300px;width:960px;background:linear-gradient(180deg,#121725 0%,#0c101a 100%);border-top:2px solid #272e40;padding:18px 24px;display:flex;flex-direction:column;justify-content:center;gap:14px}}
+.cc-hook{{background:rgba(41,98,255,0.16);border:1px solid rgba(76,201,240,0.38);border-radius:12px;padding:13px 18px;font-size:19px;font-weight:800;color:#eef4ff;line-height:1.38;text-align:center;word-break:keep-all}}
+.cc-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}
+.cc-box{{background:#181e2e;border:1px solid #2a3144;border-radius:12px;padding:15px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}}
+.cc-k{{font-size:13px;font-weight:700;color:#9598a1}}
+.cc-v{{font-size:21px;font-weight:900;color:#ffffff;line-height:1.15}}
+.cc-sub{{font-size:13px;font-weight:800;color:#cbd5e1}}
+.tv-footer{{height:32px;background:#0a0d14;border-top:1px solid #1f2430;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11px;color:#787b86;font-weight:600}}
 </style></head>
 <body>
 <div class="tv-wrap">
   <div class="tv-topbar">
-    <div class="tv-left">
-      <span class="tv-symbol">${base}USDT.P</span>
-      <span class="tv-tf-badge">{tf_label}</span>
+    <div class="tb-row">
+      <div class="tv-left">
+        <span class="tv-symbol">${base}USDT.P</span>
+        <span class="tv-tf-badge">{tf_label}</span>
+      </div>
+      <div class="tv-right">
+        <span class="tv-score-pill">{track_badge} · {score} pts</span>
+        <span class="tv-handle-pill">{WATERMARK_HANDLE}</span>
+      </div>
+    </div>
+    <div class="tb-row">
       <div class="tv-ohlc">
         <span>O <span class="tv-val-up">{fmt_price(open_last)}</span></span>
         <span>H <span class="tv-val-up">{fmt_price(high_last)}</span></span>
         <span>L <span class="tv-val-up">{fmt_price(low_last)}</span></span>
         <span>C <span class="tv-val-up">{fmt_price(price)}</span></span>
       </div>
-    </div>
-    <div class="tv-right">
-      <span>{kst_str}</span>
-      <span class="tv-score-pill">{track_badge} · {score} pts</span>
+      <span style="font-size:13px;font-weight:700;color:#b2b5be">{kst_str}</span>
     </div>
   </div>
   <div id="chart-box">
@@ -680,17 +697,56 @@ body{{background:#131722;font-family:-apple-system,BlinkMacSystemFont,Roboto,'No
     </div>
     <div id="fib-overlay"></div>
   </div>
+  <div id="bottom-panel">
+    <div class="cc-hook">📌 {hook_ko}</div>
+    <div class="cc-grid">
+      <div class="cc-box">
+        <span class="cc-k">포착 현재가</span>
+        <span class="cc-v">${fmt_price(price)}</span>
+        <span class="cc-sub" style="color:#00e676">ENTRY ZONE</span>
+      </div>
+      <div class="cc-box">
+        <span class="cc-k">손절가 (SL)</span>
+        <span class="cc-v" style="color:#ef476f">${fmt_price(sl_p)}</span>
+        <span class="cc-sub" style="color:#ef476f">-{sl_pct}% 고정손절</span>
+      </div>
+      <div class="cc-box">
+        <span class="cc-k">1차 · 2차 목표</span>
+        <span class="cc-v" style="color:#4cc9f0">+{p1:g}% / +{p2:g}%</span>
+        <span class="cc-sub" style="color:#06d6a0">TP1·TP2 전량홀딩</span>
+      </div>
+      <div class="cc-box">
+        <span class="cc-k">최종 목표 (TP3)</span>
+        <span class="cc-v" style="color:#ffd166">${fmt_price(tp3_p)}</span>
+        <span class="cc-sub" style="color:#ffd166">+{p3:g}% 확장목표</span>
+      </div>
+    </div>
+  </div>
+  <div class="tv-footer">
+    <span>※ 본 차트는 시스템 포착 기준 참고용이며 모든 투자 판단의 책임은 본인에게 있습니다.</span>
+    <span>{WATERMARK_HANDLE}</span>
+  </div>
 </div>
 <script>
 const lowPiv={low_piv},highPiv={high_piv},upComp={up_comp},downComp={down_comp},decimals={decimals};
 function invScale(y){{if(y>highPiv)return highPiv+(y-highPiv)/Math.max(upComp,1e-6);if(y<lowPiv)return lowPiv-(lowPiv-y)/Math.max(downComp,1e-6);return y;}}
 function fmtReal(val){{const p=invScale(val);if(p<=0)return '0.0000';if(p>=1000)return p.toLocaleString('en-US',{{minimumFractionDigits:2,maximumFractionDigits:2}});return p.toFixed(decimals);}}
 const chart=LightweightCharts.createChart(document.getElementById('chart-box'),{{
-  width:1160,height:638,
+  width:960,height:836,
   layout:{{background:{{type:'solid',color:'#131722'}},textColor:'#d1d4dc',fontSize:12}},
   grid:{{vertLines:{{color:'#1e222d'}},horzLines:{{color:'#1e222d'}}}},
-  rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.07,bottom:0.12}},entireTextOnly:true}},
-  timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:5,barSpacing:9.8}},
+  watermark:{{
+    visible:true,
+    fontSize:66,
+    horzAlign:'center',
+    vertAlign:'center',
+    color:'rgba(209, 212, 220, 0.14)',
+    text:'{WATERMARK_HANDLE}',
+    fontFamily:'-apple-system,BlinkMacSystemFont,Roboto,sans-serif',
+    fontStyle:'bold'
+  }},
+  rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.06,bottom:0.10}},entireTextOnly:true}},
+  timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:5,barSpacing:6.6}},
   localization:{{priceFormatter:fmtReal}}
 }});
 const candleSeries=chart.addCandlestickSeries({{
@@ -740,13 +796,13 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
     const ov=document.getElementById('fib-overlay');
     const maBox=document.getElementById('ma-legend');
     const maRight=maBox ? (maBox.offsetLeft + maBox.offsetWidth + 10) : 390;
-    const maBottom=maBox ? (maBox.offsetTop + maBox.offsetHeight + 6) : 44;
+    const maBottom=maBox ? (maBox.offsetTop + maBox.offsetHeight + 6) : 48;
 
     if(ov && fibLevels.length>0){{
-      const psWidth=(chart.priceScale('right') && chart.priceScale('right').width) ? chart.priceScale('right').width() : 88;
-      const plotRight=Math.max(200, 1160 - (psWidth || 88));
+      const psWidth=(chart.priceScale('right') && chart.priceScale('right').width) ? chart.priceScale('right').width() : 86;
+      const plotRight=Math.max(200, 960 - (psWidth || 86));
       const rawX=chart.timeScale().timeToCoordinate(fibStartTime);
-      const xStart=(rawX!==null && isFinite(rawX)) ? Math.max(8, Math.min(plotRight - 180, rawX)) : 12;
+      const xStart=(rawX!==null && isFinite(rawX)) ? Math.max(8, Math.min(plotRight - 160, rawX)) : 12;
 
       const byRatio={{}};
       fibLevels.forEach(fl=>{{
@@ -777,8 +833,8 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
       const sortedFibs=[...fibLevels].sort((a,b)=>b.priority-a.priority);
       sortedFibs.forEach(fl=>{{
         const y=byRatio[fl.label];
-        if(y===undefined || y<12 || y>592) return;
-        if(placedY.some(py=>Math.abs(py-y)<14)) return;
+        if(y===undefined || y<12 || y>785) return;
+        if(placedY.some(py=>Math.abs(py-y)<15)) return;
         placedY.push(y);
         const tag=document.createElement('div');
         tag.className='fib-lbl';
@@ -807,7 +863,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
             try:
-                page = browser.new_page(viewport={"width": 1160, "height": 680}, device_scale_factor=1.5)
+                page = browser.new_page(viewport={"width": VIDEO_W, "height": VIDEO_H}, device_scale_factor=1.25)
                 page.goto(Path(tmp_html_path).resolve().as_uri(), wait_until="load", timeout=25000)
                 page.wait_for_function("window.__CHART_DONE === true", timeout=10000)
                 page.wait_for_timeout(200)
@@ -836,9 +892,9 @@ def generate_signal_chart_bytes(res):
     df = pd.DataFrame()
 
     if is_long:
-        df = fetch_exact_bybit_klines(symbol, interval="720", limit=130, min_rows=20)
+        df = fetch_exact_bybit_klines(symbol, interval="720", limit=155, min_rows=20)
         if df.empty:
-            df_4h_raw = fetch_exact_bybit_klines(symbol, interval="240", limit=300, min_rows=30)
+            df_4h_raw = fetch_exact_bybit_klines(symbol, interval="240", limit=380, min_rows=30)
             if not df_4h_raw.empty:
                 df_resamp = _resample_4h_to_12h(df_4h_raw)
                 if not df_resamp.empty and len(df_resamp) >= 20:
@@ -848,12 +904,12 @@ def generate_signal_chart_bytes(res):
                     df = df_4h_raw
                     actual_tf = "240"
         if df.empty:
-            df = fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=20)
+            df = fetch_exact_bybit_klines(symbol, interval="60", limit=155, min_rows=20)
             actual_tf = "60"
     else:
-        df = fetch_exact_bybit_klines(symbol, interval="60", limit=130, min_rows=20)
+        df = fetch_exact_bybit_klines(symbol, interval="60", limit=155, min_rows=20)
         if df.empty:
-            df = fetch_exact_bybit_klines(symbol, interval="15", limit=130, min_rows=20)
+            df = fetch_exact_bybit_klines(symbol, interval="15", limit=155, min_rows=20)
             actual_tf = "15"
 
     if df is None or df.empty or len(df) < 20:
@@ -863,7 +919,8 @@ def generate_signal_chart_bytes(res):
     df["ma5"] = df["close"].rolling(5, min_periods=2).mean()
     df["ma9"] = df["close"].rolling(9, min_periods=3).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=5).mean()
-    return _render_tradingview_lightweight_chart(df.iloc[-96:].reset_index(drop=True), res, chart_tf=actual_tf)
+    # 세로형 차트 봉 개수 확대 (96봉 -> 120봉)
+    return _render_tradingview_lightweight_chart(df.iloc[-120:].reset_index(drop=True), res, chart_tf=actual_tf)
 
 
 def _probe_audio_duration_sec(audio_path, default_sec=3.0):
@@ -893,11 +950,7 @@ def _probe_audio_duration_sec(audio_path, default_sec=3.0):
 
 
 def _synth_jp_voice_segment(text, out_mp3):
-    """
-    일본어 여성 아나운서(ja-JP-NanamiNeural · 1.1배속) 음성 파일 생성
-    - Playwright 이벤트 루프 충돌 방지를 위해 전용 스레드 + 새 이벤트 루프에서 실행
-    - edge-tts 일시 오류 시 gTTS + ffmpeg atempo=1.1 자동 폴백
-    """
+    """일본어 여성 아나운서(ja-JP-NanamiNeural · 1.1배속) 음성 생성 + gTTS 자동 폴백"""
     err_box = []
 
     def _run_edge():
@@ -926,7 +979,6 @@ def _synth_jp_voice_segment(text, out_mp3):
     if os.path.exists(out_mp3) and os.path.getsize(out_mp3) > 500:
         return True, ""
 
-    # 비상 백업: gTTS + ffmpeg 1.1배속
     try:
         from gtts import gTTS
         raw_mp3 = out_mp3 + ".raw.mp3"
@@ -957,10 +1009,7 @@ def _synth_jp_voice_segment(text, out_mp3):
 
 
 def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, tmpdir, base_total_sec=30.5):
-    """
-    4단계 한글 자막 + 일본어 여성 아나운서(1.1배속) 음성 클립 생성 및 타임라인 정밀 동기화
-    - 반환: (segments_meta_list, final_total_sec, tts_ok, tts_err)
-    """
+    """4단계 한글 자막 + 일본어 여성 아나운서(1.1배속) 음성 클립 생성 및 타임라인 정밀 동기화"""
     base = str(close_info.get("base_coin") or str(close_info.get("symbol", "")).replace("USDT", "")).upper()
     dt_cap = datetime.fromtimestamp(created_at, tz=KST)
     date_ko = f"{dt_cap.month}월 {dt_cap.day}일"
@@ -1027,7 +1076,6 @@ def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, t
     if not tts_ok or len(durs) != 4:
         return [], base_total_sec, False, tts_err
 
-    # 30.5초 리플레이 타임라인에 4단계 음성이 자연스럽게 겹치지 않고 배치되도록 시작/종료 초 계산
     s0 = 0.25
     e0 = s0 + durs[0]
 
@@ -1066,10 +1114,9 @@ def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, t
 
 def generate_profit_replay_videos_bundle(close_info):
     """
-    [세로형(3:4 · 960x1280) 2종 리플레이 영상 동시 제작 엔진 v8]
-    - 영상 1 (clean): 무음 클린 세로형 (하단 진입·최고·마감·수익 요약 카드)
-    - 영상 2 (voiced): 한글 대형 자막 + 일본어 여성 아나운서(1.1배속) 음성 싱크 세로형
-    - 단일 Playwright 세션에서 차트 1회 렌더링 후 하단 패널만 즉시 스왑 캡처하여 속도 최적화
+    [세로형(3:4 · 960x1280) 2종 리플레이 영상 동시 제작 엔진 v9]
+    - 진입 전 차트 봉 개수 확대 (pre_bars 44/34/26봉)
+    - LIVE RETURN 상단 정중앙 정렬 + 44px 대형 강조 (차트 상단 여백 0.46 확보로 캔들 비간섭)
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -1099,11 +1146,11 @@ def generate_profit_replay_videos_bundle(close_info):
     hold_hours = (closed_at - created_at) / 3600.0
 
     tf_ladder = [
-        ("1", "1m", 60, 820),
-        ("5", "5m", 300, 420),
-        ("15", "15m", 900, 420),
-        ("60", "1H", 3600, 260),
-        ("240", "4H", 14400, 260),
+        ("1", "1m", 60, 860),
+        ("5", "5m", 300, 480),
+        ("15", "15m", 900, 480),
+        ("60", "1H", 3600, 300),
+        ("240", "4H", 14400, 300),
     ]
     if hold_hours < 10.0:
         start_tier = 0
@@ -1125,7 +1172,8 @@ def generate_profit_replay_videos_bundle(close_info):
 
     for idx_t in range(start_tier, len(tf_ladder)):
         cand_code, cand_lbl, cand_step, cand_max_bars = tf_ladder[idx_t]
-        req_start_ms = created_ms - (55 * cand_step * 1000)
+        # 진입 전 캔들 85봉 여유 확보 (기존 55봉 -> 85봉)
+        req_start_ms = created_ms - (85 * cand_step * 1000)
         req_end_ms = closed_ms + (2 * cand_step * 1000)
         cand_df = _fetch_replay_klines_window(
             symbol,
@@ -1166,7 +1214,8 @@ def generate_profit_replay_videos_bundle(close_info):
         exit_abs = min(len(df) - 1, entry_abs)
 
     post_count = (exit_abs - entry_abs) + 1
-    pre_bars = 24 if post_count <= 90 else (18 if post_count <= 220 else 14)
+    # 진입 전 차트 봉 개수 확대 (24/18/14 -> 44/34/26봉)
+    pre_bars = 44 if post_count <= 90 else (34 if post_count <= 220 else 26)
     slice_start = max(0, entry_abs - pre_bars)
     df_win = df.iloc[slice_start : exit_abs + 1].reset_index(drop=True)
     if len(df_win) < 4:
@@ -1204,8 +1253,9 @@ def generate_profit_replay_videos_bundle(close_info):
     if close_type == "TP3_TRAILING" or max_high_val >= tp3_p * 0.92:
         win_high = max(win_high, tp3_p)
     y_span = max(win_high - win_low, entry_p * 0.05)
+    # 상단 중앙 대형 LIVE RETURN HUD가 캔들을 가리지 않도록 상단 여백(0.46) 넉넉히 확보
     y_min_anchor = win_low - (y_span * 0.28)
-    y_max_anchor = win_high + (y_span * 0.34)
+    y_max_anchor = win_high + (y_span * 0.46)
 
     candles_js, vol_js, ma5_js, ma9_js, ma20_js, kst_strs = [], [], [], [], [], []
     last_ts_sec = -1
@@ -1250,7 +1300,6 @@ def generate_profit_replay_videos_bundle(close_info):
     try:
         from playwright.sync_api import sync_playwright
         with tempfile.TemporaryDirectory() as tmpdir:
-            # 1) Playwright 실행 전 일본어 여성 아나운서(1.1배속) 4단계 음성 생성
             segments, final_total_sec, tts_ok, tts_err = _build_narration_plan(
                 close_info, entry_p, total_realized_pct, created_at, tmpdir, base_total_sec=base_frames / float(in_fps)
             )
@@ -1284,12 +1333,12 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Malgun G
 .tv-val-up{{color:#26a69a}}
 .tv-val-dn{{color:#ef5350}}
 #chart-box{{position:relative;width:960px;height:836px;overflow:hidden}}
-.tv-ma-legend{{position:absolute;top:12px;left:14px;z-index:20;display:flex;gap:12px;font-size:13px;font-weight:700;background:rgba(19,23,34,0.88);padding:6px 12px;border-radius:6px;border:1px solid #2a2e39}}
-.live-hud{{position:absolute;top:52px;right:94px;z-index:25;display:flex;flex-direction:column;align-items:flex-end;gap:8px}}
-.pnl-pill{{background:rgba(19,23,34,0.92);border:2px solid #26a69a;border-radius:10px;padding:8px 16px;display:flex;flex-direction:column;align-items:flex-end;min-width:152px;box-shadow:0 8px 22px rgba(0,0,0,0.48)}}
-.pnl-label{{font-size:11px;font-weight:800;color:#9598a1;letter-spacing:0.6px}}
-.pnl-val{{font-size:28px;font-weight:900;color:#00e676;line-height:1.15}}
-.stage-pill{{background:rgba(41,98,255,0.28);border:1.5px solid #4cc9f0;color:#e0f7fa;font-size:14px;font-weight:800;padding:8px 14px;border-radius:9px;display:none}}
+.tv-ma-legend{{position:absolute;top:10px;left:14px;z-index:20;display:flex;gap:12px;font-size:12.5px;font-weight:700;background:rgba(19,23,34,0.88);padding:5px 12px;border-radius:6px;border:1px solid #2a2e39}}
+.live-hud{{position:absolute;top:48px;left:50%;transform:translateX(-50%);z-index:25;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}}
+.pnl-pill{{background:rgba(15,20,32,0.90);border:2.5px solid #26a69a;border-radius:14px;padding:10px 30px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-width:238px;box-shadow:0 10px 28px rgba(0,0,0,0.55)}}
+.pnl-label{{font-size:13px;font-weight:800;color:#9aa3b2;letter-spacing:1.2px}}
+.pnl-val{{font-size:44px;font-weight:900;color:#00e676;line-height:1.1;margin-top:2px;letter-spacing:-0.6px}}
+.stage-pill{{background:rgba(41,98,255,0.28);border:1.5px solid #4cc9f0;color:#e0f7fa;font-size:15px;font-weight:800;padding:7px 16px;border-radius:9px;display:none;white-space:nowrap}}
 
 #result-overlay{{position:absolute;inset:0;pointer-events:none;z-index:30;opacity:0}}
 #arc-svg{{position:absolute;inset:0;width:960px;height:836px;overflow:visible}}
@@ -1460,7 +1509,7 @@ const chart=LightweightCharts.createChart(document.getElementById('chart-box'),{
     fontFamily:'-apple-system,BlinkMacSystemFont,Roboto,sans-serif',
     fontStyle:'bold'
   }},
-  rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.04,bottom:0.09}},entireTextOnly:true}},
+  rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.06,bottom:0.09}},entireTextOnly:true}},
   timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:2}},
   localization:{{priceFormatter:fmtP}}
 }});
@@ -1846,7 +1895,6 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 finally:
                     browser.close()
 
-            # 2) 영상 1 인코딩 (클린 세로형 · 무음)
             cmd_clean = [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-framerate", str(in_fps),
@@ -1868,7 +1916,6 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 LAST_VIDEO_ERROR = f"클린 영상 ffmpeg 오류: {(res_c.stderr or '')[:180]}"
                 print(f"[리플레이 클린 영상 실패] {LAST_VIDEO_ERROR}")
 
-            # 3) 영상 2 인코딩 (한글 자막 + 일본어 여성 아나운서 1.1배속 음성)
             voiced_bytes = None
             voiced_error = tts_err if not tts_ok else ""
             if tts_ok and segments:
@@ -1878,7 +1925,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 cursor = 0.0
                 for idx, seg in enumerate(segments):
                     audio_inputs.extend(["-i", seg["audio_path"]])
-                    in_idx = idx + 1  # 0번 입력은 이미지 시퀀스
+                    in_idx = idx + 1
                     gap = max(0.05, seg["audio_start"] - cursor)
                     fc_parts.append(f"aevalsrc=0:s=44100:c=stereo:d={gap:.3f}[g{idx}]")
                     fc_parts.append(f"[{in_idx}:a]aresample=44100,aformat=channel_layouts=stereo,volume=1.18[s{idx}]")
@@ -1941,7 +1988,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
 
 
 def generate_profit_replay_video_bytes(close_info):
-    """단일 영상 호환 래퍼 (구버전 호출 대비)"""
+    """단일 영상 호환 래퍼"""
     bundle = generate_profit_replay_videos_bundle(close_info)
     if isinstance(bundle, dict):
         return bundle.get("voiced") or bundle.get("clean")
@@ -1981,7 +2028,7 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
     url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendPhoto")
     for attempt in range(3):
         try:
-            files = {"photo": ("tv_signal_chart.png", photo_bytes, "image/png")}
+            files = {"photo": ("tv_signal_chart_vertical.png", photo_bytes, "image/png")}
             data = {"chat_id": chat_id}
             if caption_text:
                 data["caption"] = caption_text
