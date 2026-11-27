@@ -1,4 +1,4 @@
-import os, sys, json, time, subprocess, requests
+import os, sys, json, time, copy, tempfile, subprocess, requests
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -77,10 +77,11 @@ DEFAULT_FIXED_SL_PCT = int(FIXED_SL_PCT)
 DEFAULT_LONGTERM_SL_PCT = int(LONGTERM_SL_PCT)
 FEE_SLIPPAGE_PCT = float(ROUNDTRIP_FEE_SLIPPAGE_PCT)
 
-# 런타임 전체 캐시(oi_snapshot·삭제 툼스톤 포함)는 /tmp 전용, Git 저장 파일은 STATE_FILE(bot_state.json) 단일화
-LOCAL_RUNTIME_CACHE = "/tmp/scanner_runtime_state.json"
-GIT_STATE_STAGE_TMP = "/tmp/scanner_git_state_clean.json"
-GIT_PM_STAGE_TMP = "/tmp/postmortem_git_merged.json"
+# Windows / Linux OS 공용 임시 폴더 사용 (Git 저장 파일은 STATE_FILE 단일화)
+_TMP_DIR = tempfile.gettempdir()
+LOCAL_RUNTIME_CACHE = os.path.join(_TMP_DIR, "scanner_runtime_state.json")
+GIT_STATE_STAGE_TMP = os.path.join(_TMP_DIR, "scanner_git_state_clean.json")
+GIT_PM_STAGE_TMP = os.path.join(_TMP_DIR, "postmortem_git_merged.json")
 LEGACY_DUPLICATE_STATE_FILE = "scanner_state.json"
 READ_STATE_FILES = list(dict.fromkeys([STATE_FILE, LEGACY_DUPLICATE_STATE_FILE, LOCAL_RUNTIME_CACHE]))
 
@@ -92,7 +93,7 @@ ALL_LOCK_FLAGS = (
 
 
 def send_telegram_reliable(text, reply_markup=None):
-    """텔레그램 메시지 재시도 전송 (429 레이트 리밋 자동 대기 포함)"""
+    """텔레그램 메시지 재시도 전송 (429 레이트 리밋 대기 + HTTP 오류 진단 로그 출력)"""
     if not text:
         return False
     token = (getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or os.getenv("TELEGRAM_TOKEN", "") or os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
@@ -105,17 +106,19 @@ def send_telegram_reliable(text, reply_markup=None):
     if reply_markup:
         payload["reply_markup"] = reply_markup
 
-    for _ in range(3):
+    for attempt in range(3):
         try:
             r = requests.post(url, json=payload, timeout=12)
             if r.status_code == 200:
                 time.sleep(0.6)
                 return True
             if r.status_code == 429:
-                wait_s = int(r.json().get("parameters", {}).get("retry_after", 3))
+                wait_s = int(to_float((r.json().get("parameters") or {}).get("retry_after"), 3))
                 time.sleep(wait_s + 0.5)
-        except Exception:
-            pass
+                continue
+            print(f"[Telegram sendMessage 오류 {attempt + 1}/3] HTTP {r.status_code}: {r.text[:160]}")
+        except Exception as e:
+            print(f"[Telegram sendMessage 예외 {attempt + 1}/3] {e}")
         time.sleep(1.0)
     return False
 
@@ -198,7 +201,7 @@ def check_btc_market_regime():
 
 
 def _get_oi_ref_and_update_snapshot(oi_snapshot, candidates, now_ts):
-    """종목별 OI 스냅샷 8개 보관 (/tmp 런타임 전용, 5시간 15분 연속 유지)"""
+    """종목별 OI 스냅샷 8개 보관 (임시 캐시 전용, 4시간 30분 연속 유지)"""
     ref_map = {}
     for sym in list(oi_snapshot.keys()):
         if is_stock_or_tradfi_symbol(sym):
@@ -490,7 +493,7 @@ def load_state():
 
 
 def save_state(state):
-    """전체 런타임 상태(oi_snapshot·툼스톤 포함)는 /tmp에, Git용 단일 상태(bot_state.json)는 경량본으로 저장"""
+    """전체 런타임 상태는 OS 임시 캐시에, Git용 단일 상태(bot_state.json)는 경량본으로 저장"""
     _write_json_atomic(LOCAL_RUNTIME_CACHE, state)
     _write_json_atomic(STATE_FILE, _build_git_clean_state(state))
 
@@ -566,6 +569,26 @@ def _record_pm_win(symbol, t_item, now_ts, max_fav):
             pass
 
 
+def _filter_valid_price_df(df_in, entry_ref_val):
+    """[가격 교차검증] 거래소 간 티커·액면 단위(1000X 등) 불일치 캔들 원천 제거"""
+    if df_in is None or df_in.empty or entry_ref_val <= 0:
+        return df_in
+    try:
+        c_s = df_in["close"].astype(float)
+        h_s = df_in["high"].astype(float)
+        l_s = df_in["low"].astype(float)
+        ratio_c = c_s / entry_ref_val
+        ratio_l = l_s / entry_ref_val
+        ratio_h = h_s / entry_ref_val
+        mask = (
+            (ratio_c >= 0.40) & (ratio_c <= 15.0)
+            & (ratio_l >= 0.30) & (ratio_h <= 18.0)
+        )
+        return df_in[mask].copy()
+    except Exception:
+        return df_in
+
+
 def _fetch_post_candles_no_gap(symbol, interval, created_ms, last_checked_ts, now_ms, fast_limit_sec, max_bars):
     """보유 시간이 150봉 창구를 넘어도 fetch_klines_window 페이지네이션으로 누락 없이 추적"""
     age_sec = max(0.0, (now_ms - created_ms) / 1000.0)
@@ -585,10 +608,9 @@ def _fetch_post_candles_no_gap(symbol, interval, created_ms, last_checked_ts, no
 
 def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     """
-    [기존 전량 홀딩·고정 손절 철학 100% 유지 · 만료 강제 정산 제거 · Track D 1H 단독 손절 분리]
-    - 단기(SL -6% · 15m/1m 기준, 방어선 15m 종가 확정)
-    - 장기(Track D: SL -20% · 1H 확정 종가 단독 판정 — 15m/1m 노이즈 손절 혼입 원천 차단)
-    - TP1: 100% 전량 홀딩 / TP2: 15m(1H) 종가 안착 시 TP1 방어선 / TP3: 50% 익절 + 잔여 50% 트레일링
+    [기존 전량 홀딩·고정 손절 철학 유지 + 15m/1H 가격 교차검증 + TP2/TP3 전수 확정봉 순회]
+    - 단기(SL -6% · 15m/1m 기준, 방어선 15m 확정봉 전수 순회)
+    - 장기(Track D: SL -20% · 1H 확정봉 단독 판정, 방어선 1H 확정봉 전수 순회)
     """
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("expired_closed") or t_item.get("closed_alerted"):
         return None
@@ -622,6 +644,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
             symbol, "60", created_ms, last_checked_ts, now_ms,
             fast_limit_sec=5 * 86400, max_bars=750,
         )
+        df_confirm = _filter_valid_price_df(df_confirm, entry_ref)
         if df_confirm is not None and not df_confirm.empty and "timestamp" in df_confirm.columns:
             post_1h = df_confirm[df_confirm["timestamp"] >= created_ms]
             if not post_1h.empty:
@@ -639,6 +662,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
                 symbol, "15", created_ms, last_checked_ts, now_ms,
                 fast_limit_sec=30 * 3600, max_bars=500,
             )
+            df_15m = _filter_valid_price_df(df_15m, entry_ref)
         if df_15m is not None and not df_15m.empty and "timestamp" in df_15m.columns:
             post_15m = df_15m[df_15m["timestamp"] >= created_ms]
             if not post_15m.empty:
@@ -710,7 +734,6 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
     has_closed_bar = closed_post_tf is not None and not closed_post_tf.empty
     last_closed_c = to_float(closed_post_tf["close"].iloc[-1], 0.0) if has_closed_bar else 0.0
-    last_closed_ts_ms = int(to_float(closed_post_tf["close_ts_ms"].iloc[-1], 0)) if has_closed_bar else 0
 
     def _make_video_payload(close_type_str, exit_price_val, total_cum_val):
         return {
@@ -757,32 +780,33 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
         video_payload = None
         tp3_armed_ms = int(to_float(t_item.get("tp3_armed_ts_ms"), default=peak_ts_ms))
-        if (
-            (not just_armed_tp3)
-            and has_closed_bar
-            and last_closed_c > 0
-            and last_closed_ts_ms > max(peak_ts_ms, tp3_armed_ms)
-            and last_closed_c <= stop_p
-            and not t_item.get("closed_alerted")
-        ):
-            t_item["tp3_completed"] = True
-            t_item["trailing_closed"] = True
-            t_item["closed_alerted"] = True
-            t_item["tp3_at"] = now_ts
-            t_item["exit_price"] = last_closed_c
-            exit_g = round((last_closed_c - entry_ref) / entry_ref * 100.0, 2)
-            w3 = round(g3 * 0.50, 2)
-            w_rem = round(exit_g * 0.50, 2)
-            total_cum = round((w3 + w_rem) - FEE_SLIPPAGE_PCT, 2)
-            t_item["realized_weighted_pct"] = total_cum
-            msgs.append(
-                f"🎯 {horizon_tag}[3차 달성 후 잔여 50% 트레일링 스탑({confirm_tf_lbl} 종가) 최종 익절 완료] ${base} ({symbol})\n"
-                f"• 진입가 {fmt_price(entry_ref)} → 최고가 {fmt_price(max_high)} (+{max_fav:.1f}%) → {confirm_tf_lbl} 종가 마감 {fmt_price(last_closed_c)} (트레일링선 {fmt_price(stop_p)})\n"
-                f"• 📊 [최종 익절 내역]: 3차(50%) +{g3:.1f}%(+{w3:.2f}%) + 잔여(50%) {exit_g:+.1f}%({w_rem:+.2f}%)\n"
-                f"• 💰 [최종 합산 확정 수익률]: {total_cum:+.2f}% 달성 (비중 100% 합산 · 비용반영)"
-            )
-            if total_cum > 0:
-                video_payload = _make_video_payload("TP3_TRAILING", last_closed_c, total_cum)
+        # [2단계 개선] 마지막 봉 1개가 아닌, 고점·활성화 이후 모든 확정봉 전수 순회 판정
+        if (not just_armed_tp3) and has_closed_bar and not t_item.get("closed_alerted"):
+            tp3_after = closed_post_tf[closed_post_tf["close_ts_ms"] > max(peak_ts_ms, tp3_armed_ms)]
+            tp3_breach = tp3_after[
+                (tp3_after["close"].astype(float) > 0)
+                & (tp3_after["close"].astype(float) <= stop_p)
+            ]
+            if not tp3_breach.empty:
+                breach_c = to_float(tp3_breach["close"].iloc[0], last_closed_c)
+                t_item["tp3_completed"] = True
+                t_item["trailing_closed"] = True
+                t_item["closed_alerted"] = True
+                t_item["tp3_at"] = now_ts
+                t_item["exit_price"] = breach_c
+                exit_g = round((breach_c - entry_ref) / entry_ref * 100.0, 2)
+                w3 = round(g3 * 0.50, 2)
+                w_rem = round(exit_g * 0.50, 2)
+                total_cum = round((w3 + w_rem) - FEE_SLIPPAGE_PCT, 2)
+                t_item["realized_weighted_pct"] = total_cum
+                msgs.append(
+                    f"🎯 {horizon_tag}[3차 달성 후 잔여 50% 트레일링 스탑({confirm_tf_lbl} 종가) 최종 익절 완료] ${base} ({symbol})\n"
+                    f"• 진입가 {fmt_price(entry_ref)} → 최고가 {fmt_price(max_high)} (+{max_fav:.1f}%) → {confirm_tf_lbl} 종가 마감 {fmt_price(breach_c)} (트레일링선 {fmt_price(stop_p)})\n"
+                    f"• 📊 [최종 익절 내역]: 3차(50%) +{g3:.1f}%(+{w3:.2f}%) + 잔여(50%) {exit_g:+.1f}%({w_rem:+.2f}%)\n"
+                    f"• 💰 [최종 합산 확정 수익률]: {total_cum:+.2f}% 달성 (비중 100% 합산 · 비용반영)"
+                )
+                if total_cum > 0:
+                    video_payload = _make_video_payload("TP3_TRAILING", breach_c, total_cum)
         return {"messages": msgs, "sl_record": None, "video_payload": video_payload}
 
     # [2차 달성]: TP1 방어선 100% 전량 수익 익절 완료 시에만 영상 제작
@@ -816,28 +840,29 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
 
         video_payload = None
         tp2_armed_ms = int(to_float(t_item.get("tp2_armed_ts_ms"), default=peak_ts_ms))
-        if (
-            (not just_armed_tp2)
-            and has_closed_bar
-            and last_closed_c > 0
-            and last_closed_ts_ms > tp2_armed_ms
-            and last_closed_c <= stop_p
-            and not t_item.get("closed_alerted")
-        ):
-            t_item["tp3_completed"] = True
-            t_item["trailing_closed"] = True
-            t_item["closed_alerted"] = True
-            t_item["tp3_at"] = now_ts
-            t_item["exit_price"] = last_closed_c
-            exit_g = round(((last_closed_c - entry_ref) / entry_ref * 100.0) - FEE_SLIPPAGE_PCT, 2)
-            t_item["realized_weighted_pct"] = exit_g
-            msgs.append(
-                f"🔒 {horizon_tag}[ 100% 전량 수익 익절 완료] ${base} ({symbol})\n"
-                f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 TP1({fmt_price(stop_p)})을 {confirm_tf_lbl} 종가({fmt_price(last_closed_c)})로 이탈하여 익절 마감합니다.\n"
-                f"• 💰 [최종 합산 확정 수익률]: {exit_g:+.2f}% 달성 (100% 전량 익절 · 비용반영)"
-            )
-            if exit_g > 0:
-                video_payload = _make_video_payload("TP1_DEFENSE", last_closed_c, exit_g)
+        # [2단계 개선] TP2 방어선 활성화 이후 마감된 모든 확정봉 전수 순회 판정
+        if (not just_armed_tp2) and has_closed_bar and not t_item.get("closed_alerted"):
+            tp2_after = closed_post_tf[closed_post_tf["close_ts_ms"] > tp2_armed_ms]
+            tp2_breach = tp2_after[
+                (tp2_after["close"].astype(float) > 0)
+                & (tp2_after["close"].astype(float) <= stop_p)
+            ]
+            if not tp2_breach.empty:
+                breach_c = to_float(tp2_breach["close"].iloc[0], last_closed_c)
+                t_item["tp3_completed"] = True
+                t_item["trailing_closed"] = True
+                t_item["closed_alerted"] = True
+                t_item["tp3_at"] = now_ts
+                t_item["exit_price"] = breach_c
+                exit_g = round(((breach_c - entry_ref) / entry_ref * 100.0) - FEE_SLIPPAGE_PCT, 2)
+                t_item["realized_weighted_pct"] = exit_g
+                msgs.append(
+                    f"🔒 {horizon_tag}[ 100% 전량 수익 익절 완료] ${base} ({symbol})\n"
+                    f"• 진입 후 최고 +{max_fav:.1f}% 도달 후 방어선 TP1({fmt_price(stop_p)})을 {confirm_tf_lbl} 종가({fmt_price(breach_c)})로 이탈하여 익절 마감합니다.\n"
+                    f"• 💰 [최종 합산 확정 수익률]: {exit_g:+.2f}% 달성 (100% 전량 익절 · 비용반영)"
+                )
+                if exit_g > 0:
+                    video_payload = _make_video_payload("TP1_DEFENSE", breach_c, exit_g)
         return {"messages": msgs, "sl_record": None, "video_payload": video_payload}
 
     # [1차 달성]: 익절·방어선 이동 없이 100% 홀딩 유지 (영상 제작 안 함)
@@ -1033,7 +1058,7 @@ def run_latest_profit_video_test():
 def _git_sync_state():
     """
     [Git .py 롤백 차단 + 삭제 심볼 부활 방지]
-    - 병합 완료된 JSON에 _apply_state_cleanup() 재적용 → /tmp 보관
+    - 병합 완료된 JSON에 _apply_state_cleanup() 재적용 → OS 임시 폴더 보관
     - git reset --hard origin/main으로 최신 코드 100% 보존 → bot_state.json·postmortem_db.json만 커밋·푸시
     """
     is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
@@ -1141,7 +1166,7 @@ def main(scan_long_term=True):
 
     _apply_state_cleanup(state, now_ts, rwa_blocked=rwa_blocked)
 
-    # [1단계] 기존 보유 포지션 감시 (만료 자동 정산 없이 실제 SL 또는 익절 마감까지 끝까지 추적)
+    # [1단계] 기존 보유 포지션 감시 (Git 동기화 실패 시 알림 증발 방지 롤백 스냅샷 확보)
     active_syms = []
     for sym in list(tracked.keys()):
         t_item = tracked[sym]
@@ -1154,8 +1179,18 @@ def main(scan_long_term=True):
             active_syms.append(sym)
 
     if active_syms:
+        pre_eval_tracked = {s: copy.deepcopy(tracked[s]) for s in active_syms}
+        pre_eval_episodes = {}
+        for s in active_syms:
+            ek_s = f"{s}_{int(to_float(tracked[s].get('created_at'), 0))}"
+            if ek_s in signal_episodes:
+                pre_eval_episodes[ek_s] = copy.deepcopy(signal_episodes[ek_s])
+
         pending_msgs = []
         pending_videos = []
+        emitted_syms = []
+        added_sl_keys = []
+
         with ThreadPoolExecutor(max_workers=8) as ex:
             f_map = {
                 ex.submit(evaluate_single_tracked_1m, s, tracked[s], now_ts, tp_params): s
@@ -1168,9 +1203,12 @@ def main(scan_long_term=True):
                     if out and out.get("sl_record"):
                         k, v = out["sl_record"]
                         sl_history[k] = v
+                        added_sl_keys.append(k)
                     sync_episode_ledger(signal_episodes, s, tracked[s], sl_history)
-                    for m in (out or {}).get("messages", []):
-                        pending_msgs.append(m)
+                    out_msgs = (out or {}).get("messages", [])
+                    if out_msgs:
+                        emitted_syms.append(s)
+                        pending_msgs.extend(out_msgs)
                     if out and out.get("video_payload"):
                         pending_videos.append(out["video_payload"])
                 except Exception as e:
@@ -1185,7 +1223,19 @@ def main(scan_long_term=True):
                     if _send_profit_replay_video(vp, notify_error=True):
                         sent_count += 1
             else:
-                print(f"[중복방지 보류] Git 동기화 실패로 추적 알림 {len(pending_msgs)}건 발송 보류")
+                # [1단계 핵심 수정] Git 동기화 실패 시 알림 발송 대상 플래그를 즉시 원복해 5분 뒤 누락 없이 재시도
+                for s_rb in emitted_syms:
+                    if s_rb in pre_eval_tracked:
+                        tracked[s_rb] = pre_eval_tracked[s_rb]
+                        ek_rb = f"{s_rb}_{int(to_float(tracked[s_rb].get('created_at'), 0))}"
+                        if ek_rb in pre_eval_episodes:
+                            signal_episodes[ek_rb] = pre_eval_episodes[ek_rb]
+                        else:
+                            signal_episodes.pop(ek_rb, None)
+                for sl_k_rb in added_sl_keys:
+                    sl_history.pop(sl_k_rb, None)
+                save_state(state)
+                print(f"[중복방지 보류·롤백완료] Git 동기화 실패로 추적 알림 {len(pending_msgs)}건 원복 (다음 회차 자동 재시도)")
 
     # [오답노트 v3] 손절 후 2시간+ 경과 종목 자동 사후 부검 (25시간 커버)
     if postmortem is not None and hasattr(postmortem, "run_post_sl_autopsy"):
@@ -1230,14 +1280,23 @@ def main(scan_long_term=True):
     def _recent_sl_count(sym_check):
         return sum(
             1 for v in sl_history.values()
-            if isinstance(v, dict) and v.get("symbol") == sym_check and (now_ts - int(v.get("sl_at", 0))) < RE_ALERT_COOLDOWN_SEC
+            if isinstance(v, dict) and str(v.get("symbol", "")).upper() == sym_check and (now_ts - int(to_float(v.get("sl_at"), 0))) < RE_ALERT_COOLDOWN_SEC
         )
 
-    def _was_stopped_recently(sym_check):
+    def _latest_sl_at(sym_check):
+        """[1단계 핵심 수정] 48h+ 보유 후 손절 종목도 실제 sl_at 기준으로 쿨다운·90점 컷 정확 판정"""
+        latest_ts = 0
         pt = tracked.get(sym_check)
-        if pt and pt.get("sl_alerted") and (now_ts - int(pt.get("sl_at") or pt.get("created_at") or 0)) < RE_ALERT_COOLDOWN_SEC:
-            return True
-        return _recent_sl_count(sym_check) > 0
+        if isinstance(pt, dict) and pt.get("sl_alerted"):
+            ts_pt = int(to_float(pt.get("sl_at") or pt.get("created_at"), 0))
+            if ts_pt > latest_ts:
+                latest_ts = ts_pt
+        for v in sl_history.values():
+            if isinstance(v, dict) and str(v.get("symbol", "")).upper() == sym_check:
+                ts_v = int(to_float(v.get("sl_at"), 0))
+                if ts_v > latest_ts:
+                    latest_ts = ts_v
+        return latest_ts
 
     def _closed_profit_recently(sym_check):
         pt = tracked.get(sym_check)
@@ -1263,10 +1322,16 @@ def main(scan_long_term=True):
             continue
         if _closed_profit_recently(sym):
             continue
+
+        latest_sl_ts = _latest_sl_at(sym)
+        was_sl_24h = latest_sl_ts > 0 and (now_ts - latest_sl_ts) < RE_ALERT_COOLDOWN_SEC
         sl_cnt = _recent_sl_count(sym)
-        cd = SL_RECOVERY_COOLDOWN_SEC if (_was_stopped_recently(sym) and sl_cnt < 2) else RE_ALERT_COOLDOWN_SEC
-        if (now_ts - int(alert_history.get(sym, 0))) < cd:
-            continue
+        if was_sl_24h:
+            if sl_cnt >= 2 or (now_ts - latest_sl_ts) < SL_RECOVERY_COOLDOWN_SEC:
+                continue
+        else:
+            if (now_ts - int(to_float(alert_history.get(sym), 0))) < RE_ALERT_COOLDOWN_SEC:
+                continue
         to_analyze.append(c)
 
     results = []
@@ -1313,12 +1378,19 @@ def main(scan_long_term=True):
         if int(res.get("score", 0)) < ELITE_SCORE_THRESHOLD:
             continue
 
-        elapsed_alert = now_ts - int(alert_history.get(sym, 0))
-        was_sl = _was_stopped_recently(sym)
+        latest_sl_ts = _latest_sl_at(sym)
+        elapsed_since_sl = (now_ts - latest_sl_ts) if latest_sl_ts > 0 else (RE_ALERT_COOLDOWN_SEC + 1)
+        was_sl_24h = latest_sl_ts > 0 and elapsed_since_sl < RE_ALERT_COOLDOWN_SEC
+        elapsed_alert = now_ts - int(to_float(alert_history.get(sym), 0))
         sl_cnt = _recent_sl_count(sym)
 
-        if was_sl and elapsed_alert < RE_ALERT_COOLDOWN_SEC:
-            if sl_cnt >= 2 or elapsed_alert < SL_RECOVERY_COOLDOWN_SEC or res["score"] < REENTRY_CUT_SCORE or to_float(res.get("rsi6_15m"), 50.0) >= 68.0:
+        if was_sl_24h:
+            if (
+                sl_cnt >= 2
+                or elapsed_since_sl < SL_RECOVERY_COOLDOWN_SEC
+                or res["score"] < REENTRY_CUT_SCORE
+                or to_float(res.get("rsi6_15m"), 50.0) >= 68.0
+            ):
                 continue
             orig_title = str(res.get("track_title", "🚀 [타점 포착]"))
             if "재진입" not in orig_title:
@@ -1328,6 +1400,12 @@ def main(scan_long_term=True):
             res["reason_str"] = " / ".join(res["reasons"])
         elif elapsed_alert < RE_ALERT_COOLDOWN_SEC:
             continue
+
+        # [1단계 핵심 수정] 신규 알림 Git 동기화 실패 시 롤백용 스냅샷 확보
+        prev_tracked_snap = copy.deepcopy(tracked.get(sym))
+        prev_alert_ts = alert_history.get(sym)
+        new_ep_key = f"{sym}_{now_ts}"
+        prev_ep_snap = copy.deepcopy(signal_episodes.get(new_ep_key))
 
         tracked[sym] = {
             "created_at": now_ts, "last_checked_ts": now_ts, "track_type": res["track_type"],
@@ -1356,7 +1434,20 @@ def main(scan_long_term=True):
             else:
                 active_short_cnt += 1
         else:
-            print(f"[중복방지 보류] Git 동기화 실패로 {sym} 신규 알림 발송 보류")
+            if prev_tracked_snap is None:
+                tracked.pop(sym, None)
+            else:
+                tracked[sym] = prev_tracked_snap
+            if prev_alert_ts is None:
+                alert_history.pop(sym, None)
+            else:
+                alert_history[sym] = prev_alert_ts
+            if prev_ep_snap is None:
+                signal_episodes.pop(new_ep_key, None)
+            else:
+                signal_episodes[new_ep_key] = prev_ep_snap
+            save_state(state)
+            print(f"[중복방지 보류·롤백완료] Git 동기화 실패로 {sym} 신규 알림 원복 (다음 회차 재평가)")
 
     save_state(state)
     lt_lbl = "장기ON" if scan_long_term else "단기전용"
@@ -1370,12 +1461,11 @@ def main(scan_long_term=True):
     )
 
 
-def run_loop_mode(max_iterations=80, sleep_sec=285, max_budget_sec=18900):
+def run_loop_mode(max_iterations=70, sleep_sec=285, max_budget_sec=16200):
     """
-    [1안 · 무공백 5시간 15분(315분) 연속 릴레이 루프]
-    - 24시간 4시간 간격 6슬롯(cron: 17 0,4,8,12,16,20 * * *)과 결합하여
-      최소 75분 이상의 크론 지연 흡수 마진 & 수동 재시작 시에도 자동 바통 터치 보장
-    - 장기 포지션(Track D)은 3회차마다(약 15분 주기) 탐색, OI 스냅샷 5시간 연속 유지
+    [최적 절충안 · 4시간 30분(270분) 무공백 릴레이 루프]
+    - 4시간 6슬롯(cron: 17 0,4,8,12,16,20 * * *)과 결합하여
+      최대 30분 크론 지연 공백 완벽 흡수 + 대기열 취소/코드 반영 지연 최소화
     """
     loop_start = time.time()
     budget_min = max_budget_sec / 60.0
