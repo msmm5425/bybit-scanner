@@ -998,9 +998,8 @@ def _send_video_compat(video_bytes, caption_text, filename, width=960, height=12
 
 def _send_profit_replay_video(vp, notify_error=True):
     """
-    전량 수익 마감 완료 시 세로형(3:4 · 960x1280) 리플레이 영상 2종 동시 발송
-    1) 클린 세로형 영상 (무음 · 요약 카드)
-    2) 한글자막 + 일본어 여성 아나운서(1.1배속) 음성 세로형 영상
+    전량 수익 마감 완료 시 세로형(3:4 · 960x1280) 자막+일본어음성 리플레이 영상 1개 단독 발송
+    - TTS 일시 실패 시에만 비상 폴백으로 클린 영상 1개 발송
     """
     if not vp:
         return False
@@ -1017,40 +1016,26 @@ def _send_profit_replay_video(vp, notify_error=True):
         return False
 
     try:
-        # 신버전 듀얼 세로형 번들 생성 우선 사용
         if callable(generate_profit_replay_videos_bundle):
-            bundle = generate_profit_replay_videos_bundle(vp)
-            if not isinstance(bundle, dict) or (not bundle.get("clean") and not bundle.get("voiced")):
-                err_msg = get_last_video_error() if callable(get_last_video_error) else "세로형 영상 번들 생성 실패"
-                print(f"[리플레이 영상 번들 실패] {sym}: {err_msg}")
+            try:
+                bundle = generate_profit_replay_videos_bundle(vp, include_clean=False)
+            except TypeError:
+                bundle = generate_profit_replay_videos_bundle(vp)
+
+            if not isinstance(bundle, dict) or (not bundle.get("voiced") and not bundle.get("clean")):
+                err_msg = get_last_video_error() if callable(get_last_video_error) else "세로형 영상 생성 실패"
+                print(f"[리플레이 영상 실패] {sym}: {err_msg}")
                 if notify_error:
                     send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 제작 실패 진단]: {err_msg}")
                 return False
 
             w_px = int(to_float(bundle.get("width"), 960))
             h_px = int(to_float(bundle.get("height"), 1280))
-            dur_clean = int(round(to_float(bundle.get("clean_duration"), 30)))
-            dur_voiced = int(round(to_float(bundle.get("voiced_duration"), dur_clean)))
-            sent_any = False
 
-            if bundle.get("clean"):
-                cap_clean = f"🎬 ${base} 최종 익절 리플레이 [클린 세로형] | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
-                ok_c = _send_video_compat(
-                    bundle["clean"],
-                    caption_text=cap_clean,
-                    filename=f"{base.lower()}_replay_clean_vertical.mp4",
-                    width=w_px,
-                    height=h_px,
-                    duration=dur_clean,
-                )
-                if ok_c:
-                    sent_any = True
-                elif notify_error:
-                    err_msg = get_last_video_error() if callable(get_last_video_error) else "클린 영상 전송 실패"
-                    send_telegram_reliable(f"⚠️ [${base} 클린 세로형 영상 전송 실패]: {err_msg}")
-
+            # 정상: 한글자막 + 일본어음성 세로형 영상 1개만 단독 발송
             if bundle.get("voiced"):
-                cap_voiced = f"🎙️ ${base} 최종 익절 리플레이 [한글자막·일본어음성] | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+                dur_voiced = int(round(to_float(bundle.get("voiced_duration"), 30)))
+                cap_voiced = f"🎬 ${base} 최종 익절 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
                 ok_v = _send_video_compat(
                     bundle["voiced"],
                     caption_text=cap_voiced,
@@ -1059,33 +1044,40 @@ def _send_profit_replay_video(vp, notify_error=True):
                     height=h_px,
                     duration=dur_voiced,
                 )
-                if ok_v:
-                    sent_any = True
-                elif notify_error:
+                if not ok_v and notify_error:
                     err_msg = get_last_video_error() if callable(get_last_video_error) else "자막/음성 영상 전송 실패"
-                    send_telegram_reliable(f"⚠️ [${base} 자막·일본어음성 영상 전송 실패]: {err_msg}")
-            elif notify_error and bundle.get("voiced_error"):
-                send_telegram_reliable(f"⚠️ [${base} 자막·일본어음성 영상 생성 진단]: {bundle.get('voiced_error')}")
+                    send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 전송 실패]: {err_msg}")
+                return ok_v
 
-            return sent_any
+            # 비상 폴백: TTS 생성 일시 오류 시에만 클린 세로형 영상 1개 발송
+            if bundle.get("clean"):
+                dur_clean = int(round(to_float(bundle.get("clean_duration"), 30)))
+                cap_clean = f"🎬 ${base} 최종 익절 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+                ok_c = _send_video_compat(
+                    bundle["clean"],
+                    caption_text=cap_clean,
+                    filename=f"{base.lower()}_replay_clean_vertical.mp4",
+                    width=w_px,
+                    height=h_px,
+                    duration=dur_clean,
+                )
+                if notify_error and bundle.get("voiced_error"):
+                    send_telegram_reliable(f"⚠️ [${base} 음성 합성 폴백 안내]: {bundle.get('voiced_error')}")
+                return ok_c
 
-        # 구버전 notifier.py 호환 폴백 (단일 영상)
+            return False
+
+        # 구버전 notifier.py 호환 폴백
         if not callable(generate_profit_replay_video_bytes):
             return False
         video_bytes = generate_profit_replay_video_bytes(vp)
         if not video_bytes:
             err_msg = get_last_video_error() if callable(get_last_video_error) else "영상 생성 결과 비어 있음"
-            print(f"[리플레이 영상 생성 실패] {sym}: {err_msg}")
             if notify_error:
                 send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 제작 실패 진단]: {err_msg}")
             return False
-        caption = f"🎬 ${base} 최종 익절 30초 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
-        fname = f"{base.lower()}_profit_replay.mp4"
-        ok = _send_video_compat(video_bytes, caption_text=caption, filename=fname, width=1280, height=720, duration=30)
-        if not ok and notify_error:
-            err_msg = get_last_video_error() if callable(get_last_video_error) else "텔레그램 전송 실패"
-            send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 전송 실패 진단]: {err_msg}")
-        return ok
+        caption = f"🎬 ${base} 최종 익절 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+        return _send_video_compat(video_bytes, caption_text=caption, filename=f"{base.lower()}_profit_replay.mp4", width=960, height=1280, duration=30)
     except Exception as e:
         print(f"[리플레이 영상 발송 예외] {sym}: {e}")
         if notify_error:
@@ -1094,7 +1086,7 @@ def _send_profit_replay_video(vp, notify_error=True):
 
 
 def run_latest_profit_video_test():
-    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목을 찾아 세로형 리플레이 영상 2종을 즉시 테스트 발송"""
+    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목을 찾아 자막+일본어음성 세로형 영상 1개 즉시 테스트 발송"""
     state = load_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
@@ -1167,6 +1159,74 @@ def run_latest_profit_video_test():
     print(f"[리플레이 영상 수동 테스트 시작] 대상: {sym} (진입 {entry_p} → 마감 {exit_p}, +{realized_pct:.2f}%)")
     ok = _send_profit_replay_video(vp, notify_error=True)
     print(f"[리플레이 영상 수동 테스트 결과] {'성공' if ok else '실패'}")
+
+
+def run_latest_signal_chart_test():
+    """[--test-chart] 가장 최근 포착 종목으로 세로형(3:4) 포착 차트 이미지 + X 버튼을 즉시 테스트 발송"""
+    state = load_state()
+    episodes = state.get("signal_episodes") or {}
+    tracked = state.get("tracked") or {}
+
+    pool = []
+    for ep in episodes.values():
+        if isinstance(ep, dict) and ep.get("symbol") and not is_stock_or_tradfi_symbol(ep.get("symbol")):
+            if to_float(ep.get("entry_price")) > 0:
+                pool.append(ep)
+    for sym, tv in tracked.items():
+        if isinstance(tv, dict) and not is_stock_or_tradfi_symbol(sym):
+            if to_float(tv.get("entry_price")) > 0:
+                item = dict(tv)
+                item["symbol"] = sym
+                pool.append(item)
+
+    if not pool:
+        send_telegram_reliable("⚠️ [포착 차트 테스트] 저장된 포착 종목 기록이 없습니다.")
+        return
+
+    pool.sort(key=lambda x: int(to_float(x.get("created_at"), 0)), reverse=True)
+    target = pool[0]
+
+    sym = str(target.get("symbol", "")).upper()
+    base = sym.replace("USDT", "")
+    entry_p = to_float(target.get("entry_price"))
+    is_long = bool(target.get("is_long_term") or target.get("track_type") == "TRACK_D")
+    sl_pct = int(round(to_float(target.get("sl_pct"), DEFAULT_LONGTERM_SL_PCT if is_long else DEFAULT_FIXED_SL_PCT)))
+    stop_p = to_float(target.get("initial_stop_price") or target.get("stop_price"), entry_p * (1.0 - sl_pct / 100.0))
+    tps = target.get("tps") or [entry_p * 1.08, entry_p * 1.15, entry_p * 1.22]
+    tp_pcts = target.get("tp_pcts")
+    if not isinstance(tp_pcts, list) or len(tp_pcts) < 3:
+        tp_pcts = [round((to_float(p, entry_p) - entry_p) / entry_p * 100.0, 1) for p in tps[:3]]
+
+    res_mock = {
+        "symbol": sym,
+        "base_coin": base,
+        "track_type": target.get("track_type", "TRACK_A"),
+        "is_long_term": is_long,
+        "sub_strategy": str(target.get("sub_strategy") or ""),
+        "score": int(to_float(target.get("score"), ELITE_SCORE_THRESHOLD)),
+        "price": entry_p,
+        "entry_low": to_float(target.get("entry_low"), entry_p * (0.9920 if is_long else 0.9970)),
+        "entry_high": to_float(target.get("entry_high"), entry_p * (1.0050 if is_long else 1.0015)),
+        "stop_price": stop_p,
+        "sl_pct": sl_pct,
+        "tps": tps,
+        "tp_pcts": tp_pcts,
+        "reasons": target.get("reasons") or [],
+    }
+    print(f"[포착 차트 수동 테스트 시작] 대상: {sym} (점수 {res_mock['score']} · {'장기' if is_long else '단기'})")
+    chart_bytes = generate_signal_chart_bytes(res_mock)
+    if not chart_bytes:
+        send_telegram_reliable(f"⚠️ [포착 차트 테스트 실패] ${base} ({sym}) 차트 PNG 생성에 실패했습니다.")
+        return
+
+    x_msg = build_x_post_message(res_mock)
+    markup = build_x_intent_reply_markup(x_msg)
+    ok = send_telegram_photo_with_caption(
+        chart_bytes,
+        caption_text=f"🧪 [세로형 포착 차트 테스트] ${base} ({sym})",
+        reply_markup=markup,
+    )
+    print(f"[포착 차트 수동 테스트 결과] {'성공' if ok else '실패'}")
 
 
 def _git_sync_state():
@@ -1518,7 +1578,6 @@ def main(scan_long_term=True):
         new_ep_key = f"{sym}_{now_ts}"
         prev_ep_snap = copy.deepcopy(signal_episodes.get(new_ep_key))
 
-        # X 양식 간략 포착근거(한글·일본어)를 원장에 영구 보존 (익절 자막·음성 영상 100% 일치)
         hook_ko, hook_jp = build_x_hook_pair(res)
 
         tracked[sym] = {
@@ -1611,7 +1670,9 @@ def run_loop_mode(max_iterations=70, sleep_sec=285, max_budget_sec=16200):
 
 
 if __name__ == "__main__":
-    if "--test-video" in sys.argv:
+    if "--test-chart" in sys.argv:
+        run_latest_signal_chart_test()
+    elif "--test-video" in sys.argv:
         run_latest_profit_video_test()
     elif "--loop" in sys.argv:
         run_loop_mode()
