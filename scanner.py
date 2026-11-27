@@ -64,6 +64,11 @@ except Exception:
     generate_profit_replay_videos_bundle = None
 
 try:
+    from notifier import generate_signal_chart_video_bytes
+except Exception:
+    generate_signal_chart_video_bytes = None
+
+try:
     import postmortem
 except Exception:
     postmortem = None
@@ -962,18 +967,7 @@ def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     return {"messages": msgs, "sl_record": None, "video_payload": None}
 
 
-def _send_signal_notifications(res, now_str):
-    send_telegram_reliable(build_briefing_message(res, now_str))
-    x_msg = build_x_post_message(res)
-    markup = build_x_intent_reply_markup(x_msg)
-    base = res.get("base_coin") or res.get("base") or ""
-    sym = res.get("symbol", "")
-    chart_bytes = generate_signal_chart_bytes(res)
-    if not (chart_bytes and send_telegram_photo_with_caption(chart_bytes, caption_text="", reply_markup=markup)):
-        send_telegram_reliable(f"📲 ${base} ({sym}) X 포스팅 바로가기", reply_markup=markup)
-
-
-def _send_video_compat(video_bytes, caption_text, filename, width=960, height=1280, duration=30):
+def _send_video_compat(video_bytes, caption_text, filename, width=1080, height=1440, duration=30, reply_markup=None):
     """구/신 notifier.py send_telegram_video_with_caption 시그니처 모두 안전 호환"""
     if not callable(send_telegram_video_with_caption):
         return False
@@ -981,7 +975,7 @@ def _send_video_compat(video_bytes, caption_text, filename, width=960, height=12
         return send_telegram_video_with_caption(
             video_bytes,
             caption_text=caption_text,
-            reply_markup=None,
+            reply_markup=reply_markup,
             filename=filename,
             width=width,
             height=height,
@@ -991,14 +985,54 @@ def _send_video_compat(video_bytes, caption_text, filename, width=960, height=12
         return send_telegram_video_with_caption(
             video_bytes,
             caption_text=caption_text,
-            reply_markup=None,
+            reply_markup=reply_markup,
             filename=filename,
         )
 
 
+def _send_signal_notifications(res, now_str):
+    """
+    신규 타점 포착 알림 발송:
+    1) 상세 텔레그램 브리핑 텍스트
+    2) 세로형 풀HD 포착 차트 영상 (캔들+피보나치+TP1→TP2→TP3 화살표+한/일자막·일본어음성) + X 포스팅 버튼
+       (영상 제작 일시 실패 시 기존 초고화질 정적 PNG 차트로 자동 안전 폴백)
+    """
+    send_telegram_reliable(build_briefing_message(res, now_str))
+    x_msg = build_x_post_message(res)
+    markup = build_x_intent_reply_markup(x_msg)
+    base = res.get("base_coin") or res.get("base") or ""
+    sym = res.get("symbol", "")
+
+    if callable(generate_signal_chart_video_bytes) and callable(send_telegram_video_with_caption):
+        try:
+            vid_res = generate_signal_chart_video_bytes(res)
+            v_bytes = vid_res.get("video") if isinstance(vid_res, dict) else vid_res
+            if v_bytes:
+                w_px = int(to_float(vid_res.get("width"), 1080)) if isinstance(vid_res, dict) else 1080
+                h_px = int(to_float(vid_res.get("height"), 1440)) if isinstance(vid_res, dict) else 1440
+                dur_s = int(round(to_float(vid_res.get("duration"), 16))) if isinstance(vid_res, dict) else 16
+                ok_v = _send_video_compat(
+                    v_bytes,
+                    caption_text="",
+                    filename=f"{base.lower()}_signal_chart_video.mp4",
+                    width=w_px,
+                    height=h_px,
+                    duration=dur_s,
+                    reply_markup=markup,
+                )
+                if ok_v:
+                    return
+        except Exception as e:
+            print(f"[포착 차트 영상 예외 → PNG 폴백] {sym}: {e}")
+
+    chart_bytes = generate_signal_chart_bytes(res)
+    if not (chart_bytes and send_telegram_photo_with_caption(chart_bytes, caption_text="", reply_markup=markup)):
+        send_telegram_reliable(f"📲 ${base} ({sym}) X 포스팅 바로가기", reply_markup=markup)
+
+
 def _send_profit_replay_video(vp, notify_error=True):
     """
-    전량 수익 마감 완료 시 세로형(3:4 · 960x1280) 자막+일본어음성 리플레이 영상 1개 단독 발송
+    전량 수익 마감 완료 시 세로형(3:4 · 1080x1440) 자막+일본어음성 리플레이 영상 1개 단독 발송
     - TTS 일시 실패 시에만 비상 폴백으로 클린 영상 1개 발송
     """
     if not vp:
@@ -1029,10 +1063,9 @@ def _send_profit_replay_video(vp, notify_error=True):
                     send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 제작 실패 진단]: {err_msg}")
                 return False
 
-            w_px = int(to_float(bundle.get("width"), 960))
-            h_px = int(to_float(bundle.get("height"), 1280))
+            w_px = int(to_float(bundle.get("width"), 1080))
+            h_px = int(to_float(bundle.get("height"), 1440))
 
-            # 정상: 한글자막 + 일본어음성 세로형 영상 1개만 단독 발송
             if bundle.get("voiced"):
                 dur_voiced = int(round(to_float(bundle.get("voiced_duration"), 30)))
                 cap_voiced = f"🎬 ${base} 최종 익절 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
@@ -1049,7 +1082,6 @@ def _send_profit_replay_video(vp, notify_error=True):
                     send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 전송 실패]: {err_msg}")
                 return ok_v
 
-            # 비상 폴백: TTS 생성 일시 오류 시에만 클린 세로형 영상 1개 발송
             if bundle.get("clean"):
                 dur_clean = int(round(to_float(bundle.get("clean_duration"), 30)))
                 cap_clean = f"🎬 ${base} 최종 익절 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
@@ -1067,7 +1099,6 @@ def _send_profit_replay_video(vp, notify_error=True):
 
             return False
 
-        # 구버전 notifier.py 호환 폴백
         if not callable(generate_profit_replay_video_bytes):
             return False
         video_bytes = generate_profit_replay_video_bytes(vp)
@@ -1077,7 +1108,7 @@ def _send_profit_replay_video(vp, notify_error=True):
                 send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 제작 실패 진단]: {err_msg}")
             return False
         caption = f"🎬 ${base} 최종 익절 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
-        return _send_video_compat(video_bytes, caption_text=caption, filename=f"{base.lower()}_profit_replay.mp4", width=960, height=1280, duration=30)
+        return _send_video_compat(video_bytes, caption_text=caption, filename=f"{base.lower()}_profit_replay.mp4", width=1080, height=1440, duration=30)
     except Exception as e:
         print(f"[리플레이 영상 발송 예외] {sym}: {e}")
         if notify_error:
@@ -1086,7 +1117,7 @@ def _send_profit_replay_video(vp, notify_error=True):
 
 
 def run_latest_profit_video_test():
-    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목을 찾아 자막+일본어음성 세로형 영상 1개 즉시 테스트 발송"""
+    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목을 찾아 익절 리플레이 영상 즉시 테스트 발송"""
     state = load_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
@@ -1162,7 +1193,7 @@ def run_latest_profit_video_test():
 
 
 def run_latest_signal_chart_test():
-    """[--test-chart] 가장 최근 포착 종목으로 세로형(3:4) 포착 차트 이미지 + X 버튼을 즉시 테스트 발송"""
+    """[--test-chart] 가장 최근 포착 종목으로 세로형 포착 차트 영상 + X 포스팅 버튼을 즉시 테스트 발송"""
     state = load_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
@@ -1180,7 +1211,7 @@ def run_latest_signal_chart_test():
                 pool.append(item)
 
     if not pool:
-        send_telegram_reliable("⚠️ [포착 차트 테스트] 저장된 포착 종목 기록이 없습니다.")
+        send_telegram_reliable("⚠️ [포착 차트 영상 테스트] 저장된 포착 종목 기록이 없습니다.")
         return
 
     pool.sort(key=lambda x: int(to_float(x.get("created_at"), 0)), reverse=True)
@@ -1203,6 +1234,8 @@ def run_latest_signal_chart_test():
         "track_type": target.get("track_type", "TRACK_A"),
         "is_long_term": is_long,
         "sub_strategy": str(target.get("sub_strategy") or ""),
+        "x_hook_ko": str(target.get("x_hook_ko") or ""),
+        "x_hook_jp": str(target.get("x_hook_jp") or ""),
         "score": int(to_float(target.get("score"), ELITE_SCORE_THRESHOLD)),
         "price": entry_p,
         "entry_low": to_float(target.get("entry_low"), entry_p * (0.9920 if is_long else 0.9970)),
@@ -1213,14 +1246,36 @@ def run_latest_signal_chart_test():
         "tp_pcts": tp_pcts,
         "reasons": target.get("reasons") or [],
     }
-    print(f"[포착 차트 수동 테스트 시작] 대상: {sym} (점수 {res_mock['score']} · {'장기' if is_long else '단기'})")
+    x_msg = build_x_post_message(res_mock)
+    markup = build_x_intent_reply_markup(x_msg)
+
+    print(f"[포착 차트 영상 수동 테스트 시작] 대상: {sym} (점수 {res_mock['score']} · {'장기' if is_long else '단기'})")
+    if callable(generate_signal_chart_video_bytes) and callable(send_telegram_video_with_caption):
+        vid_res = generate_signal_chart_video_bytes(res_mock)
+        v_bytes = vid_res.get("video") if isinstance(vid_res, dict) else vid_res
+        if v_bytes:
+            w_px = int(to_float(vid_res.get("width"), 1080)) if isinstance(vid_res, dict) else 1080
+            h_px = int(to_float(vid_res.get("height"), 1440)) if isinstance(vid_res, dict) else 1440
+            dur_s = int(round(to_float(vid_res.get("duration"), 16))) if isinstance(vid_res, dict) else 16
+            ok = _send_video_compat(
+                v_bytes,
+                caption_text=f"🧪 [포착 차트 영상 테스트] ${base} ({sym})",
+                filename=f"{base.lower()}_signal_chart_video.mp4",
+                width=w_px,
+                height=h_px,
+                duration=dur_s,
+                reply_markup=markup,
+            )
+            print(f"[포착 차트 영상 수동 테스트 결과] {'성공' if ok else '실패'}")
+            return
+        err_msg = get_last_video_error() if callable(get_last_video_error) else "포착 차트 영상 생성 실패"
+        send_telegram_reliable(f"⚠️ [포착 차트 영상 테스트 실패 진단]: {err_msg}")
+        return
+
     chart_bytes = generate_signal_chart_bytes(res_mock)
     if not chart_bytes:
         send_telegram_reliable(f"⚠️ [포착 차트 테스트 실패] ${base} ({sym}) 차트 PNG 생성에 실패했습니다.")
         return
-
-    x_msg = build_x_post_message(res_mock)
-    markup = build_x_intent_reply_markup(x_msg)
     ok = send_telegram_photo_with_caption(
         chart_bytes,
         caption_text=f"🧪 [세로형 포착 차트 테스트] ${base} ({sym})",
@@ -1578,7 +1633,10 @@ def main(scan_long_term=True):
         new_ep_key = f"{sym}_{now_ts}"
         prev_ep_snap = copy.deepcopy(signal_episodes.get(new_ep_key))
 
+        # X 양식에서 포착근거를 제외해도 bot_state.json(tracked · signal_episodes)에 영구 보관 → 포착·익절 영상 100% 연동
         hook_ko, hook_jp = build_x_hook_pair(res)
+        res["x_hook_ko"] = hook_ko
+        res["x_hook_jp"] = hook_jp
 
         tracked[sym] = {
             "created_at": now_ts, "last_checked_ts": now_ts, "track_type": res["track_type"],
