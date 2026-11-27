@@ -2947,33 +2947,6 @@
     "IRYSUSDT": 1795781331
   },
   "sl_history": {
-    "BABYUSDT_1795514604": {
-      "symbol": "BABYUSDT",
-      "track_type": "TRACK_H",
-      "score": 99,
-      "entry_price": 0.009,
-      "stop_price": 0.00846,
-      "sl_trigger_price": 0.00845,
-      "sl_pct": 6,
-      "created_at": 1795514604,
-      "sl_at": 1795524966,
-      "hold_minutes": 172,
-      "max_high_price": 0.009,
-      "max_favorable_pct": 0.0,
-      "vol_mult": 4.96,
-      "rsi6_15m": 56.4,
-      "oi_m": 0.6,
-      "oi_ratio": 22.1,
-      "funding_pct": -0.014100000000000001,
-      "change_24h": 15.29,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "최근 14일 Top 5 발사직전 DNA 5/6 일치 (응축, 직전RSI, 1H이격, OI비중)",
-        "1H·15m 20MA 안착 + 발사 거래량(5.0x) + PPO(+0.87%) 상방",
-        "OI 집중도 최상(22%)",
-        "음수 펀딩 숏스퀴즈(-0.0141%)"
-      ]
-    },
     "0GUSDT_1795242119": {
       "symbol": "0GUSDT",
       "track_type": "TRACK_E",
