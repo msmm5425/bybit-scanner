@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "ZROUSDT_1795763489",
+      "engine_ver": "v3",
+      "symbol": "ZROUSDT",
+      "track_type": "TRACK_A",
+      "score": 89,
+      "entry_price": 1.1458,
+      "stop_price": 1.077052,
+      "sl_trigger_price": 1.0727,
+      "sl_pct": 6,
+      "actual_sl_pct": -6.53,
+      "created_at": 1795763489,
+      "sl_at": 1795790478,
+      "hold_minutes": 449,
+      "max_high_price": 1.1465,
+      "max_favorable_pct": 0.06,
+      "vol_mult": 4.58,
+      "rsi6_15m": 53.1,
+      "oi_m": 9.7,
+      "oi_ratio": 43.5,
+      "funding_pct": 0.005,
+      "change_24h": 6.56,
+      "btc_1h_pct": 0.08,
+      "kst_block": "15-18",
+      "cause": "비트 연동 급락 및 지지선 이탈",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "SPACEUSDT_1794990586",
       "engine_ver": "v3",
       "symbol": "SPACEUSDT",
@@ -564,6 +594,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795702115,
+  "updated_at": 1795790505,
   "engine_ver": "v3"
 }
