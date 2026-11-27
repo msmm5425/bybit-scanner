@@ -3143,33 +3143,6 @@
     "GALAUSDT": 1795745944
   },
   "sl_history": {
-    "WLFIUSDT_1795418415": {
-      "symbol": "WLFIUSDT",
-      "track_type": "TRACK_E",
-      "score": 94,
-      "entry_price": 0.04329,
-      "stop_price": 0.040693,
-      "sl_trigger_price": 0.04068,
-      "sl_pct": 6,
-      "created_at": 1795418415,
-      "sl_at": 1795487061,
-      "hold_minutes": 1144,
-      "max_high_price": 0.04397,
-      "max_favorable_pct": 1.57,
-      "vol_mult": 13.36,
-      "rsi6_15m": 35.4,
-      "oi_m": 9.3,
-      "oi_ratio": 289.9,
-      "funding_pct": 0.0026,
-      "change_24h": -0.14,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 43%)",
-        "바닥 반전 거래량 13.4배 폭발 + KDJ 바닥 급반전",
-        "OI 집중도 최상(290%)",
-        "런던 유동성 세션(+4점)"
-      ]
-    },
     "SKYUSDT_1795457582": {
       "symbol": "SKYUSDT",
       "track_type": "TRACK_A",
