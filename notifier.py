@@ -1,4 +1,4 @@
-import os, re, io, sys, time, json, shutil, asyncio, tempfile, threading, subprocess, urllib.parse, requests
+import os, re, io, sys, html, time, json, shutil, asyncio, tempfile, threading, subprocess, urllib.parse, requests
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -498,11 +498,7 @@ def build_x_intent_reply_markup(x_post_text, button_label="🚀 X(트위터) 앱
 
 
 def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
-    """
-    [포착 알림 세로형(3:4 · 960x1280) 고해상도 트레이딩뷰 차트 렌더러]
-    - 리플레이 세로형 영상과 동일한 패밀리 룩 (상단 타이틀 바 + 836px 메인 차트 + 300px 전략 요약 카드 + 푸터)
-    - 최근 120봉 + 피보나치 구간 + TP1~TP3/SL 가격선 + 하단 X 간략 포착근거 및 4칸 핵심 가격 카드
-    """
+    """[포착 알림 세로형(3:4 · 960x1280) 고해상도 트레이딩뷰 차트 렌더러 · 120봉]"""
     if not _ensure_playwright():
         return None
     symbol = res.get("symbol", "")
@@ -529,7 +525,7 @@ def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
 
     tp1_p, tp2_p, tp3_p = to_float(tps[0]) * ratio_adj, to_float(tps[1]) * ratio_adj, to_float(tps[2]) * ratio_adj
     p1, p2, p3 = round(to_float(tp_pcts[0], 8.0), 1), round(to_float(tp_pcts[1], 15.0), 1), round(to_float(tp_pcts[2], 22.0), 1)
-    hook_ko = build_x_hook_line(res)
+    hook_ko = html.escape(str(res.get("x_hook_ko") or "").strip() or build_x_hook_line(res))
 
     candle_min_low = to_float(df["low"].min(), price * 0.97)
     candle_max_high = to_float(df["high"].max(), price * 1.02)
@@ -919,7 +915,6 @@ def generate_signal_chart_bytes(res):
     df["ma5"] = df["close"].rolling(5, min_periods=2).mean()
     df["ma9"] = df["close"].rolling(9, min_periods=3).mean()
     df["ma20"] = df["close"].rolling(20, min_periods=5).mean()
-    # 세로형 차트 봉 개수 확대 (96봉 -> 120봉)
     return _render_tradingview_lightweight_chart(df.iloc[-120:].reset_index(drop=True), res, chart_tf=actual_tf)
 
 
@@ -1112,11 +1107,11 @@ def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, t
     return segments, final_total_sec, True, ""
 
 
-def generate_profit_replay_videos_bundle(close_info):
+def generate_profit_replay_videos_bundle(close_info, include_clean=False):
     """
-    [세로형(3:4 · 960x1280) 2종 리플레이 영상 동시 제작 엔진 v9]
-    - 진입 전 차트 봉 개수 확대 (pre_bars 44/34/26봉)
-    - LIVE RETURN 상단 정중앙 정렬 + 44px 대형 강조 (차트 상단 여백 0.46 확보로 캔들 비간섭)
+    [세로형(3:4 · 960x1280) 자막+일본어음성 리플레이 단독 고속 제작 엔진 v10]
+    - include_clean=False(기본): 자막·일본어음성 영상 1개만 캡처·인코딩 (클린 렌더링 생략 → 속도 약 2배 향상)
+    - TTS 일시 실패 시에만 자동으로 render_clean=True 전환해 클린 세로형 1개 비상 제작
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -1172,7 +1167,6 @@ def generate_profit_replay_videos_bundle(close_info):
 
     for idx_t in range(start_tier, len(tf_ladder)):
         cand_code, cand_lbl, cand_step, cand_max_bars = tf_ladder[idx_t]
-        # 진입 전 캔들 85봉 여유 확보 (기존 55봉 -> 85봉)
         req_start_ms = created_ms - (85 * cand_step * 1000)
         req_end_ms = closed_ms + (2 * cand_step * 1000)
         cand_df = _fetch_replay_klines_window(
@@ -1214,7 +1208,6 @@ def generate_profit_replay_videos_bundle(close_info):
         exit_abs = min(len(df) - 1, entry_abs)
 
     post_count = (exit_abs - entry_abs) + 1
-    # 진입 전 차트 봉 개수 확대 (24/18/14 -> 44/34/26봉)
     pre_bars = 44 if post_count <= 90 else (34 if post_count <= 220 else 26)
     slice_start = max(0, entry_abs - pre_bars)
     df_win = df.iloc[slice_start : exit_abs + 1].reset_index(drop=True)
@@ -1253,7 +1246,6 @@ def generate_profit_replay_videos_bundle(close_info):
     if close_type == "TP3_TRAILING" or max_high_val >= tp3_p * 0.92:
         win_high = max(win_high, tp3_p)
     y_span = max(win_high - win_low, entry_p * 0.05)
-    # 상단 중앙 대형 LIVE RETURN HUD가 캔들을 가리지 않도록 상단 여백(0.46) 넉넉히 확보
     y_min_anchor = win_low - (y_span * 0.28)
     y_max_anchor = win_high + (y_span * 0.46)
 
@@ -1285,8 +1277,8 @@ def generate_profit_replay_videos_bundle(close_info):
     pos_badge = "LONG-TERM REPLAY" if is_long else f"{track_type.replace('_', ' ')} REPLAY"
     price_diff_abs = abs(exit_p - entry_p)
     price_diff_prefix = "+" if exit_p >= entry_p else "-"
-    exit_headline = f"+{total_realized_pct:.2f}% ({price_diff_prefix}{fmt_price(price_diff_abs)}) · {hold_str}"
-    hook_ko_card = str(close_info.get("x_hook_ko") or "").strip() or build_x_hook_line(close_info)
+    exit_headline = html.escape(f"+{total_realized_pct:.2f}% ({price_diff_prefix}{fmt_price(price_diff_abs)}) · {hold_str}")
+    hook_ko_card = html.escape(str(close_info.get("x_hook_ko") or "").strip() or build_x_hook_line(close_info))
 
     in_fps = 10
     out_fps = 30
@@ -1303,6 +1295,8 @@ def generate_profit_replay_videos_bundle(close_info):
             segments, final_total_sec, tts_ok, tts_err = _build_narration_plan(
                 close_info, entry_p, total_realized_pct, created_at, tmpdir, base_total_sec=base_frames / float(in_fps)
             )
+            # 정상 TTS 성공 & include_clean=False이면 클린 영상 캡처/인코딩 완전 생략 (속도 2배 최적화)
+            render_clean = bool(include_clean) or (not tts_ok)
             voiced_frames = max(base_frames, int(round(final_total_sec * in_fps))) if tts_ok else base_frames
             sub_meta_js = [
                 {
@@ -1824,7 +1818,7 @@ window.__renderFrame=function(f){{
 
 requestAnimationFrame(()=>requestAnimationFrame(()=>{{
   setupResultOverlayGeometry();
-  window.__setBottomMode('clean', 0);
+  window.__setBottomMode('{'sub' if tts_ok else 'clean'}', 0);
   window.__renderFrame(0);
   window.__REPLAY_READY=true;
 }}));
@@ -1845,7 +1839,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                         return si
                 return len(segments) - 1
 
-            total_max_frames = max(base_frames, voiced_frames)
+            total_max_frames = max(base_frames if render_clean else 0, voiced_frames if tts_ok else 0)
             with sync_playwright() as p:
                 browser = p.chromium.launch(
                     headless=True,
@@ -1871,13 +1865,13 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                         sub_jpg = os.path.join(tmpdir, f"s_{fi:04d}.jpg")
 
                         need_chart_render = not chart_is_static
-                        need_clean_shot = (fi < base_frames) and need_chart_render
+                        need_clean_shot = render_clean and (fi < base_frames) and need_chart_render
                         need_sub_shot = tts_ok and (fi < voiced_frames) and (need_chart_render or cur_sub_idx != prev_sub_idx)
 
                         if need_chart_render:
                             page.evaluate(f"window.__renderFrame({fi})")
 
-                        if fi < base_frames:
+                        if render_clean and fi < base_frames:
                             if need_clean_shot or fi == 0:
                                 page.evaluate("window.__setBottomMode('clean', 0)")
                                 page.screenshot(path=clean_jpg, type="jpeg", quality=88)
@@ -1887,7 +1881,8 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
 
                         if tts_ok and fi < voiced_frames:
                             if need_sub_shot or fi == 0:
-                                page.evaluate(f"window.__setBottomMode('sub', {cur_sub_idx})")
+                                if render_clean or cur_sub_idx != prev_sub_idx or fi == 0:
+                                    page.evaluate(f"window.__setBottomMode('sub', {cur_sub_idx})")
                                 page.screenshot(path=sub_jpg, type="jpeg", quality=88)
                             else:
                                 shutil.copyfile(os.path.join(tmpdir, f"s_{fi - 1:04d}.jpg"), sub_jpg)
@@ -1895,26 +1890,27 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 finally:
                     browser.close()
 
-            cmd_clean = [
-                "ffmpeg", "-y", "-loglevel", "error",
-                "-framerate", str(in_fps),
-                "-i", os.path.join(tmpdir, "c_%04d.jpg"),
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",
-                "-preset", "fast",
-                "-crf", "21",
-                "-r", str(out_fps),
-                "-movflags", "+faststart",
-                out_clean_mp4,
-            ]
-            res_c = subprocess.run(cmd_clean, capture_output=True, text=True, timeout=90)
             clean_bytes = None
-            if res_c.returncode == 0 and os.path.exists(out_clean_mp4):
-                with open(out_clean_mp4, "rb") as vf:
-                    clean_bytes = vf.read()
-            else:
-                LAST_VIDEO_ERROR = f"클린 영상 ffmpeg 오류: {(res_c.stderr or '')[:180]}"
-                print(f"[리플레이 클린 영상 실패] {LAST_VIDEO_ERROR}")
+            if render_clean:
+                cmd_clean = [
+                    "ffmpeg", "-y", "-loglevel", "error",
+                    "-framerate", str(in_fps),
+                    "-i", os.path.join(tmpdir, "c_%04d.jpg"),
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-preset", "fast",
+                    "-crf", "21",
+                    "-r", str(out_fps),
+                    "-movflags", "+faststart",
+                    out_clean_mp4,
+                ]
+                res_c = subprocess.run(cmd_clean, capture_output=True, text=True, timeout=90)
+                if res_c.returncode == 0 and os.path.exists(out_clean_mp4):
+                    with open(out_clean_mp4, "rb") as vf:
+                        clean_bytes = vf.read()
+                else:
+                    LAST_VIDEO_ERROR = f"클린 영상 ffmpeg 오류: {(res_c.stderr or '')[:180]}"
+                    print(f"[리플레이 클린 영상 실패] {LAST_VIDEO_ERROR}")
 
             voiced_bytes = None
             voiced_error = tts_err if not tts_ok else ""
@@ -1968,8 +1964,8 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
 
             print(
                 f"[세로형 리플레이 완료] {symbol} ({tf_label}, {len(df_win)}봉 · 960x1280) | "
-                f"클린={'OK' if clean_bytes else 'FAIL'} ({base_frames / in_fps:.1f}초) · "
-                f"자막/JP음성={'OK' if voiced_bytes else 'FAIL'} ({voiced_frames / in_fps:.1f}초)"
+                f"자막/JP음성={'OK' if voiced_bytes else 'FAIL'} ({voiced_frames / in_fps:.1f}초) · "
+                f"클린={'SKIP' if not render_clean else ('OK' if clean_bytes else 'FAIL')}"
             )
             return {
                 "clean": clean_bytes,
@@ -1989,7 +1985,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
 
 def generate_profit_replay_video_bytes(close_info):
     """단일 영상 호환 래퍼"""
-    bundle = generate_profit_replay_videos_bundle(close_info)
+    bundle = generate_profit_replay_videos_bundle(close_info, include_clean=False)
     if isinstance(bundle, dict):
         return bundle.get("voiced") or bundle.get("clean")
     return None
