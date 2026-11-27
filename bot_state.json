@@ -3099,33 +3099,6 @@
     "UNIUSDT": 1795788823
   },
   "sl_history": {
-    "ARIAUSDT_1795498934": {
-      "symbol": "ARIAUSDT",
-      "track_type": "TRACK_A",
-      "score": 99,
-      "entry_price": 0.32827,
-      "stop_price": 0.308574,
-      "sl_trigger_price": 0.308,
-      "sl_pct": 6,
-      "created_at": 1795498934,
-      "sl_at": 1795531762,
-      "hold_minutes": 547,
-      "max_high_price": 0.3453,
-      "max_favorable_pct": 5.19,
-      "vol_mult": 1.74,
-      "rsi6_15m": 76.9,
-      "oi_m": 5.9,
-      "oi_ratio": 8.0,
-      "funding_pct": 0.005,
-      "change_24h": 11.69,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "TTM Squeeze(BB<KC) 발사(응축폭 4.5%) + 15m PPO(+1.26%) 상방",
-        "15m 매수 델타(CVD)·OBV 바닥 흡수 확인",
-        "[건전한 롱 매집] OI +2.4% 동반 상승(+10점)",
-        "PPO 파동 정렬(15m PPO 히스토그램 확장 · 1H PPO 0선강세)"
-      ]
-    },
     "MEGAUSDT_1795237138": {
       "symbol": "MEGAUSDT",
       "track_type": "TRACK_E",
