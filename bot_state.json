@@ -3048,32 +3048,6 @@
     "2ZUSDT": 1795740826
   },
   "sl_history": {
-    "INXUSDT_1795482213": {
-      "symbol": "INXUSDT",
-      "track_type": "TRACK_C",
-      "score": 99,
-      "entry_price": 0.003816,
-      "stop_price": 0.003587,
-      "sl_trigger_price": 0.003564,
-      "sl_pct": 6,
-      "created_at": 1795482213,
-      "sl_at": 1795485356,
-      "hold_minutes": 52,
-      "max_high_price": 0.003816,
-      "max_favorable_pct": 0.0,
-      "vol_mult": 0.9,
-      "rsi6_15m": 31.9,
-      "oi_m": 0.6,
-      "oi_ratio": 8.1,
-      "funding_pct": 0.005,
-      "change_24h": 19.64,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "대장주(+19.6%) 고점대비 -10.5% · Fib 0.52 심층 눌림",
-        "5m MSS 반등 + 거래량 건조(28%) + 15m PPO 상방 턴",
-        "롱 청산 매물 소화(OI -4.3%)"
-      ]
-    },
     "INITUSDT_1795394443": {
       "symbol": "INITUSDT",
       "track_type": "TRACK_E",
