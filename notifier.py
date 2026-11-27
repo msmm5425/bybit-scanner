@@ -1,4 +1,5 @@
 import os, re, io, sys, time, json, shutil, tempfile, subprocess, urllib.parse, requests
+from pathlib import Path
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -30,7 +31,11 @@ except Exception:
 
 SCHEME = "ht" + "tps://"
 WATERMARK_HANDLE = "@DnaPyung"
-LOCAL_LW_CHARTS_JS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "lightweight-charts.standalone.production.js")
+LOCAL_LW_CHARTS_JS = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "assets",
+    "lightweight-charts.standalone.production.js",
+)
 _PLAYWRIGHT_READY = False
 LAST_VIDEO_ERROR = ""
 
@@ -40,11 +45,11 @@ def get_last_video_error():
 
 
 def _get_lw_charts_script_tags():
-    """로컬 JS 번들(assets/lightweight-charts...) 우선 로드 + unpkg/jsdelivr 이중 CDN 폴백"""
+    """로컬 JS 번들(OS 공용 file URI) 우선 로드 + unpkg/jsdelivr 이중 CDN 폴백"""
     lw_unpkg = clean_url(f"{SCHEME}unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
     lw_jsdelivr = clean_url(f"{SCHEME}cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js")
     if os.path.exists(LOCAL_LW_CHARTS_JS):
-        local_uri = "file://" + LOCAL_LW_CHARTS_JS.replace("\\", "/")
+        local_uri = Path(LOCAL_LW_CHARTS_JS).resolve().as_uri()
         return (
             f'<script src="{local_uri}"></script>\n'
             f'<script>if(typeof LightweightCharts==="undefined"){{document.write(\'<scr\'+\'ipt src="{lw_unpkg}"></scr\'+\'ipt>\');}}</script>'
@@ -166,7 +171,7 @@ def _build_supply_overlay_line(res):
             ls_badge = "🟢고래우위"
         elif (s_val <= 1.05 and t_val >= 2.20) or (s_val < 0.90 and t_val >= 1.80) or (t_val >= 3.00 and div <= 0.65):
             ls_badge = "🔴개미쏠림"
-        elif s_val <= 1.15 and t_val >= 1.80 and div <= 0.65:
+        elif s_val <= 1.10 and t_val >= 2.10 and div <= 0.60:
             ls_badge = "🟠개미편중"
         else:
             ls_badge = "⚪중립"
@@ -174,7 +179,7 @@ def _build_supply_overlay_line(res):
     elif ls_src in ("BINANCE", "GATE", "BITGET", "BYBIT", "OKX") and t_val > 0:
         if t_val <= 0.75:
             ls_badge = "🟢숏쏠림"
-        elif t_val >= 2.10:
+        elif t_val >= 2.50:
             ls_badge = "🔴롱과밀"
         else:
             ls_badge = "⚪중립"
@@ -436,7 +441,7 @@ def build_x_intent_reply_markup(x_post_text, button_label="🚀 X(트위터) 앱
 
 
 def _render_tradingview_lightweight_chart(df, res, chart_tf="60"):
-    """[P2-1 수정] 임시 HTML 파일 finally 정리 보장 + 비선형 압축 표식 + 로컬 JS 번들 우선 지원"""
+    """OS 공용 Path.as_uri() · 임시 HTML finally 정리 · 비선형 압축 표식 · 예외 진단 로깅"""
     if not _ensure_playwright():
         return None
     symbol = res.get("symbol", "")
@@ -747,14 +752,15 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
             browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
             try:
                 page = browser.new_page(viewport={"width": 1160, "height": 680}, device_scale_factor=1.5)
-                page.goto(f"file://{tmp_html_path}", wait_until="load", timeout=25000)
+                page.goto(Path(tmp_html_path).resolve().as_uri(), wait_until="load", timeout=25000)
                 page.wait_for_function("window.__CHART_DONE === true", timeout=10000)
                 page.wait_for_timeout(200)
                 png_bytes = page.screenshot(type="png")
             finally:
                 browser.close()
         return png_bytes
-    except Exception:
+    except Exception as e:
+        print(f"[차트 렌더링 예외] {symbol}: {e}")
         return None
     finally:
         if tmp_html_path and os.path.exists(tmp_html_path):
@@ -805,7 +811,7 @@ def generate_signal_chart_bytes(res):
 
 
 def generate_profit_replay_video_bytes(close_info):
-    """[최종 전량 익절 30초 HD MP4 리플레이 영상 자동 제작 엔진 v7 (5단계 캔들 + 페이지네이션)]"""
+    """[최종 전량 익절 30초 HD MP4 리플레이 영상 자동 제작 엔진 v7 (5단계 캔들 + 페이지네이션 + OS 공용 URI)]"""
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
 
@@ -1480,7 +1486,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
                 try:
                     page = browser.new_page(viewport={"width": 1280, "height": 720}, device_scale_factor=1)
                     page.on("pageerror", lambda err: js_errors.append(str(err)))
-                    page.goto(f"file://{html_path}", wait_until="load", timeout=25000)
+                    page.goto(Path(html_path).resolve().as_uri(), wait_until="load", timeout=25000)
                     page.wait_for_function("window.__REPLAY_READY === true", timeout=15000)
                     page.wait_for_timeout(120)
 
@@ -1541,10 +1547,20 @@ def send_telegram_single(text, reply_markup=None):
     payload = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    try:
-        return requests.post(url, json=payload, timeout=12).status_code == 200
-    except Exception:
-        return False
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload, timeout=12)
+            if resp.status_code == 200:
+                return True
+            if resp.status_code == 429:
+                wait_s = int(to_float((resp.json().get("parameters") or {}).get("retry_after"), 3))
+                time.sleep(wait_s + 0.5)
+                continue
+            print(f"[sendMessage 오류 {attempt + 1}/3] HTTP {resp.status_code}: {resp.text[:160]}")
+        except Exception as e:
+            print(f"[sendMessage 예외 {attempt + 1}/3] {e}")
+        time.sleep(1.0)
+    return False
 
 
 def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=None):
@@ -1553,7 +1569,7 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
     if not photo_bytes or not token or not chat_id:
         return False
     url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendPhoto")
-    for _ in range(3):
+    for attempt in range(3):
         try:
             files = {"photo": ("tv_signal_chart.png", photo_bytes, "image/png")}
             data = {"chat_id": chat_id}
@@ -1565,8 +1581,13 @@ def send_telegram_photo_with_caption(photo_bytes, caption_text="", reply_markup=
             if resp.status_code == 200:
                 time.sleep(0.7)
                 return True
-        except Exception:
-            pass
+            if resp.status_code == 429:
+                wait_s = int(to_float((resp.json().get("parameters") or {}).get("retry_after"), 3))
+                time.sleep(wait_s + 0.5)
+                continue
+            print(f"[sendPhoto 오류 {attempt + 1}/3] HTTP {resp.status_code}: {resp.text[:160]}")
+        except Exception as e:
+            print(f"[sendPhoto 예외 {attempt + 1}/3] {e}")
         time.sleep(1.2)
     return False
 
@@ -1581,7 +1602,7 @@ def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=
         return False
     url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendVideo")
     last_resp_err = ""
-    for _ in range(3):
+    for attempt in range(3):
         try:
             files = {"video": (filename, video_bytes, "video/mp4")}
             data = {
@@ -1599,9 +1620,15 @@ def send_telegram_video_with_caption(video_bytes, caption_text="", reply_markup=
             if resp.status_code == 200:
                 time.sleep(0.8)
                 return True
+            if resp.status_code == 429:
+                wait_s = int(to_float((resp.json().get("parameters") or {}).get("retry_after"), 3))
+                time.sleep(wait_s + 0.5)
+                continue
             last_resp_err = f"Telegram HTTP {resp.status_code}: {resp.text[:160]}"
+            print(f"[sendVideo 오류 {attempt + 1}/3] {last_resp_err}")
         except Exception as e:
             last_resp_err = f"Telegram 전송 예외: {str(e)[:150]}"
+            print(f"[sendVideo 예외 {attempt + 1}/3] {last_resp_err}")
         time.sleep(1.5)
     LAST_VIDEO_ERROR = last_resp_err or "Telegram sendVideo 3회 실패"
     print(f"[sendVideo 실패] {LAST_VIDEO_ERROR}")
