@@ -239,23 +239,34 @@ def classify_episode_by_actual_flags(e):
 
 
 def send_telegram_weekly(text):
+    """[3-2차 보강] 429 retry_after 자동 대기 · HTTP 오류 로깅 · 전 청크 성공 시에만 True 반환"""
     token = (os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or "").strip()
     chat_id = (os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or getattr(cfg, "TELEGRAM_CHAT_ID", "") or "").strip()
     if not text or not token or not chat_id:
         return False
     url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendMessage")
+    all_ok = True
     for i in range(0, len(text), 3800):
         chunk = text[i : i + 3800]
-        for _ in range(3):
+        chunk_ok = False
+        for attempt in range(3):
             try:
                 r = requests.post(url, json={"chat_id": chat_id, "text": chunk, "disable_web_page_preview": True}, timeout=12)
                 if r.status_code == 200:
+                    chunk_ok = True
                     time.sleep(0.6)
                     break
-            except Exception:
-                pass
+                if r.status_code == 429:
+                    wait_s = int(to_float((r.json().get("parameters") or {}).get("retry_after"), 3))
+                    time.sleep(wait_s + 0.5)
+                    continue
+                print(f"[weekly sendMessage 오류 {attempt + 1}/3] HTTP {r.status_code}: {r.text[:160]}")
+            except Exception as e:
+                print(f"[weekly sendMessage 예외 {attempt + 1}/3] {e}")
             time.sleep(1.0)
-    return True
+        if not chunk_ok:
+            all_ok = False
+    return all_ok
 
 
 def main():
@@ -292,7 +303,6 @@ def main():
         if c_at >= week_ago_ts:
             weekly_eps.append((ep, c_info))
         else:
-            # 7일 이전 진입했으나 이번 주 마감된 장기 포지션(Track D) 별도 보조 집계
             is_long_ep = bool(ep.get("is_long_term") or ep.get("track_type") == "TRACK_D")
             if is_long_ep and c_info["is_closed"]:
                 close_ts = max(
@@ -453,7 +463,6 @@ def main():
                 f"{idx}. {h_tag}${base} ({sym}): 진입 {fmt_price(entry_p)} → 장중최고 {fmt_price(max_h)} (최고 +{fav_pct:.1f}% | {stage})"
             )
 
-    # [보조 섹션] 이번 주 마감된 과거 진입 장기 포지션 1줄 요약
     if past_long_closed:
         plc_wins = sum(1 for _, c, p, _, _ in past_long_closed if (not c["sl"]) and p > 0)
         plc_sls = sum(1 for _, c, _, _, _ in past_long_closed if c["sl"])
@@ -468,12 +477,19 @@ def main():
     else:
         lines.append("\n🐋 [이번 주 마감된 과거 진입 장기 포지션]: 이번 주 마감 건 없음")
 
-    lines.append(f"\n📓 [5. 주간 손절(SL) 오답노트 v3 & 25h 사후 부검 (주간 전체 SL {len(sl_eps)}건)]")
+    # [3-2차 보강] 섹션 5 집계 기준 명시 (코호트 SL vs v3 DB 최근 7일 전체 SL) & Dead Code 제거
+    lines.append(
+        f"\n📓 [5. 주간 손절(SL) 오답노트 v3 & 25h 사후 부검 (주간 진입분 SL {len(sl_eps)}건 · 아래 v3 DB는 최근 7일 전체 손절 기준)]"
+    )
+    pm_lines = []
     if postmortem is not None and hasattr(postmortem, "build_daily_postmortem_summary"):
         try:
-            lines.extend(postmortem.build_daily_postmortem_summary())
-        except Exception:
-            pass
+            pm_lines = list(postmortem.build_daily_postmortem_summary() or [])
+        except Exception as e:
+            print(f"[weekly postmortem 요약 예외] {e}")
+
+    if pm_lines:
+        lines.extend(pm_lines)
     elif sl_eps:
         for s, c in sorted(sl_eps, key=lambda x: int(x[0].get("created_at", 0)), reverse=True)[:5]:
             base = str(s.get("symbol", "")).replace("USDT", "")
@@ -505,7 +521,8 @@ def main():
 
     report_text = "\n".join(lines)
     print(report_text)
-    send_telegram_weekly(report_text)
+    ok = send_telegram_weekly(report_text)
+    print(f"[주간 리포트 전송 결과] {'성공' if ok else '실패'}")
 
 
 if __name__ == "__main__":
