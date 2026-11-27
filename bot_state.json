@@ -3086,33 +3086,6 @@
     "GALAUSDT": 1795745944
   },
   "sl_history": {
-    "USELESSUSDT_1795435777": {
-      "symbol": "USELESSUSDT",
-      "track_type": "TRACK_E",
-      "score": 97,
-      "entry_price": 0.07957,
-      "stop_price": 0.074796,
-      "sl_trigger_price": 0.07459,
-      "sl_pct": 6,
-      "created_at": 1795435777,
-      "sl_at": 1795492468,
-      "hold_minutes": 944,
-      "max_high_price": 0.08995,
-      "max_favorable_pct": 13.05,
-      "vol_mult": 2.1,
-      "rsi6_15m": 29.5,
-      "oi_m": 3.1,
-      "oi_ratio": 78.1,
-      "funding_pct": 0.005,
-      "change_24h": -2.17,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 71%)",
-        "바닥 반전 거래량 2.1배 폭발 + RSI 강세 다이버전스",
-        "OI 집중도 최상(78%)",
-        "뉴욕 유동성 세션(+4점)"
-      ]
-    },
     "BREVUSDT_1795304748": {
       "symbol": "BREVUSDT",
       "track_type": "TRACK_E",
