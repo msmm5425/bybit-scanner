@@ -2803,33 +2803,6 @@
     "WIFUSDT": 1795769874
   },
   "sl_history": {
-    "BREVUSDT_1795304748": {
-      "symbol": "BREVUSDT",
-      "track_type": "TRACK_E",
-      "score": 93,
-      "entry_price": 0.06548,
-      "stop_price": 0.061551,
-      "sl_trigger_price": 0.06151,
-      "sl_pct": 6,
-      "created_at": 1795304748,
-      "sl_at": 1795511343,
-      "hold_minutes": 3443,
-      "max_high_price": 0.07146,
-      "max_favorable_pct": 9.13,
-      "vol_mult": 4.12,
-      "rsi6_15m": 24.4,
-      "oi_m": 1.3,
-      "oi_ratio": 16.1,
-      "funding_pct": -0.0383,
-      "change_24h": -7.49,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 46%)",
-        "바닥 반전 거래량 4.1배 폭발 + KDJ 바닥 급반전",
-        "음수 펀딩 숏스퀴즈(-0.0383%)",
-        "⚠️ 1W·1D 상위 역배열 구간(단기 저항 주의)"
-      ]
-    },
     "IRYSUSDT_1795483707": {
       "symbol": "IRYSUSDT",
       "track_type": "TRACK_E",
