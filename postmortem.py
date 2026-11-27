@@ -7,9 +7,7 @@ from config import KST, POSTMORTEM_DB_FILE, to_float as _to_float
 
 RETENTION_SEC = 14 * 86400
 ENGINE_VER = "v3"
-# [1차 교정] 오답 학습 감점 최대 캡을 8점으로 제한해 신호 전체 동결(Death Spiral) 방지
 MAX_PENALTY_CAP = 8
-# 구조상 거래량 배수 < 1.8x가 정상인 전략(장기 스텔스 D1 · 눌림 C · RS F · 숏스퀴즈 G)은 lowvol 감점 제외
 LOWVOL_EXEMPT_TRACKS = {"TRACK_D", "TRACK_C", "TRACK_F", "TRACK_G"}
 
 _DB_LOCK = threading.RLock()
@@ -430,7 +428,9 @@ def _compute_toxic_patterns(recs, wins, now_ts, db_updated_at=-1):
 
 
 def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
-    """[오답노트 v3 통합 자동 감점 엔진 — 최대 8점 캡 · 정상 저거래량 트랙 오폭 차단]"""
+    """
+    [오답노트 v3 통합 자동 감점 엔진 — 최대 8점 캡 · 정상 저거래량 오폭 차단 · 과열 승·패 대칭 검증]
+    """
     sym = str(symbol or "").upper().strip()
     tk = str(track_type or "TRACK_A").upper().strip()
     rsi_v = _to_float(rsi6_15m, 50.0)
@@ -463,13 +463,22 @@ def get_setup_penalty(symbol, track_type, rsi6_15m, vol_mult, extra_meta=None):
         if str(r.get("track_type", "")).upper() == tk
         and (now_ts - int(_to_float(r.get("sl_at"), 0))) <= 604800
     ]
+    recent_tk_wins = [
+        w for w in wins
+        if str(w.get("track_type", "")).upper() == tk
+        and (now_ts - int(_to_float(w.get("win_at"), 0))) <= 604800
+    ]
+
     if len(recent_tk_sls) >= 3:
+        # [2차 보완] 동일 조건 승리 표본과 대칭 비교(손절 > 승리 × 2) 시에만 감점 적용
         overheat_cnt = sum(1 for r in recent_tk_sls if _to_float(r.get("rsi6_15m"), 50.0) >= 70.0)
-        if rsi_v >= 70.0 and overheat_cnt >= 3:
+        overheat_win_cnt = sum(1 for w in recent_tk_wins if _to_float(w.get("rsi6_15m"), 50.0) >= 70.0)
+        if rsi_v >= 70.0 and overheat_cnt >= 3 and overheat_cnt > (overheat_win_cnt * 2):
             penalty += 3
         if tk not in LOWVOL_EXEMPT_TRACKS:
             lowvol_cnt = sum(1 for r in recent_tk_sls if _to_float(r.get("vol_mult"), 1.0) < 1.8)
-            if vol_v < 1.8 and lowvol_cnt >= 3:
+            lowvol_win_cnt = sum(1 for w in recent_tk_wins if _to_float(w.get("vol_mult"), 1.0) < 1.8)
+            if vol_v < 1.8 and lowvol_cnt >= 3 and lowvol_cnt > (lowvol_win_cnt * 2):
                 penalty += 3
 
     recent_toxic_bo = [
