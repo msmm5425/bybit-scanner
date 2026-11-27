@@ -360,7 +360,11 @@ def _evaluate_weekly_daily_pro_filter(
     sub_strategy="",
     funding_pct=0.0,
 ):
-    """[전문 트레이더 주봉(1W) · 일봉(1D) 탑다운 + PPO + 상단 일봉 20MA 저항벽 검증]"""
+    """
+    [전문 트레이더 주봉(1W) · 일봉(1D) 탑다운 + PPO + 상단 일봉 20MA 저항벽 검증]
+    - [2차 보완] D6 스프링 obv1d_dead 예외 허용 (자체 4H OBV 반전 검증 신뢰)
+    - [2차 보완] 신규 상장 코인(1W < 4주)에 1D PPO·OBV 강세 최대 +2점 대체 인정
+    """
     out = {"allow": True, "score_adj": 0, "htf_tag": "", "reasons": [], "block_reason": ""}
     is_spring_d6 = "D6" in str(sub_strategy or "").upper()
 
@@ -499,7 +503,8 @@ def _evaluate_weekly_daily_pro_filter(
             if (not is_spring_d6) and made_new_30d_low_recently and dd_30d_pct >= 45.0:
                 out.update({"allow": False, "block_reason": f"1D 신저가 폭락 진행형(-{dd_30d_pct:.0f}%)"})
                 return out
-            if obv1d_dead:
+            # [2차 보완] D6 스프링은 신저가 스윕 반등이므로 일봉 OBV 일시 이탈은 예외 허용 (자체 4H OBV 검증 존재)
+            if obv1d_dead and (not is_spring_d6):
                 out.update({"allow": False, "block_reason": "1D OBV 하락 이탈(물량 떠넘기기 의심)"})
                 return out
             ma20_cut = -15.0 if is_spring_d6 else -12.0
@@ -555,13 +560,22 @@ def _evaluate_weekly_daily_pro_filter(
                 out["htf_tag"] = "1W바닥숙성·PPO반전"
             else:
                 out["htf_tag"] = "1W·1D바닥전환"
-        else:
-            out["htf_tag"] = "1D스프링탈환" if is_spring_d6 else ("1D PPO강세" if ppo1d_zero_up else "4H·1D매집")
 
-        if has_1d and ppo1d_zero_up and not ppo1w_zero_up:
-            out["score_adj"] += 1
-            if len(out["reasons"]) < 2:
-                out["reasons"].append("1D 일봉 PPO 0선 돌파 모멘텀 정렬")
+            if has_1d and ppo1d_zero_up and not ppo1w_zero_up:
+                out["score_adj"] += 1
+                if len(out["reasons"]) < 2:
+                    out["reasons"].append("1D 일봉 PPO 0선 돌파 모멘텀 정렬")
+        else:
+            # [2차 보완] 주봉 4주 미만 신규 상장 코인은 1D PPO·OBV 강세로 최대 +2점 대체 인정
+            out["htf_tag"] = "1D스프링탈환" if is_spring_d6 else ("1D PPO강세" if ppo1d_zero_up else "4H·1D매집")
+            if has_1d:
+                if ppo1d_zero_up and obv1d_alive:
+                    out["score_adj"] += 2
+                    out["reasons"].append("신규상장 1D 일봉 PPO 0선 돌파·OBV 매집 정렬")
+                elif (ppo1d_turn_up or daily_bull) and obv1d_alive:
+                    out["score_adj"] += 1
+                    out["reasons"].append("신규상장 1D 일봉 추세 반전·OBV 생존 확인")
+
         if has_1d and dd_macro_pct >= 60.0 and funding_pct <= -0.005:
             out["score_adj"] += 1
             out["reasons"].append(f"심층 낙폭(-{dd_macro_pct:.0f}%) + 음수펀딩 숏함정 역발상 연료")
@@ -1536,7 +1550,8 @@ def analyze_symbol(
 
         had_break_recent = to_float(highs.iloc[-5:-1].max(), 0.0) >= high_24h * 1.002
         retest_red_vr = to_float(vol_ratios.iloc[-2], 0.0) if (prev_c < prev_o) else 0.0
-        retest_dry_ok = (retest_red_vr <= bull_vol_5 * 0.85) or (curr_bull_vol >= 1.2)
+        # [2차 보완] 돌파봉보다 큰 투매 음봉 리테스트 통과 허점 차단
+        retest_dry_ok = (retest_red_vr <= bull_vol_5 * 0.85) or (retest_red_vr <= 1.6 and curr_bull_vol >= 1.5)
         sr_flip_retest_b = (
             had_break_recent
             and (high_24h * 0.988 <= min(curr_l, prev_l) <= high_24h * 1.008)
@@ -1664,10 +1679,9 @@ def analyze_symbol(
                     vol_metric=bull_vol_2,
                 )
 
-        # [Track H] 🧬 Top 5 급등 DNA 자동 적응 트랙 (v4_clean_launchpad 검증 표본 전용)
+        # [Track H] 🧬 Top 5 급등 DNA 자동 적응 트랙 (사전 차단 해제 · 최종 정렬에서 본선 우선 채택)
         if (
-            not short_candidates
-            and htf_bull
+            htf_bull
             and curr_c >= ma20_15m_val
             and (-5.0 <= change_24h < 12.0)
             and oi_ratio >= 8.0
@@ -1754,7 +1768,11 @@ def analyze_symbol(
     if not verified_candidates:
         return None
 
-    verified_candidates.sort(key=lambda x: x["score"], reverse=True)
+    # [2차 보완] 본선 트랙(Track A~G) 통과 시 우선 채택, 본선 탈락 시 Track H 안전망 채택
+    verified_candidates.sort(
+        key=lambda x: (0 if x.get("track_type") == "TRACK_H" else 1, x["score"]),
+        reverse=True,
+    )
     best = verified_candidates[0]
 
     tp_scale = 0.88 if oi_q["squeeze_warn"] else 1.0
