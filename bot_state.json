@@ -2995,32 +2995,6 @@
     "GRASSUSDT": 1795784319
   },
   "sl_history": {
-    "VIRTUALUSDT_1795291344": {
-      "symbol": "VIRTUALUSDT",
-      "track_type": "TRACK_A",
-      "score": 95,
-      "entry_price": 0.3783,
-      "stop_price": 0.355602,
-      "sl_trigger_price": 0.3542,
-      "sl_pct": 6,
-      "created_at": 1795291344,
-      "sl_at": 1795526052,
-      "hold_minutes": 3911,
-      "max_high_price": 0.4165,
-      "max_favorable_pct": 10.1,
-      "vol_mult": 2.45,
-      "rsi6_15m": 60.0,
-      "oi_m": 2.2,
-      "oi_ratio": 22.3,
-      "funding_pct": -0.0039,
-      "change_24h": 0.48,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "TTM Squeeze(BB<KC) 발사(응축폭 1.9%) + 15m PPO(+0.32%) 상방",
-        "OI 집중도 최상(22%)",
-        "⚠️ 1W·1D 상위 역배열 구간(단기 저항 주의)"
-      ]
-    },
     "ARIAUSDT_1795498934": {
       "symbol": "ARIAUSDT",
       "track_type": "TRACK_A",
