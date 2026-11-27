@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "GRASSUSDT_1795784319",
+      "engine_ver": "v3",
+      "symbol": "GRASSUSDT",
+      "track_type": "TRACK_A",
+      "score": 90,
+      "entry_price": 0.39207,
+      "stop_price": 0.368546,
+      "sl_trigger_price": 0.36576,
+      "sl_pct": 6,
+      "actual_sl_pct": -6.86,
+      "created_at": 1795784319,
+      "sl_at": 1795801375,
+      "hold_minutes": 284,
+      "max_high_price": 0.39207,
+      "max_favorable_pct": 0.0,
+      "vol_mult": 3.02,
+      "rsi6_15m": 57.0,
+      "oi_m": 8.2,
+      "oi_ratio": 242.2,
+      "funding_pct": 0.005,
+      "change_24h": 3.03,
+      "btc_1h_pct": -0.1,
+      "kst_block": "21-24",
+      "cause": "비트 연동 급락 및 지지선 이탈",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "WLFIUSDT_1795488133",
       "engine_ver": "v3",
       "symbol": "WLFIUSDT",
@@ -624,6 +654,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795794351,
+  "updated_at": 1795801399,
   "engine_ver": "v3"
 }
