@@ -2994,33 +2994,6 @@
     "GRASSUSDT": 1795784319
   },
   "sl_history": {
-    "0GUSDT_1795242119": {
-      "symbol": "0GUSDT",
-      "track_type": "TRACK_E",
-      "score": 97,
-      "entry_price": 0.1041,
-      "stop_price": 0.097854,
-      "sl_trigger_price": 0.0974,
-      "sl_pct": 6,
-      "created_at": 1795242119,
-      "sl_at": 1795525328,
-      "hold_minutes": 4720,
-      "max_high_price": 0.1156,
-      "max_favorable_pct": 11.05,
-      "vol_mult": 2.09,
-      "rsi6_15m": 37.2,
-      "oi_m": 0.6,
-      "oi_ratio": 25.0,
-      "funding_pct": 0.005,
-      "change_24h": -12.62,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 69%)",
-        "바닥 반전 거래량 2.1배 폭발 + RSI 강세 다이버전스",
-        "OI 집중도 최상(25%)",
-        "⚠️ 1W·1D 상위 역배열 구간(단기 저항 주의)"
-      ]
-    },
     "VIRTUALUSDT_1795291344": {
       "symbol": "VIRTUALUSDT",
       "track_type": "TRACK_A",
