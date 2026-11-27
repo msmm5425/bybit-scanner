@@ -3086,33 +3086,6 @@
     "GALAUSDT": 1795745944
   },
   "sl_history": {
-    "SKYUSDT_1795457582": {
-      "symbol": "SKYUSDT",
-      "track_type": "TRACK_A",
-      "score": 92,
-      "entry_price": 0.04161,
-      "stop_price": 0.039113,
-      "sl_trigger_price": 0.0391,
-      "sl_pct": 6,
-      "created_at": 1795457582,
-      "sl_at": 1795488507,
-      "hold_minutes": 515,
-      "max_high_price": 0.0434,
-      "max_favorable_pct": 4.3,
-      "vol_mult": 0.32,
-      "rsi6_15m": 65.1,
-      "oi_m": 1.5,
-      "oi_ratio": 12.5,
-      "funding_pct": 0.005,
-      "change_24h": -0.77,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "스탑헌팅 바닥 확인 후 비과열 V자 재탈환",
-        "TTM Squeeze(BB<KC) 발사(응축폭 12.3%) + 15m PPO(+0.55%) 상방",
-        "15m 매수 델타(CVD)·OBV 바닥 흡수 확인",
-        "PPO 파동 정렬(15m PPO 히스토그램 확장)"
-      ]
-    },
     "USELESSUSDT_1795435777": {
       "symbol": "USELESSUSDT",
       "track_type": "TRACK_E",
