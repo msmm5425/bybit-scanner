@@ -8,12 +8,12 @@ on:
   workflow_dispatch:
     inputs:
       test_video:
-        description: '최근 익절 종목 세로형 리플레이 영상(한글자막·일본어음성 1개) 즉시 테스트 발송'
+        description: '최근 익절 종목 세로형 익절 리플레이 영상(한글자막·일본어음성) 즉시 테스트 발송'
         required: false
         default: false
         type: boolean
       test_chart:
-        description: '최근 포착 종목 세로형(3:4) 포착 차트 이미지 즉시 테스트 발송'
+        description: '최근 포착 종목 세로형 포착 차트 영상(캔들+TP화살표+한/일자막·일본어음성) 즉시 테스트 발송'
         required: false
         default: false
         type: boolean
@@ -93,7 +93,7 @@ jobs:
             fc-list :lang=ko 2>/dev/null | grep -qi noto || sudo apt-get install -y -qq fonts-noto-cjk
           fi
 
-      - name: Run Signal Chart Test (if selected)
+      - name: Run Signal Chart Video Test (if selected)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_chart == true }}
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
