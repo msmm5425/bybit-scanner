@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       test_video:
-        description: '최근 익절 종목 30초 리플레이 영상 즉시 테스트 발송'
+        description: '최근 익절 종목 세로형 리플레이 영상 2종(클린+자막/일본어음성) 즉시 테스트 발송'
         required: false
         default: false
         type: boolean
@@ -43,7 +43,7 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -q -r requirements.txt
           else
-            pip install -q requests pandas numpy playwright
+            pip install -q requests pandas numpy playwright edge-tts gTTS
           fi
 
       - name: Cache Playwright Chromium browser
@@ -77,8 +77,16 @@ jobs:
           curl -fsSL https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js -o assets/lightweight-charts.standalone.production.js || \
           curl -fsSL https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js -o assets/lightweight-charts.standalone.production.js || true
 
-      - name: Ensure ffmpeg is available
-        run: which ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+      - name: Ensure ffmpeg and Korean CJK font are available
+        run: |
+          NEED_UPDATE=0
+          which ffmpeg >/dev/null 2>&1 || NEED_UPDATE=1
+          fc-list :lang=ko 2>/dev/null | grep -qi noto || NEED_UPDATE=1
+          if [ "$NEED_UPDATE" -eq 1 ]; then
+            sudo apt-get update -qq
+            which ffmpeg >/dev/null 2>&1 || sudo apt-get install -y -qq ffmpeg
+            fc-list :lang=ko 2>/dev/null | grep -qi noto || sudo apt-get install -y -qq fonts-noto-cjk
+          fi
 
       - name: Run Replay Video Test (if selected)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_video == true }}
