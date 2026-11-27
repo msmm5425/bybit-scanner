@@ -2851,34 +2851,6 @@
     "SENTUSDT": 1795771222
   },
   "sl_history": {
-    "IRYSUSDT_1795483707": {
-      "symbol": "IRYSUSDT",
-      "track_type": "TRACK_E",
-      "score": 97,
-      "entry_price": 0.01654,
-      "stop_price": 0.015548,
-      "sl_trigger_price": 0.01554,
-      "sl_pct": 6,
-      "created_at": 1795483707,
-      "sl_at": 1795519456,
-      "hold_minutes": 595,
-      "max_high_price": 0.0167,
-      "max_favorable_pct": 0.97,
-      "vol_mult": 7.14,
-      "rsi6_15m": 45.7,
-      "oi_m": 1.4,
-      "oi_ratio": 24.0,
-      "funding_pct": -0.0236,
-      "change_24h": -10.05,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "스탑헌팅 바닥 확인 후 비과열 V자 재탈환",
-        "24H 저점 유동성 스윕 후 지지선 탈환(아래꼬리 42%)",
-        "바닥 반전 거래량 7.1배 폭발 + KDJ 바닥 급반전",
-        "OI 집중도 최상(24%)",
-        "음수 펀딩 숏스퀴즈(-0.0236%)"
-      ]
-    },
     "BABYUSDT_1795514604": {
       "symbol": "BABYUSDT",
       "track_type": "TRACK_H",
