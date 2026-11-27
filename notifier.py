@@ -618,12 +618,37 @@ def _synth_jp_voice_segment(text, out_mp3):
     return False, ("; ".join(err_box)[:160] or "TTS 생성 실패")
 
 
+def _unified_opening_spec():
+    """포착·익절 영상 공통 오프닝 (1 / 4)"""
+    return {
+        "step": "1 / 4",
+        "tag": "INTRO",
+        "ko_line1": "안녕하세요, 단평입니다 👋",
+        "ko_line2": f"X · {WATERMARK_HANDLE} 상승 코인 검색기 브리핑",
+        "jp_sub": "こんにちは、ダンピョンです！仮想通貨スキャナーブリーフィング",
+        "jp_text": "こんにちは、ダンピョンです。",
+    }
+
+
+def _unified_ending_spec():
+    """포착·익절 영상 공통 엔딩 (4 / 4)"""
+    return {
+        "step": "4 / 4",
+        "tag": "FOLLOW",
+        "ko_line1": "팔로우 + 알림설정 부탁드립니다! 🔔",
+        "ko_line2": f"X · {WATERMARK_HANDLE} 실시간 상승 코인 알림",
+        "jp_sub": f"フォロー＋通知設定よろしくお願いします！ · {WATERMARK_HANDLE}",
+        "jp_text": "フォローと通知設定、よろしくお願いします！",
+    }
+
+
 def _build_signal_video_narration(res, tp1_p, tp2_p, tp3_p, p1, p2, p3, tmpdir):
     """
-    [포착 차트 영상 3단계 자막 + 일본어 여성 아나운서(1.1배속) 음성 동기화]
-    - 1단계 (전반부 캔들 리플레이): 포착근거(한글+일본어) + 진입해볼만한 자리 브리핑
-    - 2단계 (후반부 TP1→TP2→TP3 화살표 확장): TP1, TP2, TP3 예상가 브리핑
-    - 3단계 (엔딩 CTA): 팔로우+알림설정 부탁드립니다
+    [포착 차트 영상 4단계 한/일 자막 + 일본어 여성 아나운서(1.1배속) 음성 동기화]
+    - 1/4: 공통 오프닝 (익절 영상과 100% 동일)
+    - 2/4: 전반부 캔들 리플레이 — 포착근거(한/일) + 진입 주목 자리
+    - 3/4: 후반부 TP1→TP2→TP3 화살표 확장 — 목표가 예상
+    - 4/4: 공통 엔딩 (익절 영상과 100% 동일)
     """
     base = str(res.get("base_coin") or res.get("base") or str(res.get("symbol", "")).replace("USDT", "")).upper()
     hook_ko = str(res.get("x_hook_ko") or "").strip()
@@ -637,8 +662,9 @@ def _build_signal_video_narration(res, tp1_p, tp2_p, tp3_p, p1, p2, p3, tmpdir):
     t1_jp, t2_jp, t3_jp = t1_s.replace(",", ""), t2_s.replace(",", ""), t3_s.replace(",", "")
 
     raw_specs = [
+        _unified_opening_spec(),
         {
-            "step": "1 / 3",
+            "step": "2 / 4",
             "tag": "SIGNAL",
             "ko_line1": f'${base} 종목은 "{hook_ko}" 근거로',
             "ko_line2": "진입해볼만한 자리입니다",
@@ -646,21 +672,14 @@ def _build_signal_video_narration(res, tp1_p, tp2_p, tp3_p, p1, p2, p3, tmpdir):
             "jp_text": f"{base}は、{hook_jp}の根拠で、エントリーを狙えるポイントです。",
         },
         {
-            "step": "2 / 3",
+            "step": "3 / 4",
             "tag": "TARGETS",
             "ko_line1": f'TP1 "${t1_s}" , TP2 "${t2_s}" , TP3 "${t3_s}"',
             "ko_line2": f"예상하고 있습니다! (+{p1:g}% / +{p2:g}% / +{p3:g}%)",
             "jp_sub": f"目標予想：TP1 ${t1_s} · TP2 ${t2_s} · TP3 ${t3_s}",
             "jp_text": f"TP1、{t1_jp}ドル。TP2、{t2_jp}ドル。TP3、{t3_jp}ドルを予想しています。",
         },
-        {
-            "step": "3 / 3",
-            "tag": "FOLLOW",
-            "ko_line1": "팔로우 + 알림설정 부탁드립니다! 🔔",
-            "ko_line2": f"X · {WATERMARK_HANDLE} 실시간 상승 코인 포착 알림",
-            "jp_sub": f"フォロー＋通知設定よろしくお願いします！ · {WATERMARK_HANDLE}",
-            "jp_text": "フォローと通知設定、よろしくお願いします！",
-        },
+        _unified_ending_spec(),
     ]
 
     durs, paths = [], []
@@ -672,37 +691,37 @@ def _build_signal_video_narration(res, tp1_p, tp2_p, tp3_p, p1, p2, p3, tmpdir):
             tts_ok = False
             tts_err = err
             break
-        durs.append(_probe_audio_duration_sec(mp3_p, default_sec=4.0))
+        durs.append(_probe_audio_duration_sec(mp3_p, default_sec=3.5))
         paths.append(mp3_p)
 
-    # 음성 생성 실패 시에도 영상(자막 포함) 자체는 정상 완성되도록 고정 타이밍 폴백
-    if not tts_ok or len(durs) != 3:
-        durs = [6.2, 6.2, 2.8]
-        paths = ["", "", ""]
+    if not tts_ok or len(durs) != 4:
+        durs = [2.0, 5.8, 6.2, 2.8]
+        paths = ["", "", "", ""]
 
-    # 전반부(썸네일 1.2s + 캔들 리플레이) vs 후반부(TP1→TP2→TP3 화살표 확장 + CTA) 약 50:50 대칭 배분
     s0 = 0.25
     e0 = s0 + durs[0]
 
-    # 전반부 종료(캔들 ENTRY 도달 완료) = 후반부(화살표 시작)
-    arrow_start_sec = max(e0 + 0.45, 7.20)
-    s1 = arrow_start_sec
+    s1 = max(e0 + 0.45, 2.20)
     e1 = s1 + durs[1]
 
-    # 화살표 3단계(TP1 -> TP2 -> TP3) 확장은 2단계 음성에 맞춰 최소 6.0초 이상 부드럽게 전개
-    arrow_end_sec = max(e1 + 0.25, arrow_start_sec + 6.00)
-
-    s2 = max(e1 + 0.45, arrow_end_sec - 0.15)
+    # 전반부(썸네일 + 캔들 리플레이) 종료 = 후반부(TP1→TP2→TP3 화살표 확장) 시작
+    arrow_start_sec = max(e1 + 0.45, 8.20)
+    s2 = arrow_start_sec
     e2 = s2 + durs[2]
 
-    final_total_sec = max(16.0, e2 + 0.85)
+    arrow_end_sec = max(e2 + 0.25, arrow_start_sec + 6.00)
 
-    starts = [s0, s1, s2]
-    ends = [e0, e1, e2]
+    s3 = max(e2 + 0.45, arrow_end_sec - 0.15)
+    e3 = s3 + durs[3]
+
+    final_total_sec = max(18.0, e3 + 0.85)
+
+    starts = [s0, s1, s2, s3]
+    ends = [e0, e1, e2, e3]
     segments = []
     for i, sp in enumerate(raw_specs):
         show_start = 0.0 if i == 0 else (starts[i] - 0.12)
-        show_end = final_total_sec if i == 2 else (starts[i + 1] - 0.12)
+        show_end = final_total_sec if i == 3 else (starts[i + 1] - 0.12)
         segments.append({
             "step": sp["step"],
             "tag": sp["tag"],
@@ -733,9 +752,9 @@ def generate_signal_chart_video_bytes(res):
     """
     [<포착알림차트영상> X 풀HD 세로형(3:4 · 1080x1440) 자동 제작 엔진]
     - 썸네일(0~1.2초): 진입가(ENTRY) → TP1 → TP2 → TP3 완성 화살표 + 피보나치
-    - 전반부(50%): 캔들 리플레이(진입 시점까지) + 피보나치 + 한국어·일본어 포착근거
-    - 후반부(50%): 진입가→TP1 화살표 → 진입가→TP2 화살표 → 진입가→TP3 화살표 순차 확장 액션
-    - 음성: 일본어 여성 아나운서(ja-JP-NanamiNeural · 1.1배속) + 하단 한국어·일본어 자막 싱크
+    - 전반부(50%): 캔들 리플레이(진입 시점까지) + 피보나치
+    - 후반부(50%): 진입가→TP1 → 진입가→TP2 → 진입가→TP3 순차 화살표 확장 액션
+    - 자막·음성: 공통 오프닝(1/4) · 포착근거(2/4) · TP예상(3/4) · 공통 엔딩(4/4) — 한글+일본어 자막 & 일본어 음성
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -827,7 +846,6 @@ def generate_signal_chart_video_bytes(res):
         ma20_js.append({"time": ts_sec, "value": _fwd(row["ma20"])} if pd.notna(row.get("ma20")) else None)
         kst_strs.append(datetime.fromtimestamp(ts_ms / 1000.0, tz=KST).strftime("%Y-%m-%d %H:%M KST"))
 
-    # 우측 화살표 전용 공간(30봉 여백) 확보 → 진입가에서 TP1→TP2→TP3 화살표가 시원하게 뻗어나감
     ws_count = 30
     ws_tail = [{"time": candles_js[-1]["time"] + (i * step_sec)} for i in range(1, ws_count + 1)]
     entry_idx = len(candles_js) - 1
@@ -899,10 +917,10 @@ def generate_signal_chart_video_bytes(res):
             arrow_end_sec = plan["arrow_end_sec"]
             tts_ok = plan["tts_ok"]
 
-            total_frames = max(160, int(round(total_sec * in_fps)))
-            thumb_end_f = 12  # 0.0 ~ 1.2s: ENTRY → TP3 완성 화살표 썸네일
+            total_frames = max(180, int(round(total_sec * in_fps)))
+            thumb_end_f = 12
             candle_start_f = thumb_end_f
-            candle_end_f = max(candle_start_f + 35, int(round(arrow_start_sec * in_fps)))
+            candle_end_f = max(candle_start_f + 40, int(round(arrow_start_sec * in_fps)))
             arrow_start_f = candle_end_f
             arrow_end_f = min(total_frames - 8, max(arrow_start_f + 45, int(round(arrow_end_sec * in_fps))))
 
@@ -995,7 +1013,7 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Noto San
       <span style="color:#ff9800">▤ {fib_dir_tag}</span>
     </div>
     <div id="fib-overlay"></div>
-    <div class="phase-pill" id="phase-pill">🚀 ENTRY → TP3 목표 시나리오</div>
+    <div class="phase-pill" id="phase-pill">🎯 ENTRY → TP3 목표 시나리오</div>
 
     <div id="arrow-overlay">
       <svg id="tp-svg" viewBox="0 0 960 836">
@@ -1026,8 +1044,8 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Noto San
 
   <div id="bottom-panel">
     <div class="sub-head">
-      <span class="sub-badge">🎙️ 단평 포착 시그널 브리핑 · KR / JP</span>
-      <span class="sub-step" id="sub-step">1 / 3</span>
+      <span class="sub-badge">🎙️ 단평 포착 브리핑 · KR / JP</span>
+      <span class="sub-step" id="sub-step">1 / 4</span>
     </div>
     <div class="sub-box">
       <div class="sub-l1" id="sub-l1"></div>
@@ -1121,7 +1139,6 @@ function buildFibAndArrowGeometry(){{
   const psW=(chart.priceScale('right') && chart.priceScale('right').width) ? chart.priceScale('right').width() : 86;
   const plotRight=Math.max(360, 960 - (psW || 86) - 6);
 
-  // 1) 피보나치 밴드 & 라벨 1회 고정 배치
   try{{
     const ov=document.getElementById('fib-overlay');
     const maBox=document.getElementById('ma-legend');
@@ -1174,7 +1191,6 @@ function buildFibAndArrowGeometry(){{
     }}
   }}catch(e){{}}
 
-  // 2) ENTRY → TP1, ENTRY → TP2, ENTRY → TP3 화살표 3단계 경로 계산
   let x0=chart.timeScale().timeToCoordinate(cAll[entryIdx].time);
   if(x0===null || !isFinite(x0)) x0=plotRight * 0.72;
   const availW=Math.max(90, plotRight - x0 - 12);
@@ -1290,7 +1306,6 @@ const CANDLE_START={candle_start_f};
 const CANDLE_END={candle_end_f};
 const ARROW_START={arrow_start_f};
 const ARROW_END={arrow_end_f};
-const TOTAL_F={total_frames};
 
 window.__renderFrame=function(f, subIdx){{
   setSubtitle(subIdx);
@@ -1298,7 +1313,6 @@ window.__renderFrame=function(f, subIdx){{
   const isThumb=(f < THUMB_END);
   const isCandle=(f >= CANDLE_START && f < CANDLE_END);
   const isArrow=(f >= ARROW_START && f <= ARROW_END);
-  const isOutro=(f > ARROW_END);
 
   let showIdx=entryIdx;
   let frac=1.0;
@@ -1382,7 +1396,7 @@ window.__renderFrame=function(f, subIdx){{
     candleSeries.setMarkers([]);
   }}
 
-  if(isThumb || isOutro){{
+  if(isThumb || f > ARROW_END){{
     setTpArrowStage(3, 1.0);
   }} else if(isCandle){{
     setTpArrowStage(0, 0.0);
@@ -1519,7 +1533,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{
 
             print(
                 f"[포착 차트 영상 완료] {symbol} ({tf_name}, {len(df)}봉 · {VIDEO_W}x{VIDEO_H} CRF15) | "
-                f"{total_sec:.1f}초 · JP음성={'OK' if tts_ok else 'OFF'}"
+                f"{total_sec:.1f}초 · 한/일자막 · JP음성={'OK' if tts_ok else 'OFF'}"
             )
             return {
                 "video": video_bytes,
@@ -1699,7 +1713,13 @@ def generate_signal_chart_bytes(res):
 
 
 def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, tmpdir, base_total_sec=30.5):
-    """[익절 리플레이 영상] 4단계 한글 자막 + 일본어 여성 아나운서(1.1배속) 음성 싱크"""
+    """
+    [익절 리플레이 영상 4단계 한/일 자막 + 일본어 여성 아나운서(1.1배속) 음성 동기화]
+    - 1/4: 공통 오프닝 (포착 영상과 100% 동일)
+    - 2/4: 포착 근거 (한/일 자막 + 일본어 음성)
+    - 3/4: 수익률 달성 축하 (한/일 자막 + 일본어 음성)
+    - 4/4: 공통 엔딩 (포착 영상과 100% 동일)
+    """
     base = str(close_info.get("base_coin") or str(close_info.get("symbol", "")).replace("USDT", "")).upper()
     dt_cap = datetime.fromtimestamp(created_at, tz=KST)
     date_ko = f"{dt_cap.month}월 {dt_cap.day}일"
@@ -1718,30 +1738,24 @@ def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, t
     pct_jp_num = f"{total_realized_pct:.1f}"
 
     raw_specs = [
+        _unified_opening_spec(),
         {
-            "step": "1 / 4", "tag": "INTRO",
-            "ko_line1": "안녕하세요, 단평입니다 👋",
-            "ko_line2": f"${base} 실전 검색기 익절 리플레이 브리핑",
-            "jp_text": "こんにちは、ダンピョンです。",
-        },
-        {
-            "step": "2 / 4", "tag": "SIGNAL",
+            "step": "2 / 4",
+            "tag": "SIGNAL",
             "ko_line1": f'{date_ko}, "{hook_ko}" 근거로',
             "ko_line2": f"${base} 종목이 검색기에 포착되었습니다",
+            "jp_sub": f"{date_jp}、「{hook_jp}」で{base}を捕捉",
             "jp_text": f"{date_jp}、「{hook_jp}」の根拠で、{base}がスキャナーに捕捉されました。",
         },
         {
-            "step": "3 / 4", "tag": "PROFIT",
+            "step": "3 / 4",
+            "tag": "PROFIT",
             "ko_line1": f"진입가격 {entry_str} 달러 · 최종 수익률 +{pct_str}%",
             "ko_line2": "달성하였습니다! 축하드립니다!! 🎉",
+            "jp_sub": f"エントリー ${entry_str} · 最終収益率 +{pct_str}% 達成！おめでとうございます！",
             "jp_text": f"エントリー価格、{entry_jp_num}ドル。最終収益率、プラス{pct_jp_num}パーセントを達成しました！おめでとうございます！",
         },
-        {
-            "step": "4 / 4", "tag": "FOLLOW",
-            "ko_line1": "팔로우 + 알림설정 부탁드립니다 🔔",
-            "ko_line2": f"X · {WATERMARK_HANDLE} 실시간 상승 타점 알림",
-            "jp_text": "フォローと通知設定、よろしくお願いします！",
-        },
+        _unified_ending_spec(),
     ]
 
     durs, paths = [], []
@@ -1776,17 +1790,23 @@ def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, t
         show_start = 0.0 if i == 0 else starts[i] - 0.15
         show_end = final_total_sec if i == 3 else (starts[i + 1] - 0.15)
         segments.append({
-            "step": sp["step"], "tag": sp["tag"],
-            "ko_line1": sp["ko_line1"], "ko_line2": sp["ko_line2"],
-            "audio_path": paths[i], "audio_start": round(starts[i], 3),
-            "audio_dur": round(durs[i], 3), "audio_end": round(ends[i], 3),
-            "sub_start": round(show_start, 3), "sub_end": round(show_end, 3),
+            "step": sp["step"],
+            "tag": sp["tag"],
+            "ko_line1": sp["ko_line1"],
+            "ko_line2": sp["ko_line2"],
+            "jp_sub": sp["jp_sub"],
+            "audio_path": paths[i],
+            "audio_start": round(starts[i], 3),
+            "audio_dur": round(durs[i], 3),
+            "audio_end": round(ends[i], 3),
+            "sub_start": round(show_start, 3),
+            "sub_end": round(show_end, 3),
         })
     return segments, final_total_sec, True, ""
 
 
 def generate_profit_replay_videos_bundle(close_info, include_clean=True):
-    """[익절 리플레이] X 풀HD 세로형(3:4 · 1080x1440) 자막+일본어음성 리플레이 엔진 v11"""
+    """[익절 리플레이] X 풀HD 세로형(3:4 · 1080x1440) 한/일 자막 + 일본어음성 리플레이 엔진 v12"""
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
 
@@ -1932,7 +1952,15 @@ def generate_profit_replay_videos_bundle(close_info, include_clean=True):
             make_clean = bool(include_clean) or (not make_voiced)
             voiced_frames = max(base_frames, int(round(final_total_sec * in_fps))) if make_voiced else base_frames
             sub_meta_js = [
-                {"step": s["step"], "tag": s["tag"], "l1": s["ko_line1"], "l2": s["ko_line2"], "s": s["sub_start"], "e": s["sub_end"]}
+                {
+                    "step": s["step"],
+                    "tag": s["tag"],
+                    "l1": s["ko_line1"],
+                    "l2": s["ko_line2"],
+                    "jp": s["jp_sub"],
+                    "s": s["sub_start"],
+                    "e": s["sub_end"],
+                }
                 for s in segments
             ]
             init_mode = "sub" if (make_voiced and not make_clean) else "clean"
@@ -1940,7 +1968,7 @@ def generate_profit_replay_videos_bundle(close_info, include_clean=True):
             html_content = f"""<!DOCTYPE html><html><head><meta charset="utf-8">{lw_script_tags}
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}}
-body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Malgun Gothic',-apple-system,Roboto,sans-serif;color:#d1d4dc;width:960px;height:1280px;overflow:hidden}}
+body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Noto Sans CJK JP','Malgun Gothic',-apple-system,Roboto,sans-serif;color:#d1d4dc;width:960px;height:1280px;overflow:hidden}}
 .tv-wrap{{width:960px;height:1280px;background:#131722;display:flex;flex-direction:column}}
 .tv-topbar{{height:112px;background:#181c27;border-bottom:1px solid #2a2e39;display:flex;flex-direction:column;justify-content:center;gap:8px;padding:10px 20px}}
 .tb-row{{display:flex;align-items:center;justify-content:space-between}}
@@ -1965,16 +1993,20 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Malgun G
 .tv-callout-entry{{padding:10px 16px}}.tv-callout-entry .co-main{{font-size:20px;font-weight:900}}.tv-callout-entry .co-sub{{font-size:15px;font-weight:700;color:#e0ecff;margin-top:3px}}
 .co-caret-down{{position:absolute;bottom:-9px;width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:9px solid #1f52df}}
 .co-caret-up{{position:absolute;top:-9px;width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:9px solid #2962ff}}
-#bottom-panel{{height:300px;width:960px;background:linear-gradient(180deg,#121725 0%,#0c101a 100%);border-top:2px solid #272e40;padding:18px 24px;display:flex;flex-direction:column;justify-content:center}}
+#bottom-panel{{height:300px;width:960px;background:linear-gradient(180deg,#121725 0%,#0c101a 100%);border-top:2px solid #272e40;padding:16px 24px;display:flex;flex-direction:column;justify-content:center}}
 #clean-card{{display:flex;flex-direction:column;gap:14px;height:100%;justify-content:center}}
 .cc-hook{{background:rgba(41,98,255,0.16);border:1px solid rgba(76,201,240,0.35);border-radius:12px;padding:12px 18px;font-size:19px;font-weight:800;color:#e8f1ff;text-align:center}}
 .cc-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}
 .cc-box{{background:#181e2e;border:1px solid #2a3144;border-radius:12px;padding:14px 12px;display:flex;flex-direction:column;align-items:center;gap:6px}}
 .cc-k{{font-size:13px;font-weight:700;color:#9598a1}}.cc-v{{font-size:22px;font-weight:900;color:#fff}}.cc-v-profit{{color:#00e676;font-size:25px}}
-#sub-card{{display:none;flex-direction:column;justify-content:center;align-items:center;gap:16px;height:100%}}
-.sub-head{{display:flex;align-items:center;gap:10px}}.sub-badge{{background:#2962ff;color:#fff;font-size:14px;font-weight:800;padding:5px 14px;border-radius:999px}}.sub-step{{background:rgba(255,255,255,0.08);border:1px solid #3a4258;color:#cbd5e1;font-size:13px;font-weight:800;padding:4px 11px;border-radius:999px}}
-.sub-box{{width:100%;background:rgba(24,30,46,0.95);border:2px solid rgba(76,201,240,0.45);border-radius:16px;padding:22px 24px;text-align:center;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:180px}}
-.sub-l1{{font-size:30px;font-weight:900;color:#fff;line-height:1.38;word-break:keep-all}}.sub-l2{{font-size:27px;font-weight:900;color:#ffd166;line-height:1.35;word-break:keep-all}}
+#sub-card{{display:none;flex-direction:column;justify-content:center;gap:12px;height:100%}}
+.sub-head{{display:flex;align-items:center;justify-content:space-between}}
+.sub-badge{{background:#2962ff;color:#fff;font-size:13.5px;font-weight:800;padding:5px 14px;border-radius:999px;letter-spacing:0.3px}}
+.sub-step{{background:rgba(255,255,255,0.08);border:1px solid #3a4258;color:#cbd5e1;font-size:13px;font-weight:800;padding:4px 12px;border-radius:999px}}
+.sub-box{{width:100%;background:rgba(24,30,46,0.96);border:2px solid rgba(76,201,240,0.48);border-radius:16px;padding:18px 22px;text-align:center;box-shadow:0 10px 26px rgba(0,0,0,0.45);display:flex;flex-direction:column;gap:9px;justify-content:center;min-height:212px}}
+.sub-l1{{font-size:27px;font-weight:900;color:#fff;line-height:1.34;word-break:keep-all;text-shadow:0 2px 6px rgba(0,0,0,0.55)}}
+.sub-l2{{font-size:25px;font-weight:900;color:#ffd166;line-height:1.32;word-break:keep-all;text-shadow:0 2px 6px rgba(0,0,0,0.55)}}
+.sub-jp{{font-size:17px;font-weight:700;color:#93c5fd;line-height:1.32;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;margin-top:2px;word-break:keep-all}}
 .tv-footer{{height:32px;background:#0a0d14;border-top:1px solid #1f2430;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11px;color:#787b86;font-weight:600}}
 .prog-wrap{{width:150px;height:5px;background:#222632;border-radius:3px;overflow:hidden}}.prog-fill{{height:100%;width:0%;background:linear-gradient(90deg,#2962ff,#00e676)}}
 </style></head><body><div class="tv-wrap">
@@ -2000,7 +2032,14 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Malgun G
   </div>
   <div id="bottom-panel">
     <div id="clean-card"><div class="cc-hook">📌 {hook_ko_card}</div><div class="cc-grid"><div class="cc-box"><span class="cc-k">진입가격</span><span class="cc-v">${fmt_price(entry_p)}</span></div><div class="cc-box"><span class="cc-k">최고 상승폭</span><span class="cc-v" style="color:#4cc9f0">+{max_fav_val:.1f}%</span></div><div class="cc-box"><span class="cc-k">최종 수익률</span><span class="cc-v cc-v-profit">+{total_realized_pct:.2f}%</span></div><div class="cc-box"><span class="cc-k">보유 기간</span><span class="cc-v">{hold_str}</span></div></div></div>
-    <div id="sub-card"><div class="sub-head"><span class="sub-badge">🎙️ 단평 리플레이 브리핑 · JP VOICE</span><span class="sub-step" id="sub-step">1 / 4</span></div><div class="sub-box"><div class="sub-l1" id="sub-l1"></div><div class="sub-l2" id="sub-l2"></div></div></div>
+    <div id="sub-card">
+      <div class="sub-head"><span class="sub-badge">🎙️ 단평 익절 리플레이 · KR / JP</span><span class="sub-step" id="sub-step">1 / 4</span></div>
+      <div class="sub-box">
+        <div class="sub-l1" id="sub-l1"></div>
+        <div class="sub-l2" id="sub-l2"></div>
+        <div class="sub-jp" id="sub-jp"></div>
+      </div>
+    </div>
   </div>
   <div class="tv-footer"><span>※ 본 영상은 스캐너 기준 시뮬레이션 리플레이이며 실제 체결 결과와 다를 수 있습니다.</span><div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div></div>
 </div><script>
@@ -2024,7 +2063,7 @@ candleSeries.setData(cAll.concat(wsTail));chart.timeScale().fitContent();
 const elO=document.getElementById('oh-o'),elH=document.getElementById('oh-h'),elL=document.getElementById('oh-l'),elC=document.getElementById('oh-c'),elTime=document.getElementById('top-time'),elM5=document.getElementById('lg-m5'),elM9=document.getElementById('lg-m9'),elM20=document.getElementById('lg-m20');
 const elHud=document.getElementById('live-hud'),elPnl=document.getElementById('pnl-val'),elPnlBox=document.getElementById('pnl-box'),elStage=document.getElementById('stage-pill'),elProg=document.getElementById('prog-fill');
 const elOverlay=document.getElementById('result-overlay'),elArcPath=document.getElementById('arc-path'),elArcHead=document.getElementById('arc-head'),elExitGuide=document.getElementById('exit-guide'),elEntryGuide=document.getElementById('entry-guide'),elDotEntry=document.getElementById('dot-entry'),elDotExit=document.getElementById('dot-exit'),elCoExit=document.getElementById('callout-exit'),elCoEntry=document.getElementById('callout-entry'),elCaretExit=document.getElementById('caret-exit'),elCaretEntry=document.getElementById('caret-entry');
-const elCleanCard=document.getElementById('clean-card'),elSubCard=document.getElementById('sub-card'),elSubStep=document.getElementById('sub-step'),elSubL1=document.getElementById('sub-l1'),elSubL2=document.getElementById('sub-l2');
+const elCleanCard=document.getElementById('clean-card'),elSubCard=document.getElementById('sub-card'),elSubStep=document.getElementById('sub-step'),elSubL1=document.getElementById('sub-l1'),elSubL2=document.getElementById('sub-l2'),elSubJp=document.getElementById('sub-jp');
 let arcTotalLen=1,geometryReady=false,showExitGuide=false,showEntryGuide=false;
 
 function setupResultOverlayGeometry(){{
@@ -2070,8 +2109,12 @@ function setResultOverlayVisual(op,ap,sc){{
   elEntryGuide.setAttribute('opacity',(showEntryGuide&&ba>0.5)?'0.80':'0');elExitGuide.setAttribute('opacity',(showExitGuide&&er>0.5)?'0.80':'0');
 }}
 window.__setBottomMode=function(mode,subIdx){{
-  if(mode==='sub'&&subMeta.length>0){{elCleanCard.style.display='none';elSubCard.style.display='flex';const seg=subMeta[Math.max(0,Math.min(subMeta.length-1,subIdx||0))];elSubStep.textContent=seg.step;elSubL1.textContent=seg.l1;elSubL2.textContent=seg.l2;elSubL2.style.color=(seg.tag==='PROFIT')?'#00e676':'#ffd166';}}
-  else{{elSubCard.style.display='none';elCleanCard.style.display='flex';}}
+  if(mode==='sub'&&subMeta.length>0){{
+    elCleanCard.style.display='none';elSubCard.style.display='flex';
+    const seg=subMeta[Math.max(0,Math.min(subMeta.length-1,subIdx||0))];
+    elSubStep.textContent=seg.step;elSubL1.textContent=seg.l1;elSubL2.textContent=seg.l2;elSubJp.textContent=seg.jp||'';
+    elSubL2.style.color=(seg.tag==='PROFIT')?'#00e676':'#ffd166';
+  }} else {{elSubCard.style.display='none';elCleanCard.style.display='flex';}}
 }};
 const THUMB_END={thumb_end},PLAY_START={play_start},PLAY_END={play_end},postSteps=Math.max(1,exitIdx-entryIdx);
 window.__renderFrame=function(f){{
@@ -2215,6 +2258,10 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{setupResultOverlayGeometry
                 else:
                     voiced_error = f"음성 합성 ffmpeg 오류: {(res_v.stderr or '')[:180]}"
 
+            print(
+                f"[익절 리플레이 영상 완료] {symbol} ({tf_label}, {len(df_win)}봉 · {VIDEO_W}x{VIDEO_H} CRF15) | "
+                f"한/일자막 · JP음성={'OK' if voiced_bytes else 'FAIL'} ({voiced_frames / in_fps:.1f}초)"
+            )
             return {
                 "clean": clean_bytes, "voiced": voiced_bytes,
                 "width": VIDEO_W, "height": VIDEO_H,
