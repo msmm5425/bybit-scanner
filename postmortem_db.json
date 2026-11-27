@@ -55,10 +55,10 @@
       "btc_1h_pct": 0.0,
       "kst_block": "09-12",
       "cause": "+5.3% 반등 후 차익 매물 출회",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "TOXIC_BREAKOUT",
+      "autopsy_post_high_pct": -5.5,
+      "autopsy_post_low_pct": -7.1
     },
     {
       "id": "ZROUSDT_1795763489",
@@ -654,6 +654,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795801399,
+  "updated_at": 1795808898,
   "engine_ver": "v3"
 }
