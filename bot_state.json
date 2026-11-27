@@ -2636,6 +2636,51 @@
       "tp3_at": 0,
       "sl_at": 0,
       "expired_at": 0
+    },
+    "LINKUSDT": {
+      "created_at": 1795766841,
+      "last_checked_ts": 1795766841,
+      "track_type": "TRACK_D",
+      "is_long_term": true,
+      "score": 88,
+      "entry_price": 9.594,
+      "swing_high_line": 12.008,
+      "entry_low": 9.517248,
+      "entry_high": 9.64197,
+      "initial_stop_price": 7.6752,
+      "stop_price": 7.6752,
+      "sl_pct": 20,
+      "tps": [
+        13.04784,
+        16.031574,
+        21.999042
+      ],
+      "tp_pcts": [
+        36.0,
+        67.1,
+        129.3
+      ],
+      "vol_mult": 1.0,
+      "rsi6_15m": 51.2,
+      "oi_m": 23.2,
+      "oi_ratio": 100.1,
+      "turnover_m": 23.2,
+      "change_24h": 4.98,
+      "funding_pct": 0.0078,
+      "btc_1h_pct": 0.43,
+      "reasons": [
+        "장기 전략: D1 · 스텔스 OI·OBV 선행 매집",
+        "10일 저항선 압착 중 4H OBV 최고치 선행 돌파 + PPO(+1.86%) 상방",
+        "스텔스 OI 23.2M(비중 100%) · 최근 2일 매수 거래량 우위"
+      ],
+      "max_high_price": 9.594,
+      "peak_ts_ms": 1795766841000,
+      "max_favorable_pct": 0.0,
+      "tp2_armed_ts_ms": 0,
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0,
+      "expired_at": 0
     }
   },
   "alert_history": {
@@ -2657,7 +2702,8 @@
     "HYPERUSDT": 1795757717,
     "ZROUSDT": 1795763489,
     "WUSDT": 1795765834,
-    "MOVEUSDT": 1795766841
+    "MOVEUSDT": 1795766841,
+    "LINKUSDT": 1795766841
   },
   "sl_history": {
     "BREVUSDT_1795304748": {
@@ -17955,6 +18001,56 @@
       "oi_ratio": 7.6,
       "funding_pct": -0.1678,
       "change_24h": -6.33,
+      "btc_1h_pct": 0.43,
+      "hold_minutes": 0,
+      "tp2_armed_ts_ms": 0,
+      "tp3_armed_ts_ms": 0,
+      "tp3_at": 0,
+      "sl_at": 0,
+      "expired_at": 0,
+      "last_checked_ts": 1795766841,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "tp3_hit": false,
+      "tp1_alerted": false,
+      "tp2_alerted": false,
+      "tp3_alerted": false,
+      "tp3_completed": false,
+      "trailing_closed": false,
+      "sl_alerted": false,
+      "expired_closed": false,
+      "closed_alerted": false
+    },
+    "LINKUSDT_1795766841": {
+      "symbol": "LINKUSDT",
+      "created_at": 1795766841,
+      "track_type": "TRACK_D",
+      "is_long_term": true,
+      "score": 88,
+      "entry_price": 9.594,
+      "initial_stop_price": 7.6752,
+      "stop_price": 7.6752,
+      "sl_pct": 20.0,
+      "exit_price": 0.0,
+      "tps": [
+        13.04784,
+        16.031574,
+        21.999042
+      ],
+      "tp_pcts": [
+        36.0,
+        67.1,
+        129.3
+      ],
+      "max_high_price": 9.594,
+      "max_favorable_pct": 0.0,
+      "realized_weighted_pct": 0.0,
+      "vol_mult": 1.0,
+      "rsi6_15m": 51.2,
+      "oi_m": 23.2,
+      "oi_ratio": 100.1,
+      "funding_pct": 0.0078,
+      "change_24h": 4.98,
       "btc_1h_pct": 0.43,
       "hold_minutes": 0,
       "tp2_armed_ts_ms": 0,
