@@ -3,7 +3,7 @@ name: Bybit Multi-Timeframe Scanner
 on:
   schedule:
     # 24시간 4시간 간격 비혼잡 6슬롯 (UTC 00:17, 04:17, 08:17, 12:17, 16:17, 20:17)
-    # KST 기준: 01:17, 05:17, 09:17, 13:17, 17:17, 21:17 (수동 재시작 시에도 4시간 내 자동 바통 터치)
+    # KST 기준: 01:17, 05:17, 09:17, 13:17, 17:17, 21:17
     - cron: '17 0,4,8,12,16,20 * * *'
   workflow_dispatch:
     inputs:
@@ -14,8 +14,8 @@ on:
         type: boolean
 
 concurrency:
-  group: bybit-scanner-main
-  # 실행 중인 5시간 15분 루프를 절대 강제 종료하지 않고, 다음 슬롯이 대기열(Queued)에서 즉시 이어받음
+  # test_video 수동 테스트는 별도 그룹으로 분리해 정기 릴레이 스캔과 상호 간섭·대기 차단
+  group: ${{ (github.event_name == 'workflow_dispatch' && (inputs.test_video == true || github.event.inputs.test_video == 'true')) && 'bybit-scanner-video-test' || 'bybit-scanner-main' }}
   cancel-in-progress: false
 
 permissions:
@@ -24,7 +24,7 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 345
+    timeout-minutes: 300
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
