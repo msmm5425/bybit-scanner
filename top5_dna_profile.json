@@ -2,6 +2,20 @@
   "samples": [
     {
       "dna_version": "v4_clean_launchpad",
+      "symbol": "INITUSDT",
+      "timestamp": 1795739664,
+      "change_24h": 63.0,
+      "caught_by_scanner": false,
+      "caught_track": "MISSED",
+      "pre_bb_width": 2.99,
+      "pre_vol_dry_ratio": 0.93,
+      "launch_vol_mult": 6.05,
+      "pre_rsi6": 62.4,
+      "pre_1h_ma20_dist": -0.59,
+      "pattern_tag": "초응축 돌파 폭발"
+    },
+    {
+      "dna_version": "v4_clean_launchpad",
       "symbol": "BLURUSDT",
       "timestamp": 1795680082,
       "change_24h": 23.99,
@@ -18,9 +32,9 @@
   "active_dna_formula": {
     "enabled": false,
     "dna_version": "v4_clean_launchpad",
-    "sample_count": 1,
-    "missed_count": 1,
-    "updated_at": 1795680057
+    "sample_count": 2,
+    "missed_count": 2,
+    "updated_at": 1795739638
   },
-  "updated_at": 1795680057
+  "updated_at": 1795739638
 }
