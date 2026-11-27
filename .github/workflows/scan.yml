@@ -8,14 +8,19 @@ on:
   workflow_dispatch:
     inputs:
       test_video:
-        description: '최근 익절 종목 세로형 리플레이 영상 2종(클린+자막/일본어음성) 즉시 테스트 발송'
+        description: '최근 익절 종목 세로형 리플레이 영상(한글자막·일본어음성 1개) 즉시 테스트 발송'
+        required: false
+        default: false
+        type: boolean
+      test_chart:
+        description: '최근 포착 종목 세로형(3:4) 포착 차트 이미지 즉시 테스트 발송'
         required: false
         default: false
         type: boolean
 
 concurrency:
-  # test_video 수동 테스트는 별도 그룹으로 분리해 정기 릴레이 스캔과 상호 간섭·대기 차단
-  group: ${{ (github.event_name == 'workflow_dispatch' && (inputs.test_video == true || github.event.inputs.test_video == 'true')) && 'bybit-scanner-video-test' || 'bybit-scanner-main' }}
+  # 영상/차트 수동 테스트는 별도 그룹으로 분리해 정기 릴레이 스캔과 상호 간섭·대기 차단
+  group: ${{ (github.event_name == 'workflow_dispatch' && (inputs.test_video == true || inputs.test_chart == true || github.event.inputs.test_video == 'true' || github.event.inputs.test_chart == 'true')) && 'bybit-scanner-media-test' || 'bybit-scanner-main' }}
   cancel-in-progress: false
 
 permissions:
@@ -88,6 +93,16 @@ jobs:
             fc-list :lang=ko 2>/dev/null | grep -qi noto || sudo apt-get install -y -qq fonts-noto-cjk
           fi
 
+      - name: Run Signal Chart Test (if selected)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_chart == true }}
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          BYBIT_PROXY_URL: ${{ secrets.BYBIT_PROXY_URL }}
+        run: python scanner.py --test-chart
+
       - name: Run Replay Video Test (if selected)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_video == true }}
         env:
@@ -99,7 +114,7 @@ jobs:
         run: python scanner.py --test-video
 
       - name: Run Scanner Loop
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_video == true) }}
+        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.test_video == true || inputs.test_chart == true)) }}
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
