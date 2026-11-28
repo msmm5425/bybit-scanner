@@ -1,4 +1,4 @@
-import os, sys, html, json, time, copy, tempfile, subprocess, requests
+import os, sys, re, json, time, copy, tempfile, subprocess, requests
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -41,28 +41,17 @@ from notifier import (
 )
 
 try:
-    from notifier import build_x_hook_pair
+    from notifier import build_x_hook_triplet
 except Exception:
-    def build_x_hook_pair(res):
-        return build_x_hook_line(res), ""
+    try:
+        from notifier import build_x_hook_pair
 
-try:
-    from notifier import build_x_hook_trio
-except Exception:
-    def build_x_hook_trio(res):
-        ko, jp = build_x_hook_pair(res)
-        return ko, jp, ""
-
-try:
-    from notifier import (
-        build_rumble_post_message,
-        build_rumble_profit_post_message,
-        build_rumble_upload_reply_markup,
-    )
-except Exception:
-    build_rumble_post_message = None
-    build_rumble_profit_post_message = None
-    build_rumble_upload_reply_markup = None
+        def build_x_hook_triplet(res):
+            ko, jp = build_x_hook_pair(res)
+            return ko, jp, ""
+    except Exception:
+        def build_x_hook_triplet(res):
+            return build_x_hook_line(res), "", ""
 
 try:
     from notifier import (
@@ -85,6 +74,19 @@ try:
     from notifier import generate_signal_chart_video_bytes
 except Exception:
     generate_signal_chart_video_bytes = None
+
+try:
+    from notifier import (
+        build_copyable_x_post_html,
+        build_x_profit_post_message,
+        build_rumble_signal_post_message,
+        build_rumble_profit_post_message,
+    )
+except Exception:
+    build_copyable_x_post_html = None
+    build_x_profit_post_message = None
+    build_rumble_signal_post_message = None
+    build_rumble_profit_post_message = None
 
 try:
     import postmortem
@@ -128,7 +130,7 @@ ALL_LOCK_FLAGS = (
 
 
 def send_telegram_reliable(text, reply_markup=None, parse_mode=None):
-    """텔레그램 메시지 재시도 전송 (429 레이트 리밋 대기 · 선택적 HTML parse_mode · 오류 진단 로그)"""
+    """텔레그램 메시지 재시도 전송 (429 레이트 리밋 대기 + HTML 1탭 복사 지원 + 오류 시 평문 폴백)"""
     if not text:
         return False
     token = (getattr(cfg, "TELEGRAM_BOT_TOKEN", "") or os.getenv("TELEGRAM_TOKEN", "") or os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
@@ -137,13 +139,15 @@ def send_telegram_reliable(text, reply_markup=None, parse_mode=None):
         return send_telegram_single(text, reply_markup=reply_markup)
 
     url = clean_url(f"{SCHEME}api.telegram.org/bot{token}/sendMessage")
-    payload = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
-    if parse_mode:
-        payload["parse_mode"] = parse_mode
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
+    cur_text = str(text)
+    cur_pm = parse_mode
 
     for attempt in range(3):
+        payload = {"chat_id": chat_id, "text": cur_text, "disable_web_page_preview": True}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        if cur_pm:
+            payload["parse_mode"] = cur_pm
         try:
             r = requests.post(url, json=payload, timeout=12)
             if r.status_code == 200:
@@ -154,23 +158,13 @@ def send_telegram_reliable(text, reply_markup=None, parse_mode=None):
                 time.sleep(wait_s + 0.5)
                 continue
             print(f"[Telegram sendMessage 오류 {attempt + 1}/3] HTTP {r.status_code}: {r.text[:160]}")
+            if r.status_code == 400 and cur_pm:
+                cur_pm = None
+                cur_text = re.sub(r"</?(?:b|i|code|pre)>", "", cur_text)
         except Exception as e:
             print(f"[Telegram sendMessage 예외 {attempt + 1}/3] {e}")
         time.sleep(1.0)
     return False
-
-
-def _send_rumble_copy_message(raw_text, header_label="🎬 [Rumble 영문 양식 · 아래 박스 탭하여 1초 복사]"):
-    """럼블 업로드용 영문 본문을 텔레그램 1탭 복사(<pre>) 박스 + 업로드 바로가기 버튼으로 전송"""
-    if not raw_text:
-        return False
-    escaped = html.escape(str(raw_text))
-    html_body = f"<b>{html.escape(header_label)}</b>\n<pre>{escaped}</pre>"
-    markup = build_rumble_upload_reply_markup() if callable(build_rumble_upload_reply_markup) else None
-    ok = send_telegram_reliable(html_body, reply_markup=markup, parse_mode="HTML")
-    if not ok:
-        return send_telegram_reliable(f"{header_label}\n\n{raw_text}", reply_markup=markup)
-    return True
 
 
 def _read_json(path):
@@ -674,8 +668,6 @@ def _fetch_post_candles_no_gap(symbol, interval, created_ms, last_checked_ts, no
 def evaluate_single_tracked_1m(symbol, t_item, now_ts, tp_params):
     """
     [기존 전량 홀딩·고정 손절 철학 유지 + 15m/1H 가격 교차검증 + TP2/TP3 전수 확정봉 순회]
-    - 단기(SL -6% · 15m/1m 기준, 방어선 15m 확정봉 전수 순회)
-    - 장기(Track D: SL -20% · 1H 확정봉 단독 판정, 방어선 1H 확정봉 전수 순회)
     """
     if t_item.get("tp3_completed") or t_item.get("sl_alerted") or t_item.get("expired_closed") or t_item.get("closed_alerted"):
         return None
@@ -1025,114 +1017,100 @@ def _send_video_compat(video_bytes, caption_text, filename, width=1080, height=1
         )
 
 
-def _generate_signal_video_compat(res, lang="jp"):
-    """구/신 notifier.py generate_signal_chart_video_bytes(res, lang=...) 시그니처 호환 래퍼"""
-    if not callable(generate_signal_chart_video_bytes):
-        return None
-    try:
-        return generate_signal_chart_video_bytes(res, lang=lang)
-    except TypeError:
-        if lang == "en":
-            return None
-        return generate_signal_chart_video_bytes(res)
-
-
-def _generate_profit_bundle_compat(vp, include_clean=False, lang="jp"):
-    """구/신 notifier.py generate_profit_replay_videos_bundle(..., lang=...) 시그니처 호환 래퍼"""
-    if not callable(generate_profit_replay_videos_bundle):
-        return None
-    try:
-        return generate_profit_replay_videos_bundle(vp, include_clean=include_clean, lang=lang)
-    except TypeError:
-        if lang == "en":
-            return None
-        try:
-            return generate_profit_replay_videos_bundle(vp, include_clean=include_clean)
-        except TypeError:
-            return generate_profit_replay_videos_bundle(vp)
-
-
-def _send_signal_notifications(res, now_str):
+def _send_signal_media_and_forms(res, is_test=False):
     """
-    신규 타점 포착 알림 발송:
-    1) 상세 텔레그램 브리핑 텍스트
-    2) X용 세로형 풀HD 포착 차트 영상 (한/일자막 · 일본어음성) + X 포스팅 자동 입력 버튼
-       (영상 제작 일시 실패 시 기존 초고화질 정적 PNG 차트로 안전 폴백)
-    3) 럼블(Rumble) 전용 100% 영문 포착 차트 영상 (영문차트 · 영문자막 · 영어음성)
-    4) 럼블(Rumble) 1탭 복사용 영문 양식(<pre>) + [🎬 Rumble 업로드 바로가기] 버튼
+    포착 영상 & 복사 양식 통합 발송 (실전 포착 / --test-chart 공용):
+    1) X용 포착 영상 (한/일 자막 · 일본어 음성) + X 자동 입력 버튼
+    2) X 포스팅 1탭 복사 양식 알림
+    3) 럼블 전용 포착 영상 (100% 영문 차트 · 영문 자막 · 영어 음성)
+    4) 럼블 업로드 1탭 복사 양식 알림 (Title · Description · Tags)
     """
-    send_telegram_reliable(build_briefing_message(res, now_str))
     x_msg = build_x_post_message(res)
-    x_markup = build_x_intent_reply_markup(x_msg)
+    markup = build_x_intent_reply_markup(x_msg)
     base = res.get("base_coin") or res.get("base") or ""
     sym = res.get("symbol", "")
 
-    # [A] X용 (한/일 자막 · 일본어 음성) 포착 차트 영상 + X 버튼
-    x_vid_sent = False
+    # 1) X용 포착 차트 영상 (한/일 자막 · 일본어 음성)
+    x_sent = False
     if callable(generate_signal_chart_video_bytes) and callable(send_telegram_video_with_caption):
         try:
-            vid_jp = _generate_signal_video_compat(res, lang="jp")
-            v_bytes = vid_jp.get("video") if isinstance(vid_jp, dict) else vid_jp
+            try:
+                vid_res = generate_signal_chart_video_bytes(res, lang="kr_jp")
+            except TypeError:
+                vid_res = generate_signal_chart_video_bytes(res)
+            v_bytes = vid_res.get("video") if isinstance(vid_res, dict) else vid_res
             if v_bytes:
-                w_px = int(to_float(vid_jp.get("width"), 1080)) if isinstance(vid_jp, dict) else 1080
-                h_px = int(to_float(vid_jp.get("height"), 1440)) if isinstance(vid_jp, dict) else 1440
-                dur_s = int(round(to_float(vid_jp.get("duration"), 18))) if isinstance(vid_jp, dict) else 18
-                x_vid_sent = _send_video_compat(
+                w_px = int(to_float(vid_res.get("width"), 1080)) if isinstance(vid_res, dict) else 1080
+                h_px = int(to_float(vid_res.get("height"), 1440)) if isinstance(vid_res, dict) else 1440
+                dur_s = int(round(to_float(vid_res.get("duration"), 18))) if isinstance(vid_res, dict) else 18
+                cap_x = f"🧪 [X용 포착 차트 영상 테스트] ${base} ({sym})" if is_test else ""
+                x_sent = _send_video_compat(
                     v_bytes,
-                    caption_text="",
-                    filename=f"{base.lower()}_signal_x_jp.mp4",
+                    caption_text=cap_x,
+                    filename=f"{base.lower()}_signal_x_krjp.mp4",
                     width=w_px,
                     height=h_px,
                     duration=dur_s,
-                    reply_markup=x_markup,
+                    reply_markup=markup,
                 )
         except Exception as e:
             print(f"[X 포착 차트 영상 예외 → PNG 폴백] {sym}: {e}")
 
-    if not x_vid_sent:
+    if not x_sent:
         chart_bytes = generate_signal_chart_bytes(res)
-        if not (chart_bytes and send_telegram_photo_with_caption(chart_bytes, caption_text="", reply_markup=x_markup)):
-            send_telegram_reliable(f"📲 ${base} ({sym}) X 포스팅 바로가기", reply_markup=x_markup)
+        cap_fb = f"🧪 [세로형 포착 차트 테스트] ${base} ({sym})" if is_test else ""
+        if not (chart_bytes and send_telegram_photo_with_caption(chart_bytes, caption_text=cap_fb, reply_markup=markup)):
+            send_telegram_reliable(f"📲 ${base} ({sym}) X 포스팅 바로가기", reply_markup=markup)
 
-    # [B] 럼블(Rumble) 전용 100% 영문 포착 차트 영상
+    # 2) X 포스팅 1탭 복사 양식 알림
+    if callable(build_copyable_x_post_html):
+        send_telegram_reliable(
+            build_copyable_x_post_html(x_msg, f"📋 [X 포스팅 복사 양식 · 포착] ${base}"),
+            parse_mode="HTML",
+        )
+
+    # 3) 럼블 전용 100% 영문 포착 차트 영상 (영어 자막 · 영어 음성)
     if callable(generate_signal_chart_video_bytes) and callable(send_telegram_video_with_caption):
         try:
-            vid_en = _generate_signal_video_compat(res, lang="en")
-            v_en_bytes = vid_en.get("video") if isinstance(vid_en, dict) else vid_en
-            if v_en_bytes:
-                w_px = int(to_float(vid_en.get("width"), 1080)) if isinstance(vid_en, dict) else 1080
-                h_px = int(to_float(vid_en.get("height"), 1440)) if isinstance(vid_en, dict) else 1440
-                dur_s = int(round(to_float(vid_en.get("duration"), 18))) if isinstance(vid_en, dict) else 18
+            en_res = generate_signal_chart_video_bytes(res, lang="en")
+            en_bytes = en_res.get("video") if isinstance(en_res, dict) else None
+            if en_bytes:
+                w_en = int(to_float(en_res.get("width"), 1080))
+                h_en = int(to_float(en_res.get("height"), 1440))
+                dur_en = int(round(to_float(en_res.get("duration"), 18)))
+                cap_en = (
+                    f"🇺🇸 [Rumble 전용 영문 포착 영상 테스트] ${base} ({sym})"
+                    if is_test
+                    else f"🇺🇸 [Rumble 전용 영문 포착 영상] ${base} ({sym})"
+                )
                 _send_video_compat(
-                    v_en_bytes,
-                    caption_text=f"🎬 [Rumble EN] ${base} ({sym}) Bullish Signal Video",
+                    en_bytes,
+                    caption_text=cap_en,
                     filename=f"{base.lower()}_signal_rumble_en.mp4",
-                    width=w_px,
-                    height=h_px,
-                    duration=dur_s,
+                    width=w_en,
+                    height=h_en,
+                    duration=dur_en,
                     reply_markup=None,
                 )
+                # 4) 럼블 업로드 1탭 복사 양식 (Title · Description · Tags)
+                if callable(build_rumble_signal_post_message):
+                    send_telegram_reliable(build_rumble_signal_post_message(res), parse_mode="HTML")
+        except TypeError:
+            pass
         except Exception as e:
             print(f"[Rumble 영문 포착 영상 예외] {sym}: {e}")
 
-    # [C] 럼블(Rumble) 1탭 복사용 영문 양식 알림 + 업로드 바로가기 버튼
-    if callable(build_rumble_post_message):
-        try:
-            rumble_txt = build_rumble_post_message(res)
-            _send_rumble_copy_message(
-                rumble_txt,
-                header_label=f"🎬 [Rumble 영문 포착 양식 · ${base} · 박스 탭하여 복사]",
-            )
-        except Exception as e:
-            print(f"[Rumble 영문 양식 발송 예외] {sym}: {e}")
+
+def _send_signal_notifications(res, now_str):
+    send_telegram_reliable(build_briefing_message(res, now_str))
+    _send_signal_media_and_forms(res, is_test=False)
 
 
 def _send_profit_replay_video(vp, notify_error=True):
     """
-    전량 수익 마감 완료 시:
-    1) X용 세로형 풀HD 익절 리플레이 영상 (한/일자막 · 일본어음성)
-    2) 럼블(Rumble) 전용 100% 영문 익절 리플레이 영상 (영문차트 · 영문자막 · 영어음성)
-    3) 럼블(Rumble) 1탭 복사용 영문 익절 양식(<pre>) + [🎬 Rumble 업로드 바로가기] 버튼
+    전량 수익 마감 완료 시 X용 + 럼블 영문 전용 리플레이 영상 및 1탭 복사 양식 발송:
+    1) X용 익절 리플레이 영상 (한/일 자막 · 일본어 음성) + X 익절 1탭 복사 양식
+    2) 럼블 전용 영문 익절 리플레이 영상 (100% 영문 차트 · 영문 자막 · 영어 음성) + 럼블 1탭 복사 양식
     """
     if not vp:
         return False
@@ -1150,69 +1128,93 @@ def _send_profit_replay_video(vp, notify_error=True):
 
     sent_any = False
     try:
-        # [A] X용 (한/일 자막 · 일본어 음성) 익절 리플레이 영상
+        # [1] X용 익절 리플레이 영상 (한/일 자막 · 일본어 음성)
         if callable(generate_profit_replay_videos_bundle):
-            bundle_jp = _generate_profit_bundle_compat(vp, include_clean=False, lang="jp")
-            if isinstance(bundle_jp, dict) and (bundle_jp.get("voiced") or bundle_jp.get("clean")):
-                w_px = int(to_float(bundle_jp.get("width"), 1080))
-                h_px = int(to_float(bundle_jp.get("height"), 1440))
-                if bundle_jp.get("voiced"):
-                    dur_v = int(round(to_float(bundle_jp.get("voiced_duration"), 30)))
-                    cap_v = f"🎬 ${base} 최종 익절 리플레이 [X용 한/일] | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
-                    if _send_video_compat(bundle_jp["voiced"], caption_text=cap_v, filename=f"{base.lower()}_replay_x_jp.mp4", width=w_px, height=h_px, duration=dur_v):
-                        sent_any = True
-                elif bundle_jp.get("clean"):
-                    dur_c = int(round(to_float(bundle_jp.get("clean_duration"), 30)))
-                    cap_c = f"🎬 ${base} 최종 익절 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
-                    if _send_video_compat(bundle_jp["clean"], caption_text=cap_c, filename=f"{base.lower()}_replay_clean.mp4", width=w_px, height=h_px, duration=dur_c):
-                        sent_any = True
-                    if notify_error and bundle_jp.get("voiced_error"):
-                        send_telegram_reliable(f"⚠️ [${base} X용 음성 합성 폴백 안내]: {bundle_jp.get('voiced_error')}")
-            elif notify_error:
-                err_msg = get_last_video_error() if callable(get_last_video_error) else "X용 리플레이 영상 생성 실패"
-                send_telegram_reliable(f"⚠️ [${base} X용 리플레이 영상 제작 실패 진단]: {err_msg}")
-
-            # [B] 럼블(Rumble) 전용 100% 영문 익절 리플레이 영상
             try:
-                bundle_en = _generate_profit_bundle_compat(vp, include_clean=False, lang="en")
-                if isinstance(bundle_en, dict) and (bundle_en.get("voiced") or bundle_en.get("clean")):
-                    w_px = int(to_float(bundle_en.get("width"), 1080))
-                    h_px = int(to_float(bundle_en.get("height"), 1440))
-                    en_bytes = bundle_en.get("voiced") or bundle_en.get("clean")
-                    dur_en = int(round(to_float(bundle_en.get("voiced_duration") or bundle_en.get("clean_duration"), 30)))
-                    cap_en = f"🎬 [Rumble EN] ${base} Profit Replay | +{tot_pct:.2f}% (Peak +{max_fav:.1f}%)"
-                    if _send_video_compat(en_bytes, caption_text=cap_en, filename=f"{base.lower()}_replay_rumble_en.mp4", width=w_px, height=h_px, duration=dur_en):
-                        sent_any = True
-                elif notify_error and bundle_en is not None:
-                    err_en = (bundle_en.get("voiced_error") if isinstance(bundle_en, dict) else "") or (get_last_video_error() if callable(get_last_video_error) else "영문 영상 생성 실패")
-                    send_telegram_reliable(f"⚠️ [${base} Rumble 영문 익절 영상 진단]: {err_en}")
-            except Exception as en_e:
-                print(f"[Rumble 영문 익절 영상 예외] {sym}: {en_e}")
-
-            # [C] 럼블(Rumble) 1탭 복사용 영문 익절 양식 알림
-            if callable(build_rumble_profit_post_message):
+                bundle = generate_profit_replay_videos_bundle(vp, include_clean=False, lang="kr_jp")
+            except TypeError:
                 try:
-                    rumble_profit_txt = build_rumble_profit_post_message(vp)
-                    _send_rumble_copy_message(
-                        rumble_profit_txt,
-                        header_label=f"🎬 [Rumble 영문 익절 양식 · ${base} · 박스 탭하여 복사]",
+                    bundle = generate_profit_replay_videos_bundle(vp, include_clean=False)
+                except TypeError:
+                    bundle = generate_profit_replay_videos_bundle(vp)
+
+            if isinstance(bundle, dict) and (bundle.get("voiced") or bundle.get("clean")):
+                w_px = int(to_float(bundle.get("width"), 1080))
+                h_px = int(to_float(bundle.get("height"), 1440))
+                if bundle.get("voiced"):
+                    dur_v = int(round(to_float(bundle.get("voiced_duration"), 30)))
+                    cap_v = f"🎬 ${base} 최종 익절 리플레이 [X용 · 한/일] | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+                    ok_v = _send_video_compat(
+                        bundle["voiced"],
+                        caption_text=cap_v,
+                        filename=f"{base.lower()}_replay_x_krjp.mp4",
+                        width=w_px,
+                        height=h_px,
+                        duration=dur_v,
                     )
-                except Exception as rp_e:
-                    print(f"[Rumble 영문 익절 양식 예외] {sym}: {rp_e}")
-
-            return sent_any
-
-        # 구버전 notifier.py 호환 폴백
-        if not callable(generate_profit_replay_video_bytes):
-            return False
-        video_bytes = generate_profit_replay_video_bytes(vp)
-        if not video_bytes:
-            err_msg = get_last_video_error() if callable(get_last_video_error) else "영상 생성 결과 비어 있음"
-            if notify_error:
+                    if ok_v:
+                        sent_any = True
+                    elif notify_error:
+                        err_msg = get_last_video_error() if callable(get_last_video_error) else "X 리플레이 영상 전송 실패"
+                        send_telegram_reliable(f"⚠️ [${base} X 리플레이 영상 전송 실패]: {err_msg}")
+                elif bundle.get("clean"):
+                    dur_c = int(round(to_float(bundle.get("clean_duration"), 30)))
+                    cap_c = f"🎬 ${base} 최종 익절 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+                    if _send_video_compat(
+                        bundle["clean"],
+                        caption_text=cap_c,
+                        filename=f"{base.lower()}_replay_clean.mp4",
+                        width=w_px,
+                        height=h_px,
+                        duration=dur_c,
+                    ):
+                        sent_any = True
+            elif notify_error:
+                err_msg = get_last_video_error() if callable(get_last_video_error) else "X 리플레이 영상 생성 실패"
                 send_telegram_reliable(f"⚠️ [${base} 리플레이 영상 제작 실패 진단]: {err_msg}")
-            return False
-        caption = f"🎬 ${base} 최종 익절 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
-        return _send_video_compat(video_bytes, caption_text=caption, filename=f"{base.lower()}_profit_replay.mp4", width=1080, height=1440, duration=30)
+        elif callable(generate_profit_replay_video_bytes):
+            video_bytes = generate_profit_replay_video_bytes(vp)
+            if video_bytes:
+                cap = f"🎬 ${base} 최종 익절 리플레이 | 합산 +{tot_pct:.2f}% (최고 +{max_fav:.1f}%)"
+                if _send_video_compat(video_bytes, caption_text=cap, filename=f"{base.lower()}_profit_replay.mp4", width=1080, height=1440, duration=30):
+                    sent_any = True
+
+        # [2] X 익절 포스팅 1탭 복사 양식 알림
+        if callable(build_x_profit_post_message) and callable(build_copyable_x_post_html):
+            x_profit_txt = build_x_profit_post_message(vp)
+            send_telegram_reliable(
+                build_copyable_x_post_html(x_profit_txt, f"📋 [X 포스팅 복사 양식 · 익절] ${base}"),
+                parse_mode="HTML",
+            )
+
+        # [3] 럼블 전용 100% 영문 익절 리플레이 영상 (영어 자막 · 영어 음성)
+        if callable(generate_profit_replay_videos_bundle):
+            try:
+                en_bundle = generate_profit_replay_videos_bundle(vp, include_clean=False, lang="en")
+                if isinstance(en_bundle, dict) and (en_bundle.get("voiced") or en_bundle.get("clean")):
+                    w_en = int(to_float(en_bundle.get("width"), 1080))
+                    h_en = int(to_float(en_bundle.get("height"), 1440))
+                    en_bytes = en_bundle.get("voiced") or en_bundle.get("clean")
+                    dur_en = int(round(to_float(en_bundle.get("voiced_duration") or en_bundle.get("clean_duration"), 30)))
+                    cap_en = f"🇺🇸 [Rumble 전용 영문 익절 리플레이] ${base} | +{tot_pct:.2f}% (Peak +{max_fav:.1f}%)"
+                    if _send_video_compat(
+                        en_bytes,
+                        caption_text=cap_en,
+                        filename=f"{base.lower()}_replay_rumble_en.mp4",
+                        width=w_en,
+                        height=h_en,
+                        duration=dur_en,
+                    ):
+                        sent_any = True
+                        # [4] 럼블 익절 업로드 1탭 복사 양식 (Title · Description · Tags)
+                        if callable(build_rumble_profit_post_message):
+                            send_telegram_reliable(build_rumble_profit_post_message(vp), parse_mode="HTML")
+            except TypeError:
+                pass
+            except Exception as en_e:
+                print(f"[Rumble 영문 익절 리플레이 예외] {sym}: {en_e}")
+
+        return sent_any
     except Exception as e:
         print(f"[리플레이 영상 발송 예외] {sym}: {e}")
         if notify_error:
@@ -1221,7 +1223,7 @@ def _send_profit_replay_video(vp, notify_error=True):
 
 
 def run_latest_profit_video_test():
-    """[--test-video] 저장된 원장에서 가장 최근 수익 마감 종목으로 X용 + 럼블 영문 익절 영상 & 복사 양식 테스트 발송"""
+    """[--test-video] 최근 수익 마감 종목으로 X용 + 럼블 영문 전용 익절 영상 & 복사 양식 즉시 테스트 발송"""
     state = load_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
@@ -1298,7 +1300,7 @@ def run_latest_profit_video_test():
 
 
 def run_latest_signal_chart_test():
-    """[--test-chart] 가장 최근 포착 종목으로 X용 포착 영상 + 럼블 영문 포착 영상 + 럼블 복사 양식 테스트 발송"""
+    """[--test-chart] 최근 포착 종목으로 X용 + 럼블 영문 전용 포착 영상 & 복사 양식 즉시 테스트 발송"""
     state = load_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
@@ -1352,77 +1354,14 @@ def run_latest_signal_chart_test():
         "tp_pcts": tp_pcts,
         "reasons": target.get("reasons") or [],
     }
-    x_msg = build_x_post_message(res_mock)
-    x_markup = build_x_intent_reply_markup(x_msg)
-
     print(f"[포착 차트 영상 수동 테스트 시작] 대상: {sym} (점수 {res_mock['score']} · {'장기' if is_long else '단기'})")
-    if callable(generate_signal_chart_video_bytes) and callable(send_telegram_video_with_caption):
-        # 1) X용 (한/일) 포착 영상 + X 버튼
-        vid_jp = _generate_signal_video_compat(res_mock, lang="jp")
-        v_jp_bytes = vid_jp.get("video") if isinstance(vid_jp, dict) else vid_jp
-        if v_jp_bytes:
-            w_px = int(to_float(vid_jp.get("width"), 1080)) if isinstance(vid_jp, dict) else 1080
-            h_px = int(to_float(vid_jp.get("height"), 1440)) if isinstance(vid_jp, dict) else 1440
-            dur_s = int(round(to_float(vid_jp.get("duration"), 18))) if isinstance(vid_jp, dict) else 18
-            _send_video_compat(
-                v_jp_bytes,
-                caption_text=f"🧪 [포착 차트 영상 테스트 · X용] ${base} ({sym})",
-                filename=f"{base.lower()}_signal_x_jp.mp4",
-                width=w_px,
-                height=h_px,
-                duration=dur_s,
-                reply_markup=x_markup,
-            )
-        else:
-            err_msg = get_last_video_error() if callable(get_last_video_error) else "X용 포착 영상 생성 실패"
-            send_telegram_reliable(f"⚠️ [X용 포착 차트 영상 테스트 실패 진단]: {err_msg}")
-
-        # 2) 럼블 전용 100% 영문 포착 영상
-        vid_en = _generate_signal_video_compat(res_mock, lang="en")
-        v_en_bytes = vid_en.get("video") if isinstance(vid_en, dict) else vid_en
-        if v_en_bytes:
-            w_px = int(to_float(vid_en.get("width"), 1080)) if isinstance(vid_en, dict) else 1080
-            h_px = int(to_float(vid_en.get("height"), 1440)) if isinstance(vid_en, dict) else 1440
-            dur_s = int(round(to_float(vid_en.get("duration"), 18))) if isinstance(vid_en, dict) else 18
-            _send_video_compat(
-                v_en_bytes,
-                caption_text=f"🧪 [Rumble EN Signal Video Test] ${base} ({sym})",
-                filename=f"{base.lower()}_signal_rumble_en.mp4",
-                width=w_px,
-                height=h_px,
-                duration=dur_s,
-                reply_markup=None,
-            )
-        else:
-            err_en = get_last_video_error() if callable(get_last_video_error) else "Rumble 영문 포착 영상 미지원 또는 생성 실패"
-            send_telegram_reliable(f"⚠️ [Rumble 영문 포착 영상 테스트 진단]: {err_en}")
-
-        # 3) 럼블 1탭 복사용 영문 양식 알림
-        if callable(build_rumble_post_message):
-            _send_rumble_copy_message(
-                build_rumble_post_message(res_mock),
-                header_label=f"🧪 [Rumble 영문 포착 양식 테스트 · ${base} · 박스 탭하여 복사]",
-            )
-        print("[포착 차트 영상 수동 테스트 완료]")
-        return
-
-    chart_bytes = generate_signal_chart_bytes(res_mock)
-    if not chart_bytes:
-        send_telegram_reliable(f"⚠️ [포착 차트 테스트 실패] ${base} ({sym}) 차트 PNG 생성에 실패했습니다.")
-        return
-    ok = send_telegram_photo_with_caption(
-        chart_bytes,
-        caption_text=f"🧪 [세로형 포착 차트 테스트] ${base} ({sym})",
-        reply_markup=x_markup,
-    )
-    print(f"[포착 차트 수동 테스트 결과] {'성공' if ok else '실패'}")
+    _send_signal_media_and_forms(res_mock, is_test=True)
+    print(f"[포착 차트 영상 수동 테스트 완료] {sym}")
 
 
 def _git_sync_state():
     """
     [Git .py 롤백 차단 + 삭제 심볼 부활 방지]
-    - 병합 완료된 JSON에 _apply_state_cleanup() 재적용 → OS 임시 폴더 보관
-    - git reset --hard origin/main으로 최신 코드 100% 보존 → bot_state.json·postmortem_db.json만 커밋·푸시
     """
     is_ci = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
     if not is_ci:
@@ -1529,7 +1468,7 @@ def main(scan_long_term=True):
 
     _apply_state_cleanup(state, now_ts, rwa_blocked=rwa_blocked)
 
-    # [1단계] 기존 보유 포지션 감시 (Git 동기화 실패 시 알림 증발 방지 롤백 스냅샷 확보)
+    # [1단계] 기존 보유 포지션 감시
     active_syms = []
     for sym in list(tracked.keys()):
         t_item = tracked[sym]
@@ -1767,8 +1706,8 @@ def main(scan_long_term=True):
         new_ep_key = f"{sym}_{now_ts}"
         prev_ep_snap = copy.deepcopy(signal_episodes.get(new_ep_key))
 
-        # 한글·일본어·영문 3개국어 포착근거를 bot_state.json 원장에 영구 보존 → 포착·익절 영상(X/Rumble) 100% 연동
-        hook_ko, hook_jp, hook_en = build_x_hook_trio(res)
+        # 한/일/영 포착근거 3종을 bot_state.json에 영구 보관 → X·럼블 포착/익절 영상 100% 일치
+        hook_ko, hook_jp, hook_en = build_x_hook_triplet(res)
         res["x_hook_ko"] = hook_ko
         res["x_hook_jp"] = hook_jp
         res["x_hook_en"] = hook_en
@@ -1844,4 +1783,32 @@ def run_loop_mode(max_iterations=70, sleep_sec=285, max_budget_sec=16200):
 
         scan_lt = (i % 3 == 1)
         print(
-            f"=== [회차 {i}/{max_iterations} | 경과
+            f"=== [회차 {i}/{max_iterations} | 경과 {elapsed / 60.0:.1f}분 / {budget_min:.0f}분] "
+            f"5분 주기 스캔 시작 ({'단기+장기' if scan_lt else '단기전용'}) ==="
+        )
+        _git_sync_state()
+        try:
+            main(scan_long_term=scan_lt)
+        except Exception as e:
+            print(f"[스캔 루프 예외] {e}")
+        _git_sync_state()
+
+        if i < max_iterations:
+            rem_budget = max_budget_sec - (time.time() - loop_start)
+            max_wait_allowed = rem_budget - 45.0
+            if max_wait_allowed < 60.0:
+                print(f"[릴레이 정상 마무리] 잔여 시간 {rem_budget:.0f}초 — 대기 중인 다음 슬롯으로 바통 터치합니다.")
+                break
+            time.sleep(min(sleep_sec, max_wait_allowed))
+
+
+if __name__ == "__main__":
+    if "--test-chart" in sys.argv:
+        run_latest_signal_chart_test()
+    elif "--test-video" in sys.argv:
+        run_latest_profit_video_test()
+    elif "--loop" in sys.argv:
+        run_loop_mode()
+    else:
+        main(scan_long_term=True)
+# === END OF FILE ===
