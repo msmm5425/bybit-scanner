@@ -2477,57 +2477,6 @@
       "exit_price": 0.03887,
       "realized_weighted_pct": -7.67
     },
-    "ZROUSDT": {
-      "created_at": 1795763489,
-      "last_checked_ts": 1795790478,
-      "track_type": "TRACK_A",
-      "is_long_term": false,
-      "score": 89,
-      "entry_price": 1.1458,
-      "swing_high_line": 1.1692,
-      "entry_low": 1.142363,
-      "entry_high": 1.147519,
-      "initial_stop_price": 1.077052,
-      "stop_price": 1.077052,
-      "sl_pct": 6,
-      "tps": [
-        1.237464,
-        1.310795,
-        1.399022
-      ],
-      "tp_pcts": [
-        8.0,
-        14.4,
-        22.1
-      ],
-      "vol_mult": 4.58,
-      "rsi6_15m": 53.1,
-      "oi_m": 9.7,
-      "oi_ratio": 43.5,
-      "turnover_m": 22.2,
-      "change_24h": 6.56,
-      "funding_pct": 0.005,
-      "btc_1h_pct": 0.08,
-      "reasons": [
-        "박스권 초응축(2.5%) 상단 돌파 + 건전 양봉 4.6배",
-        "15m 매수 델타(CVD)·OBV 흡수 + PPO(+0.13%) 상방",
-        "⚠️ 1W·1D 상위 역배열 구간(단기 저항 주의)",
-        "OI 집중도 최상(44%)"
-      ],
-      "max_high_price": 1.1465,
-      "peak_ts_ms": 1795763520000,
-      "max_favorable_pct": 0.06,
-      "tp2_armed_ts_ms": 0,
-      "tp3_armed_ts_ms": 0,
-      "tp3_at": 0,
-      "sl_at": 1795790478,
-      "expired_at": 0,
-      "hold_minutes": 449,
-      "sl_alerted": true,
-      "closed_alerted": true,
-      "exit_price": 1.0727,
-      "realized_weighted_pct": -6.53
-    },
     "WUSDT": {
       "created_at": 1795765834,
       "last_checked_ts": 1795876554,
