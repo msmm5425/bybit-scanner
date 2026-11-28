@@ -77,14 +77,10 @@ except Exception:
 
 try:
     from notifier import (
-        build_copyable_x_post_html,
-        build_x_profit_post_message,
         build_rumble_signal_post_message,
         build_rumble_profit_post_message,
     )
 except Exception:
-    build_copyable_x_post_html = None
-    build_x_profit_post_message = None
     build_rumble_signal_post_message = None
     build_rumble_profit_post_message = None
 
@@ -1019,18 +1015,17 @@ def _send_video_compat(video_bytes, caption_text, filename, width=1080, height=1
 
 def _send_signal_media_and_forms(res, is_test=False):
     """
-    포착 영상 & 복사 양식 통합 발송 (실전 포착 / --test-chart 공용):
-    1) X용 포착 영상 (한/일 자막 · 일본어 음성) + X 자동 입력 버튼
-    2) X 포스팅 1탭 복사 양식 알림
-    3) 럼블 전용 포착 영상 (100% 영문 차트 · 영문 자막 · 영어 음성)
-    4) 럼블 업로드 1탭 복사 양식 알림 (Title · Description · Tags)
+    포착 영상 & 양식 통합 발송 (실전 포착 / --test-chart 공용):
+    1) X용 포착 영상 (한/일 자막 · 일본어 음성) + 기존 X 자동 입력 인라인 버튼
+    2) 럼블 전용 포착 영상 (100% 영문 차트 · 영문 자막 · 영어 음성)
+    3) 럼블 업로드 1탭 복사 양식 알림 (Title · Description[해시태그 포함])
     """
     x_msg = build_x_post_message(res)
     markup = build_x_intent_reply_markup(x_msg)
     base = res.get("base_coin") or res.get("base") or ""
     sym = res.get("symbol", "")
 
-    # 1) X용 포착 차트 영상 (한/일 자막 · 일본어 음성)
+    # 1) X용 포착 차트 영상 + 기존 X 자동 입력 버튼
     x_sent = False
     if callable(generate_signal_chart_video_bytes) and callable(send_telegram_video_with_caption):
         try:
@@ -1062,14 +1057,7 @@ def _send_signal_media_and_forms(res, is_test=False):
         if not (chart_bytes and send_telegram_photo_with_caption(chart_bytes, caption_text=cap_fb, reply_markup=markup)):
             send_telegram_reliable(f"📲 ${base} ({sym}) X 포스팅 바로가기", reply_markup=markup)
 
-    # 2) X 포스팅 1탭 복사 양식 알림
-    if callable(build_copyable_x_post_html):
-        send_telegram_reliable(
-            build_copyable_x_post_html(x_msg, f"📋 [X 포스팅 복사 양식 · 포착] ${base}"),
-            parse_mode="HTML",
-        )
-
-    # 3) 럼블 전용 100% 영문 포착 차트 영상 (영어 자막 · 영어 음성)
+    # 2) 럼블 전용 100% 영문 포착 차트 영상 + 럼블 1탭 복사 양식
     if callable(generate_signal_chart_video_bytes) and callable(send_telegram_video_with_caption):
         try:
             en_res = generate_signal_chart_video_bytes(res, lang="en")
@@ -1092,7 +1080,6 @@ def _send_signal_media_and_forms(res, is_test=False):
                     duration=dur_en,
                     reply_markup=None,
                 )
-                # 4) 럼블 업로드 1탭 복사 양식 (Title · Description · Tags)
                 if callable(build_rumble_signal_post_message):
                     send_telegram_reliable(build_rumble_signal_post_message(res), parse_mode="HTML")
         except TypeError:
@@ -1108,8 +1095,8 @@ def _send_signal_notifications(res, now_str):
 
 def _send_profit_replay_video(vp, notify_error=True):
     """
-    전량 수익 마감 완료 시 X용 + 럼블 영문 전용 리플레이 영상 및 1탭 복사 양식 발송:
-    1) X용 익절 리플레이 영상 (한/일 자막 · 일본어 음성) + X 익절 1탭 복사 양식
+    전량 수익 마감 완료 시:
+    1) X용 익절 리플레이 영상 (한/일 자막 · 일본어 음성 · 버튼 없음 원복)
     2) 럼블 전용 영문 익절 리플레이 영상 (100% 영문 차트 · 영문 자막 · 영어 음성) + 럼블 1탭 복사 양식
     """
     if not vp:
@@ -1128,7 +1115,7 @@ def _send_profit_replay_video(vp, notify_error=True):
 
     sent_any = False
     try:
-        # [1] X용 익절 리플레이 영상 (한/일 자막 · 일본어 음성)
+        # [1] X용 익절 리플레이 영상 (기존과 동일하게 영상 단독 발송)
         if callable(generate_profit_replay_videos_bundle):
             try:
                 bundle = generate_profit_replay_videos_bundle(vp, include_clean=False, lang="kr_jp")
@@ -1179,15 +1166,7 @@ def _send_profit_replay_video(vp, notify_error=True):
                 if _send_video_compat(video_bytes, caption_text=cap, filename=f"{base.lower()}_profit_replay.mp4", width=1080, height=1440, duration=30):
                     sent_any = True
 
-        # [2] X 익절 포스팅 1탭 복사 양식 알림
-        if callable(build_x_profit_post_message) and callable(build_copyable_x_post_html):
-            x_profit_txt = build_x_profit_post_message(vp)
-            send_telegram_reliable(
-                build_copyable_x_post_html(x_profit_txt, f"📋 [X 포스팅 복사 양식 · 익절] ${base}"),
-                parse_mode="HTML",
-            )
-
-        # [3] 럼블 전용 100% 영문 익절 리플레이 영상 (영어 자막 · 영어 음성)
+        # [2] 럼블 전용 100% 영문 익절 리플레이 영상 + 럼블 1탭 복사 양식
         if callable(generate_profit_replay_videos_bundle):
             try:
                 en_bundle = generate_profit_replay_videos_bundle(vp, include_clean=False, lang="en")
@@ -1206,7 +1185,6 @@ def _send_profit_replay_video(vp, notify_error=True):
                         duration=dur_en,
                     ):
                         sent_any = True
-                        # [4] 럼블 익절 업로드 1탭 복사 양식 (Title · Description · Tags)
                         if callable(build_rumble_profit_post_message):
                             send_telegram_reliable(build_rumble_profit_post_message(vp), parse_mode="HTML")
             except TypeError:
@@ -1223,7 +1201,7 @@ def _send_profit_replay_video(vp, notify_error=True):
 
 
 def run_latest_profit_video_test():
-    """[--test-video] 최근 수익 마감 종목으로 X용 + 럼블 영문 전용 익절 영상 & 복사 양식 즉시 테스트 발송"""
+    """[--test-video] 최근 수익 마감 종목으로 X용 + 럼블 영문 전용 익절 영상 & 럼블 복사 양식 테스트 발송"""
     state = load_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
@@ -1300,7 +1278,7 @@ def run_latest_profit_video_test():
 
 
 def run_latest_signal_chart_test():
-    """[--test-chart] 최근 포착 종목으로 X용 + 럼블 영문 전용 포착 영상 & 복사 양식 즉시 테스트 발송"""
+    """[--test-chart] 최근 포착 종목으로 X용(버튼) + 럼블 영문 포착 영상 & 럼블 복사 양식 테스트 발송"""
     state = load_state()
     episodes = state.get("signal_episodes") or {}
     tracked = state.get("tracked") or {}
