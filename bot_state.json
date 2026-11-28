@@ -3858,33 +3858,6 @@
     "SEIUSDT": 1795861711
   },
   "sl_history": {
-    "PLUMEUSDT_1795264778": {
-      "symbol": "PLUMEUSDT",
-      "track_type": "TRACK_H",
-      "score": 93,
-      "entry_price": 0.01063,
-      "stop_price": 0.009992,
-      "sl_trigger_price": 0.00995,
-      "sl_pct": 6,
-      "created_at": 1795264778,
-      "sl_at": 1795614344,
-      "hold_minutes": 5826,
-      "max_high_price": 0.01167,
-      "max_favorable_pct": 9.78,
-      "vol_mult": 2.77,
-      "rsi6_15m": 61.2,
-      "oi_m": 1.6,
-      "oi_ratio": 58.8,
-      "funding_pct": -0.0022,
-      "change_24h": -2.94,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "최근 14일 Top 5 발사직전 DNA 6/6 일치 (응축, 거래량건조, 직전RSI, 1H이격)",
-        "1H·15m 20MA 안착 + 발사 거래량(2.8x) + PPO(-0.04%) 상방",
-        "OI 집중도 최상(59%)",
-        "뉴욕 유동성 세션(+4점)"
-      ]
-    },
     "ETHFIUSDT_1795302309": {
       "symbol": "ETHFIUSDT",
       "track_type": "TRACK_A",
