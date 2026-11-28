@@ -3858,33 +3858,6 @@
     "SEIUSDT": 1795861711
   },
   "sl_history": {
-    "ZKCUSDT_1795122403": {
-      "symbol": "ZKCUSDT",
-      "track_type": "TRACK_D",
-      "score": 91,
-      "entry_price": 0.02591,
-      "stop_price": 0.020728,
-      "sl_trigger_price": 0.0207,
-      "sl_pct": 20,
-      "created_at": 1795122403,
-      "sl_at": 1795615792,
-      "hold_minutes": 8223,
-      "max_high_price": 0.02796,
-      "max_favorable_pct": 7.91,
-      "vol_mult": 2.2,
-      "rsi6_15m": 50.5,
-      "oi_m": 1.1,
-      "oi_ratio": 6.1,
-      "funding_pct": -0.002347,
-      "change_24h": 0.0,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "장기 전략: D2 · 매집봉 출현 후 거래량 건조 눌림",
-        "최근 5일 내 4H 매집봉(거래량 16.8배) 출현",
-        "조정 구간 거래량 70% 이상 건조(세력 이탈 없음)",
-        "매집봉 지지선 & 4H 20MA 위 양봉 반등 턴"
-      ]
-    },
     "USUALUSDT_1795514236": {
       "symbol": "USUALUSDT",
       "track_type": "TRACK_A",
