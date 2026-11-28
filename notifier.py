@@ -538,7 +538,7 @@ def build_x_hook_line(res):
 
 
 def build_x_post_message(res):
-    """[X 포스팅 양식] 포착근거 제외 · 최하단 면책 문구 포함"""
+    """[X 포스팅 양식] 포착근거 제외 · 최하단 면책 문구 포함 (기존 X 자동 입력 버튼용)"""
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
     is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
@@ -573,38 +573,8 @@ def build_x_post_message(res):
     )
 
 
-def build_x_profit_post_message(vp):
-    """[X 익절 리플레이 포스팅 양식] 1탭 복사용"""
-    base = str(vp.get("base_coin") or str(vp.get("symbol", "")).replace("USDT", "")).upper()
-    symbol = str(vp.get("symbol", "")).upper()
-    is_long = bool(vp.get("is_long_term") or vp.get("track_type") == "TRACK_D")
-    entry_p = to_float(vp.get("entry_price"))
-    exit_p = to_float(vp.get("exit_price"), entry_p)
-    tot_pct = to_float(vp.get("realized_weighted_pct"))
-    max_fav = to_float(vp.get("max_favorable_pct"), tot_pct)
-    hold_str = _fmt_hold_duration(vp.get("hold_minutes", 60), lang="kr_jp")
-    long_line = "【장기 포지션】\n" if is_long else ""
-    return (
-        "スキャナー捕捉コインが利確決済されました\n#仮想通貨 #コインシグナル\n\n"
-        f"{long_line}"
-        f"🎯 상승 코인 검색기 익절 마감 리플레이 😎\n\n"
-        f"${base} ({symbol})\n"
-        f"- 진입가: {fmt_price(entry_p)} USDT\n"
-        f"- 마감가: {fmt_price(exit_p)} USDT\n"
-        f"- 최고 상승폭: +{max_fav:.1f}%\n"
-        f"- 최종 수익률: +{tot_pct:.2f}% (보유 {hold_str})\n\n"
-        f"#{base} #코인시황 #코인신호 #코인 #재테크\n\n"
-        f"{X_POST_DISCLAIMER}"
-    )
-
-
-def build_copyable_x_post_html(raw_text, header_title="📋 [X 포스팅 복사 양식]"):
-    """텔레그램에서 터치 1번으로 전체 복사 가능한 HTML <pre> 박스 생성"""
-    return f"<b>{html.escape(header_title)}</b> (아래 박스 터치 → 자동 복사)\n<pre>{html.escape(str(raw_text or ''))}</pre>"
-
-
 def build_rumble_signal_post_message(res):
-    """[럼블(Rumble) 포착 업로드용 1탭 복사 양식 HTML — Title / Description / Tags]"""
+    """[럼블(Rumble) 포착 업로드용 1탭 복사 양식 — Title + Description(해시태그 본문 통합)]"""
     base = str(res.get("base_coin") or res.get("base") or str(res.get("symbol", "")).replace("USDT", "")).upper()
     symbol = str(res.get("symbol", "")).upper()
     is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
@@ -620,6 +590,7 @@ def build_rumble_signal_post_message(res):
     long_prefix = "【Long-Term Position】Expected Holding: 1+ Month\n" if is_long else ""
     title_prefix = "[Long-Term] " if is_long else ""
     rumble_title = f"{title_prefix}${base} ({symbol}) Bullish Scanner Alert | TP3 +{p3:g}% Setup"
+    hashtags_en = f"#{base} #Crypto #Altcoin #CryptoSignals #Trading #Bybit"
     rumble_desc = (
         f"{long_prefix}"
         "🔺️Spotted on the Bullish Coin Scanner😎\n"
@@ -630,22 +601,21 @@ def build_rumble_signal_post_message(res):
         f"TP2: {fmt_price(tps[1])} (+{p2:g}%)\n"
         f"TP3: {fmt_price(tps[2])} (+{p3:g}%)\n\n"
         f"How high do you think #{base} will go?\n"
-        "Anyone currently holding this?\n\n\n"
+        "Anyone currently holding this?\n\n"
+        f"{hashtags_en}\n\n"
         f"{RUMBLE_DISCLAIMER_EN}"
     )
-    rumble_tags = f"crypto, {base.lower()}, {symbol.lower()}, altcoin, crypto signals, trading, bybit"
 
     return (
         f"<b>📺 [Rumble 영문 포착 복사 양식 · ${html.escape(base)}]</b>\n"
         f"🔗 업로드: https://rumble.com/upload.php\n\n"
         f"<b>1) Title (터치 복사)</b>\n<code>{html.escape(rumble_title)}</code>\n\n"
-        f"<b>2) Description (터치 복사)</b>\n<pre>{html.escape(rumble_desc)}</pre>\n\n"
-        f"<b>3) Tags (터치 복사)</b>\n<code>{html.escape(rumble_tags)}</code>"
+        f"<b>2) Description (해시태그 포함 · 터치 복사)</b>\n<pre>{html.escape(rumble_desc)}</pre>"
     )
 
 
 def build_rumble_profit_post_message(vp):
-    """[럼블(Rumble) 익절 리플레이 업로드용 1탭 복사 양식 HTML — Title / Description / Tags]"""
+    """[럼블(Rumble) 익절 리플레이 업로드용 1탭 복사 양식 — Title + Description(해시태그 본문 통합)]"""
     base = str(vp.get("base_coin") or str(vp.get("symbol", "")).replace("USDT", "")).upper()
     symbol = str(vp.get("symbol", "")).upper()
     is_long = bool(vp.get("is_long_term") or vp.get("track_type") == "TRACK_D")
@@ -658,6 +628,7 @@ def build_rumble_profit_post_message(vp):
     long_prefix = "【Long-Term Position】\n" if is_long else ""
     title_prefix = "[Long-Term] " if is_long else ""
     rumble_title = f"{title_prefix}${base} ({symbol}) +{tot_pct:.2f}% Profit Replay | Bullish Coin Scanner"
+    hashtags_en = f"#{base} #Crypto #CryptoProfit #Altcoin #TradingReplay #Bybit"
     rumble_desc = (
         f"{long_prefix}"
         "🎯 Bullish Coin Scanner Profit Replay 😎\n"
@@ -667,17 +638,16 @@ def build_rumble_profit_post_message(vp):
         f"Peak Gain: +{max_fav:.1f}%\n"
         f"Final Return: +{tot_pct:.2f}% (Held {hold_en})\n\n"
         f"Did you catch this #{base} move?\n"
-        "Follow and turn on notifications for real-time scanner alerts!\n\n\n"
+        "Follow and turn on notifications for real-time scanner alerts!\n\n"
+        f"{hashtags_en}\n\n"
         f"{RUMBLE_DISCLAIMER_EN}"
     )
-    rumble_tags = f"crypto, {base.lower()}, {symbol.lower()}, crypto profit, altcoin, trading replay, bybit"
 
     return (
         f"<b>📺 [Rumble 영문 익절 복사 양식 · ${html.escape(base)}]</b>\n"
         f"🔗 업로드: https://rumble.com/upload.php\n\n"
         f"<b>1) Title (터치 복사)</b>\n<code>{html.escape(rumble_title)}</code>\n\n"
-        f"<b>2) Description (터치 복사)</b>\n<pre>{html.escape(rumble_desc)}</pre>\n\n"
-        f"<b>3) Tags (터치 복사)</b>\n<code>{html.escape(rumble_tags)}</code>"
+        f"<b>2) Description (해시태그 포함 · 터치 복사)</b>\n<pre>{html.escape(rumble_desc)}</pre>"
     )
 
 
@@ -1057,7 +1027,6 @@ def generate_signal_chart_video_bytes(res, lang="kr_jp"):
     min_move = 10 ** (-decimals)
     lw_script_tags = _get_lw_charts_script_tags()
 
-    # 언어별 UI 문구 분리 (lang="en"은 100% 영문 전용)
     ui_badge = "🎙️ DANPYUNG SIGNAL BRIEFING · EN" if is_en else "🎙️ 단평 포착 브리핑 · KR / JP"
     ui_footer = VIDEO_FOOTER_NFA_EN if is_en else VIDEO_FOOTER_NFA_KR
     ui_phases = {
