@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "AEROUSDT_1795280672",
+      "engine_ver": "v3",
+      "symbol": "AEROUSDT",
+      "track_type": "TRACK_A",
+      "score": 97,
+      "entry_price": 0.3986,
+      "stop_price": 0.374684,
+      "sl_trigger_price": 0.3739,
+      "sl_pct": 6,
+      "actual_sl_pct": -6.35,
+      "created_at": 1795280672,
+      "sl_at": 1795898024,
+      "hold_minutes": 10289,
+      "max_high_price": 0.4555,
+      "max_favorable_pct": 14.27,
+      "vol_mult": 2.82,
+      "rsi6_15m": 66.9,
+      "oi_m": 5.0,
+      "oi_ratio": 71.0,
+      "funding_pct": 0.005,
+      "change_24h": 1.12,
+      "btc_1h_pct": 0.0,
+      "kst_block": "00-03",
+      "cause": "+14.3% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "ZKPUSDT_1795107290",
       "engine_ver": "v3",
       "symbol": "ZKPUSDT",
@@ -1061,6 +1091,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795895420,
+  "updated_at": 1795898046,
   "engine_ver": "v3"
 }
