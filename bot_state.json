@@ -3787,33 +3787,6 @@
     "SAHARAUSDT": 1795856929
   },
   "sl_history": {
-    "HYPEUSDT_1795292781": {
-      "symbol": "HYPEUSDT",
-      "track_type": "TRACK_A",
-      "score": 95,
-      "entry_price": 61.492,
-      "stop_price": 57.80248,
-      "sl_trigger_price": 57.746,
-      "sl_pct": 6,
-      "created_at": 1795292781,
-      "sl_at": 1795600732,
-      "hold_minutes": 5132,
-      "max_high_price": 69.745,
-      "max_favorable_pct": 13.42,
-      "vol_mult": 2.35,
-      "rsi6_15m": 70.4,
-      "oi_m": 98.8,
-      "oi_ratio": 40.3,
-      "funding_pct": -0.0021,
-      "change_24h": 0.83,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "TTM Squeeze(BB<KC) 발사(응축폭 1.2%) + 15m PPO(+0.53%) 상방",
-        "15m 매수 델타(CVD)·OBV 바닥 흡수 확인",
-        "OI 집중도 최상(40%)",
-        "⚠️ 1W·1D 상위 역배열 구간(단기 저항 주의)"
-      ]
-    },
     "CCUSDT_1795476498": {
       "symbol": "CCUSDT",
       "track_type": "TRACK_A",
