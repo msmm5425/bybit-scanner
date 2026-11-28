@@ -25,10 +25,10 @@
       "btc_1h_pct": -0.16,
       "kst_block": "21-24",
       "cause": "단기 고점 RSI 과열 추격",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -4.9,
+      "autopsy_post_low_pct": -1.8
     },
     {
       "id": "GRASSUSDT_1795784319",
@@ -684,6 +684,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795823034,
+  "updated_at": 1795839940,
   "engine_ver": "v3"
 }
