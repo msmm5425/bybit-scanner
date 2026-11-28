@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "HUMAUSDT_1795093253",
+      "engine_ver": "v3",
+      "symbol": "HUMAUSDT",
+      "track_type": "TRACK_D",
+      "score": 91,
+      "entry_price": 0.00829,
+      "stop_price": 0.006632,
+      "sl_trigger_price": 0.00656,
+      "sl_pct": 20,
+      "actual_sl_pct": -21.02,
+      "created_at": 1795093253,
+      "sl_at": 1795849469,
+      "hold_minutes": 12603,
+      "max_high_price": 0.01072,
+      "max_favorable_pct": 29.31,
+      "vol_mult": 1.56,
+      "rsi6_15m": 70.8,
+      "oi_m": 1.4,
+      "oi_ratio": 11.3,
+      "funding_pct": -0.060700000000000004,
+      "change_24h": 0.0,
+      "btc_1h_pct": 0.0,
+      "kst_block": "21-24",
+      "cause": "+29.3% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "HYPERUSDT_1795757717",
       "engine_ver": "v3",
       "symbol": "HYPERUSDT",
@@ -744,6 +774,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795844991,
+  "updated_at": 1795849493,
   "engine_ver": "v3"
 }
