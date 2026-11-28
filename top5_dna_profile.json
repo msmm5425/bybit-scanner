@@ -2,6 +2,20 @@
   "samples": [
     {
       "dna_version": "v4_clean_launchpad",
+      "symbol": "PONSUSDT",
+      "timestamp": 1795825789,
+      "change_24h": 16.69,
+      "caught_by_scanner": false,
+      "caught_track": "MISSED",
+      "pre_bb_width": 5.4,
+      "pre_vol_dry_ratio": 0.89,
+      "launch_vol_mult": 3.19,
+      "pre_rsi6": 21.2,
+      "pre_1h_ma20_dist": -1.27,
+      "pattern_tag": "초응축 돌파 폭발"
+    },
+    {
+      "dna_version": "v4_clean_launchpad",
       "symbol": "INITUSDT",
       "timestamp": 1795739664,
       "change_24h": 63.0,
@@ -32,9 +46,9 @@
   "active_dna_formula": {
     "enabled": false,
     "dna_version": "v4_clean_launchpad",
-    "sample_count": 2,
-    "missed_count": 2,
-    "updated_at": 1795739638
+    "sample_count": 3,
+    "missed_count": 3,
+    "updated_at": 1795825758
   },
-  "updated_at": 1795739638
+  "updated_at": 1795825758
 }
