@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "1000BONKUSDT_1795709007",
+      "engine_ver": "v3",
+      "symbol": "1000BONKUSDT",
+      "track_type": "TRACK_A",
+      "score": 88,
+      "entry_price": 0.002202,
+      "stop_price": 0.00207,
+      "sl_trigger_price": 0.002069,
+      "sl_pct": 6,
+      "actual_sl_pct": -6.19,
+      "created_at": 1795709007,
+      "sl_at": 1795873506,
+      "hold_minutes": 2741,
+      "max_high_price": 0.00223,
+      "max_favorable_pct": 1.27,
+      "vol_mult": 3.05,
+      "rsi6_15m": 66.7,
+      "oi_m": 2.2,
+      "oi_ratio": 51.7,
+      "funding_pct": 0.005,
+      "change_24h": 7.72,
+      "btc_1h_pct": 0.23,
+      "kst_block": "00-03",
+      "cause": "비트 연동 급락 및 지지선 이탈",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "ERAUSDT_1795497854",
       "engine_ver": "v3",
       "symbol": "ERAUSDT",
@@ -941,6 +971,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795871205,
+  "updated_at": 1795873539,
   "engine_ver": "v3"
 }
