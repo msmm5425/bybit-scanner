@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "ERAUSDT_1795497854",
+      "engine_ver": "v3",
+      "symbol": "ERAUSDT",
+      "track_type": "TRACK_G",
+      "score": 99,
+      "entry_price": 0.0733,
+      "stop_price": 0.068902,
+      "sl_trigger_price": 0.0686,
+      "sl_pct": 6,
+      "actual_sl_pct": -6.56,
+      "created_at": 1795497854,
+      "sl_at": 1795868108,
+      "hold_minutes": 6170,
+      "max_high_price": 0.0783,
+      "max_favorable_pct": 6.82,
+      "vol_mult": 2.06,
+      "rsi6_15m": 64.8,
+      "oi_m": 1.2,
+      "oi_ratio": 42.9,
+      "funding_pct": -0.0226,
+      "change_24h": 0.25,
+      "btc_1h_pct": 0.0,
+      "kst_block": "12-15",
+      "cause": "+6.8% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "IRYSUSDT_1795781331",
       "engine_ver": "v3",
       "symbol": "IRYSUSDT",
@@ -911,6 +941,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795866833,
+  "updated_at": 1795868127,
   "engine_ver": "v3"
 }
