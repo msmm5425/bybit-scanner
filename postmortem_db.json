@@ -175,10 +175,10 @@
       "btc_1h_pct": 0.77,
       "kst_block": "12-15",
       "cause": "단기 고점 RSI 과열 추격",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -5.9,
+      "autopsy_post_low_pct": -1.1
     },
     {
       "id": "PARTIUSDT_1795288002",
@@ -205,10 +205,10 @@
       "btc_1h_pct": 0.0,
       "kst_block": "03-06",
       "cause": "+11.9% 반등 후 차익 매물 출회",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -3.5,
+      "autopsy_post_low_pct": 0.1
     },
     {
       "id": "VVVUSDT_1795787304",
@@ -911,6 +911,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795865816,
+  "updated_at": 1795866833,
   "engine_ver": "v3"
 }
