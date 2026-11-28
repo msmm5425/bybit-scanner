@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "ZKPUSDT_1795107290",
+      "engine_ver": "v3",
+      "symbol": "ZKPUSDT",
+      "track_type": "TRACK_D",
+      "score": 95,
+      "entry_price": 0.03213,
+      "stop_price": 0.025704,
+      "sl_trigger_price": 0.02562,
+      "sl_pct": 20,
+      "actual_sl_pct": -20.41,
+      "created_at": 1795107290,
+      "sl_at": 1795889112,
+      "hold_minutes": 13030,
+      "max_high_price": 0.03365,
+      "max_favorable_pct": 4.73,
+      "vol_mult": 2.85,
+      "rsi6_15m": 62.4,
+      "oi_m": 0.7,
+      "oi_ratio": 20.0,
+      "funding_pct": -0.013200000000000002,
+      "change_24h": 0.0,
+      "btc_1h_pct": 0.0,
+      "kst_block": "00-03",
+      "cause": "+4.7% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "ICPUSDT_1795674732",
       "engine_ver": "v3",
       "symbol": "ICPUSDT",
@@ -1031,6 +1061,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795888143,
+  "updated_at": 1795889126,
   "engine_ver": "v3"
 }
