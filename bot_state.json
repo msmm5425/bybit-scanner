@@ -3735,33 +3735,6 @@
     "DOTUSDT": 1795847327
   },
   "sl_history": {
-    "ICNTUSDT_1795570843": {
-      "symbol": "ICNTUSDT",
-      "track_type": "TRACK_E",
-      "score": 93,
-      "entry_price": 0.3073,
-      "stop_price": 0.288862,
-      "sl_trigger_price": 0.2888,
-      "sl_pct": 6,
-      "created_at": 1795570843,
-      "sl_at": 1795596298,
-      "hold_minutes": 424,
-      "max_high_price": 0.3107,
-      "max_favorable_pct": 1.11,
-      "vol_mult": 2.75,
-      "rsi6_15m": 55.7,
-      "oi_m": 2.2,
-      "oi_ratio": 28.3,
-      "funding_pct": 0.0013,
-      "change_24h": -0.62,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "24H 저점 -0.4% 스윕 후 지지선 탈환(아래꼬리 43%)",
-        "최근 2봉 건전 양봉 거래량 2.8배 폭발 + KDJ 바닥 급반전",
-        "OI 집중도 최상(28%)",
-        "PPO 파동 정렬(15m PPO 골든크로스)"
-      ]
-    },
     "HYPEUSDT_1795292781": {
       "symbol": "HYPEUSDT",
       "track_type": "TRACK_A",
