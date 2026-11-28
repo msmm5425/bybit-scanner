@@ -860,6 +860,23 @@
   ],
   "wins": [
     {
+      "id": "NIGHTUSDT_1795191839",
+      "engine_ver": "v3",
+      "symbol": "NIGHTUSDT",
+      "track_type": "TRACK_E",
+      "score": 99,
+      "created_at": 1795191839,
+      "win_at": 1795865800,
+      "max_favorable_pct": 31.16,
+      "vol_mult": 5.56,
+      "rsi6_15m": 43.3,
+      "oi_ratio": 43.5,
+      "funding_pct": 0.0018,
+      "change_24h": -4.83,
+      "btc_1h_pct": 0.0,
+      "kst_block": "00-03"
+    },
+    {
       "id": "VVVUSDT_1795265541",
       "engine_ver": "v3",
       "symbol": "VVVUSDT",
@@ -894,6 +911,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795862815,
+  "updated_at": 1795865816,
   "engine_ver": "v3"
 }
