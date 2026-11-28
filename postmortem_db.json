@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "MONUSDT_1795745596",
+      "engine_ver": "v3",
+      "symbol": "MONUSDT",
+      "track_type": "TRACK_E",
+      "score": 93,
+      "entry_price": 0.01032,
+      "stop_price": 0.009701,
+      "sl_trigger_price": 0.0097,
+      "sl_pct": 6,
+      "actual_sl_pct": -6.16,
+      "created_at": 1795745596,
+      "sl_at": 1795860362,
+      "hold_minutes": 1912,
+      "max_high_price": 0.01112,
+      "max_favorable_pct": 7.75,
+      "vol_mult": 3.93,
+      "rsi6_15m": 53.5,
+      "oi_m": 3.4,
+      "oi_ratio": 46.1,
+      "funding_pct": 0.005,
+      "change_24h": -8.17,
+      "btc_1h_pct": 0.91,
+      "kst_block": "09-12",
+      "cause": "+7.8% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "TRUMPUSDT_1795443856",
       "engine_ver": "v3",
       "symbol": "TRUMPUSDT",
@@ -834,6 +864,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795860051,
+  "updated_at": 1795860396,
   "engine_ver": "v3"
 }
