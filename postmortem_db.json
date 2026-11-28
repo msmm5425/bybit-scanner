@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "0GUSDT_1795812212",
+      "engine_ver": "v3",
+      "symbol": "0GUSDT",
+      "track_type": "TRACK_A",
+      "score": 90,
+      "entry_price": 0.1065,
+      "stop_price": 0.10011,
+      "sl_trigger_price": 0.1001,
+      "sl_pct": 6,
+      "actual_sl_pct": -6.16,
+      "created_at": 1795812212,
+      "sl_at": 1795883086,
+      "hold_minutes": 1181,
+      "max_high_price": 0.1086,
+      "max_favorable_pct": 1.97,
+      "vol_mult": 7.61,
+      "rsi6_15m": 66.6,
+      "oi_m": 0.8,
+      "oi_ratio": 22.9,
+      "funding_pct": 0.005,
+      "change_24h": 5.75,
+      "btc_1h_pct": -0.17,
+      "kst_block": "03-06",
+      "cause": "비트 연동 급락 및 지지선 이탈",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "1000BONKUSDT_1795709007",
       "engine_ver": "v3",
       "symbol": "1000BONKUSDT",
@@ -971,6 +1001,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795882456,
+  "updated_at": 1795883109,
   "engine_ver": "v3"
 }
