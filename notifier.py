@@ -33,6 +33,12 @@ SCHEME = "ht" + "tps://"
 WATERMARK_HANDLE = "@DnaPyung"
 JP_TTS_VOICE = "ja-JP-NanamiNeural"
 JP_TTS_RATE = "+10%"
+VIDEO_FOOTER_NFA = "*본 게시물은 단순 스캐너 데이터 참고용이며 투자 권유가 아닙니다. (NFA)"
+X_POST_DISCLAIMER = (
+    "본 계정의 모든 차트와 알림은 알고리즘 스캐너의 단순 데이터 기록이며, "
+    "특정 자산의 매수·매도를 권유하거나 수익을 보장하지 않습니다. "
+    "모든 투자 판단과 책임은 본인에게 있습니다."
+)
 
 CHART_CSS_W = 960
 CHART_CSS_H = 1280
@@ -477,7 +483,7 @@ def build_x_hook_line(res):
 
 
 def build_x_post_message(res):
-    """[X 포스팅 양식] 포착근거는 영상에 포함되므로 본문에서는 제외 (bot_state.json에는 영구 보관)"""
+    """[X 포스팅 양식] 포착근거 제외 · 최하단 알고리즘 데이터 기록/투자책임 면책 문구 포함"""
     base = res.get("base_coin") or res.get("base") or ""
     symbol = res.get("symbol", "")
     is_long = bool(res.get("is_long_term") or res.get("track_type") == "TRACK_D")
@@ -509,7 +515,8 @@ def build_x_post_message(res):
             f"- tp3: {fmt_price(tps[2])}(+{p3:g}%)\n\n"
             f"#{base} 어디까지 오를거 같나요?\n"
             "보유중이신 분들 계신가요?\n\n"
-            f"{footer_tags}"
+            f"{footer_tags}\n\n"
+            f"{X_POST_DISCLAIMER}"
         )
 
     return (
@@ -523,7 +530,8 @@ def build_x_post_message(res):
         f"- tp3: {fmt_price(tps[2])}(+{p3:g}%)\n\n"
         f"#{base} 어디까지 오를거 같나요?\n"
         "보유중이신 분들 계신가요?\n\n"
-        f"{footer_tags}"
+        f"{footer_tags}\n\n"
+        f"{X_POST_DISCLAIMER}"
     )
 
 
@@ -704,7 +712,6 @@ def _build_signal_video_narration(res, tp1_p, tp2_p, tp3_p, p1, p2, p3, tmpdir):
     s1 = max(e0 + 0.45, 2.20)
     e1 = s1 + durs[1]
 
-    # 전반부(썸네일 + 캔들 리플레이) 종료 = 후반부(TP1→TP2→TP3 화살표 확장) 시작
     arrow_start_sec = max(e1 + 0.45, 8.20)
     s2 = arrow_start_sec
     e2 = s2 + durs[2]
@@ -754,7 +761,7 @@ def generate_signal_chart_video_bytes(res):
     - 썸네일(0~1.2초): 진입가(ENTRY) → TP1 → TP2 → TP3 완성 화살표 + 피보나치
     - 전반부(50%): 캔들 리플레이(진입 시점까지) + 피보나치
     - 후반부(50%): 진입가→TP1 → 진입가→TP2 → 진입가→TP3 순차 화살표 확장 액션
-    - 자막·음성: 공통 오프닝(1/4) · 포착근거(2/4) · TP예상(3/4) · 공통 엔딩(4/4) — 한글+일본어 자막 & 일본어 음성
+    - 최하단: *본 게시물은 단순 스캐너 데이터 참고용이며 투자 권유가 아닙니다. (NFA)
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -977,7 +984,7 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Noto San
 .sub-l2{{font-size:25px;font-weight:900;color:#ffd166;line-height:1.32;word-break:keep-all;text-shadow:0 2px 6px rgba(0,0,0,0.55)}}
 .sub-jp{{font-size:17px;font-weight:700;color:#93c5fd;line-height:1.32;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;margin-top:2px;word-break:keep-all}}
 
-.tv-footer{{height:32px;background:#0a0d14;border-top:1px solid #1f2430;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11px;color:#787b86;font-weight:600}}
+.tv-footer{{height:32px;background:#0a0d14;border-top:1px solid #1f2430;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11.5px;color:#8e94a4;font-weight:600}}
 .prog-wrap{{width:150px;height:5px;background:#222632;border-radius:3px;overflow:hidden}}
 .prog-fill{{height:100%;width:0%;background:linear-gradient(90deg,#2962ff,#00e676)}}
 </style></head>
@@ -1055,7 +1062,7 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Noto San
   </div>
 
   <div class="tv-footer">
-    <span>※ 본 영상은 스캐너 포착 기준 참고용 시나리오이며 투자 판단의 책임은 본인에게 있습니다.</span>
+    <span>{VIDEO_FOOTER_NFA}</span>
     <div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
   </div>
 </div>
@@ -1639,7 +1646,7 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR',-apple-sy
 .cc-box{{background:#181e2e;border:1px solid #2a3144;border-radius:12px;padding:15px 10px;text-align:center}}
 .cc-k{{font-size:13px;color:#9598a1;display:block}}
 .cc-v{{font-size:21px;font-weight:900;color:#fff;display:block;margin-top:4px}}
-.tv-footer{{height:32px;background:#0a0d14;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11px;color:#787b86}}
+.tv-footer{{height:32px;background:#0a0d14;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11.5px;color:#8e94a4;font-weight:600}}
 </style></head><body><div class="tv-wrap">
   <div class="tv-topbar">
     <div class="tb-row"><div><span class="tv-symbol">${base}USDT.P</span><span class="tv-tf-badge">{tf_label}</span></div><span class="tv-score-pill">{track_badge} · {score} pts</span></div>
@@ -1655,7 +1662,7 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR',-apple-sy
       <div class="cc-box"><span class="cc-k">최종 목표 (TP3)</span><span class="cc-v" style="color:#ffd166">${fmt_price(tp3_p)}</span></div>
     </div>
   </div>
-  <div class="tv-footer"><span>※ 시스템 포착 기준 참고용 차트</span><span>{WATERMARK_HANDLE}</span></div>
+  <div class="tv-footer"><span>{VIDEO_FOOTER_NFA}</span><span>{WATERMARK_HANDLE}</span></div>
 </div><script>
 const lowPiv={low_piv},highPiv={high_piv},upComp={up_comp},downComp={down_comp},decimals={decimals};
 function invScale(y){{if(y>highPiv)return highPiv+(y-highPiv)/Math.max(upComp,1e-6);if(y<lowPiv)return lowPiv-(lowPiv-y)/Math.max(downComp,1e-6);return y;}}
@@ -1717,7 +1724,7 @@ def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, t
     [익절 리플레이 영상 4단계 한/일 자막 + 일본어 여성 아나운서(1.1배속) 음성 동기화]
     - 1/4: 공통 오프닝 (포착 영상과 100% 동일)
     - 2/4: 포착 근거 (한/일 자막 + 일본어 음성)
-    - 3/4: 수익률 달성 축하 (한/일 자막 + 일본어 음성)
+    - 3/4: 진입가·최종 수익률 마감 안내 ("마감되었습니다 ❤️" · 일본어 음성)
     - 4/4: 공통 엔딩 (포착 영상과 100% 동일)
     """
     base = str(close_info.get("base_coin") or str(close_info.get("symbol", "")).replace("USDT", "")).upper()
@@ -1751,9 +1758,9 @@ def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, t
             "step": "3 / 4",
             "tag": "PROFIT",
             "ko_line1": f"진입가격 {entry_str} 달러 · 최종 수익률 +{pct_str}%",
-            "ko_line2": "달성하였습니다! 축하드립니다!! 🎉",
-            "jp_sub": f"エントリー ${entry_str} · 最終収益率 +{pct_str}% 達成！おめでとうございます！",
-            "jp_text": f"エントリー価格、{entry_jp_num}ドル。最終収益率、プラス{pct_jp_num}パーセントを達成しました！おめでとうございます！",
+            "ko_line2": "마감되었습니다 ❤️",
+            "jp_sub": f"エントリー ${entry_str} · 最終収益率 +{pct_str}% で決済されました ❤️",
+            "jp_text": f"エントリー価格、{entry_jp_num}ドル。最終収益率、プラス{pct_jp_num}パーセントで決済されました。",
         },
         _unified_ending_spec(),
     ]
@@ -1806,7 +1813,7 @@ def _build_narration_plan(close_info, entry_p, total_realized_pct, created_at, t
 
 
 def generate_profit_replay_videos_bundle(close_info, include_clean=True):
-    """[익절 리플레이] X 풀HD 세로형(3:4 · 1080x1440) 한/일 자막 + 일본어음성 리플레이 엔진 v12"""
+    """[익절 리플레이] X 풀HD 세로형(3:4 · 1080x1440) 한/일 자막 + 일본어음성 리플레이 엔진 v13"""
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
 
@@ -2007,7 +2014,7 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Noto San
 .sub-l1{{font-size:27px;font-weight:900;color:#fff;line-height:1.34;word-break:keep-all;text-shadow:0 2px 6px rgba(0,0,0,0.55)}}
 .sub-l2{{font-size:25px;font-weight:900;color:#ffd166;line-height:1.32;word-break:keep-all;text-shadow:0 2px 6px rgba(0,0,0,0.55)}}
 .sub-jp{{font-size:17px;font-weight:700;color:#93c5fd;line-height:1.32;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;margin-top:2px;word-break:keep-all}}
-.tv-footer{{height:32px;background:#0a0d14;border-top:1px solid #1f2430;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11px;color:#787b86;font-weight:600}}
+.tv-footer{{height:32px;background:#0a0d14;border-top:1px solid #1f2430;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11.5px;color:#8e94a4;font-weight:600}}
 .prog-wrap{{width:150px;height:5px;background:#222632;border-radius:3px;overflow:hidden}}.prog-fill{{height:100%;width:0%;background:linear-gradient(90deg,#2962ff,#00e676)}}
 </style></head><body><div class="tv-wrap">
   <div class="tv-topbar">
@@ -2041,11 +2048,13 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Noto San
       </div>
     </div>
   </div>
-  <div class="tv-footer"><span>※ 본 영상은 스캐너 기준 시뮬레이션 리플레이이며 실제 체결 결과와 다를 수 있습니다.</span><div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div></div>
+  <div class="tv-footer"><span>{VIDEO_FOOTER_NFA}</span><div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div></div>
 </div><script>
 const cAll={json.dumps(candles_js)}, vAll={json.dumps(vol_js)}, m5All={json.dumps(ma5_js)}, m9All={json.dumps(ma9_js)}, m20All={json.dumps(ma20_js)}, kstAll={json.dumps(kst_strs)}, wsTail={json.dumps(ws_tail)}, subMeta={json.dumps(sub_meta_js, ensure_ascii=False)};
 const entryIdx={entry_idx}, exitIdx={exit_idx}, entryP={entry_p}, exitP={exit_p}, tp1P={tp1_p}, tp2P={tp2_p}, tp3P={tp3_p}, slP={sl_p}, decimals={decimals}, yMinAnchor={y_min_anchor}, yMaxAnchor={y_max_anchor};
 function fmtP(v){{if(!v||v<=0)return '0.0000';return v>=1000?v.toLocaleString('en-US',{{minimumFractionDigits:2,maximumFractionDigits:2}}):v.toFixed(decimals);}}
+const HEART_SVG='<svg style="display:inline-block;width:0.95em;height:0.95em;vertical-align:-0.12em;margin-left:4px" viewBox="0 0 24 24" fill="#ff3b5c"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
+function setTextWithHeart(el,txt){{const s=String(txt||'');if(s.indexOf('❤️')===-1){{el.textContent=s;return;}}const esc=s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');el.innerHTML=esc.split('❤️').join(HEART_SVG);}}
 const chart=LightweightCharts.createChart(document.getElementById('chart-box'),{{width:960,height:836,layout:{{background:{{type:'solid',color:'#131722'}},textColor:'#d1d4dc',fontSize:12}},grid:{{vertLines:{{color:'#1e222d'}},horzLines:{{color:'#1e222d'}}}},watermark:{{visible:true,fontSize:66,horzAlign:'center',vertAlign:'center',color:'rgba(209,212,220,0.14)',text:'{WATERMARK_HANDLE}',fontStyle:'bold'}},rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.06,bottom:0.09}},entireTextOnly:true}},timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:2}},localization:{{priceFormatter:fmtP}}}});
 chart.addLineSeries({{color:'rgba(0,0,0,0)',lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false}}).setData([{{time:cAll[0].time,value:yMinAnchor}},{{time:wsTail[wsTail.length-1].time,value:yMaxAnchor}}]);
 const candleSeries=chart.addCandlestickSeries({{upColor:'#26a69a',downColor:'#ef5350',borderUpColor:'#26a69a',borderDownColor:'#ef5350',wickUpColor:'#26a69a',wickDownColor:'#ef5350',priceLineVisible:false,lastValueVisible:false,priceFormat:{{type:'custom',minMove:{min_move},formatter:fmtP}}}});
@@ -2112,7 +2121,10 @@ window.__setBottomMode=function(mode,subIdx){{
   if(mode==='sub'&&subMeta.length>0){{
     elCleanCard.style.display='none';elSubCard.style.display='flex';
     const seg=subMeta[Math.max(0,Math.min(subMeta.length-1,subIdx||0))];
-    elSubStep.textContent=seg.step;elSubL1.textContent=seg.l1;elSubL2.textContent=seg.l2;elSubJp.textContent=seg.jp||'';
+    elSubStep.textContent=seg.step;
+    setTextWithHeart(elSubL1, seg.l1);
+    setTextWithHeart(elSubL2, seg.l2);
+    setTextWithHeart(elSubJp, seg.jp||'');
     elSubL2.style.color=(seg.tag==='PROFIT')?'#00e676':'#ffd166';
   }} else {{elSubCard.style.display='none';elCleanCard.style.display='flex';}}
 }};
