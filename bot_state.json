@@ -3760,33 +3760,6 @@
     "SEIUSDT": 1795861711
   },
   "sl_history": {
-    "NAORISUSDT_1795118707": {
-      "symbol": "NAORISUSDT",
-      "track_type": "TRACK_D",
-      "score": 94,
-      "entry_price": 0.03329,
-      "stop_price": 0.026632,
-      "sl_trigger_price": 0.02661,
-      "sl_pct": 20,
-      "created_at": 1795118707,
-      "sl_at": 1795621959,
-      "hold_minutes": 8387,
-      "max_high_price": 0.03789,
-      "max_favorable_pct": 13.82,
-      "vol_mult": 1.36,
-      "rsi6_15m": 58.9,
-      "oi_m": 1.0,
-      "oi_ratio": 3.5,
-      "funding_pct": 0.005,
-      "change_24h": 0.0,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "장기 전략: D2 · 매집봉 출현 후 거래량 건조 눌림",
-        "최근 5일 내 4H 매집봉(거래량 17.3배) 출현",
-        "조정 구간 거래량 70% 이상 건조(세력 이탈 없음)",
-        "매집봉 지지선 & 4H 20MA 위 양봉 반등 턴"
-      ]
-    },
     "IDOLUSDT_1795612954": {
       "symbol": "IDOLUSDT",
       "track_type": "TRACK_A",
