@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "KAVAUSDT_1795824128",
+      "engine_ver": "v3",
+      "symbol": "KAVAUSDT",
+      "track_type": "TRACK_A",
+      "score": 93,
+      "entry_price": 0.02743,
+      "stop_price": 0.025784,
+      "sl_trigger_price": 0.02542,
+      "sl_pct": 6,
+      "actual_sl_pct": -7.48,
+      "created_at": 1795824128,
+      "sl_at": 1795850823,
+      "hold_minutes": 444,
+      "max_high_price": 0.03156,
+      "max_favorable_pct": 15.06,
+      "vol_mult": 8.37,
+      "rsi6_15m": 64.9,
+      "oi_m": 0.9,
+      "oi_ratio": 24.1,
+      "funding_pct": -0.0225,
+      "change_24h": 9.35,
+      "btc_1h_pct": 0.09,
+      "kst_block": "09-12",
+      "cause": "+15.1% 반등 후 차익 매물 출회",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "HUMAUSDT_1795093253",
       "engine_ver": "v3",
       "symbol": "HUMAUSDT",
@@ -774,6 +804,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795849493,
+  "updated_at": 1795850851,
   "engine_ver": "v3"
 }
