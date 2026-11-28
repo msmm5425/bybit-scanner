@@ -769,17 +769,17 @@ def _encode_hd_mp4(img_pattern, out_mp4, in_fps, out_fps, segments=None, total_s
         return vf.read(), ""
 
 
-def _unified_opening_spec(lang="kr_jp"):
+def _unified_opening_spec(lang="kr_jp", step_str="1 / 4"):
     if lang == "en":
         return {
-            "step": "1 / 4", "tag": "INTRO",
+            "step": step_str, "tag": "INTRO",
             "l1": "Hello, this is Danpyung 👋",
             "l2": f"{WATERMARK_HANDLE} Bullish Coin Scanner Briefing",
             "sub": "",
             "tts_text": "Hello, this is Danpyung.",
         }
     return {
-        "step": "1 / 4", "tag": "INTRO",
+        "step": step_str, "tag": "INTRO",
         "l1": "안녕하세요, 단평입니다 👋",
         "l2": f"X · {WATERMARK_HANDLE} 상승 코인 검색기 브리핑",
         "sub": "こんにちは、ダンピョンです！仮想通貨スキャナーブリーフィング",
@@ -787,17 +787,17 @@ def _unified_opening_spec(lang="kr_jp"):
     }
 
 
-def _unified_ending_spec(lang="kr_jp"):
+def _unified_ending_spec(lang="kr_jp", step_str="4 / 4"):
     if lang == "en":
         return {
-            "step": "4 / 4", "tag": "FOLLOW",
+            "step": step_str, "tag": "FOLLOW",
             "l1": "Please Follow + Turn on Notifications! 🔔",
             "l2": f"{WATERMARK_HANDLE} Real-Time Crypto Scanner Alerts",
             "sub": "",
             "tts_text": "Please follow and turn on notifications!",
         }
     return {
-        "step": "4 / 4", "tag": "FOLLOW",
+        "step": step_str, "tag": "FOLLOW",
         "l1": "팔로우 + 알림설정 부탁드립니다! 🔔",
         "l2": f"X · {WATERMARK_HANDLE} 실시간 상승 코인 알림",
         "sub": f"フォロー＋通知設定よろしくお願いします！ · {WATERMARK_HANDLE}",
@@ -823,7 +823,7 @@ def _build_signal_video_narration(res, tp1_p, tp2_p, tp3_p, p1, p2, p3, tmpdir, 
     if lang == "en":
         voice, rate, gtts_lang = EN_TTS_VOICE, EN_TTS_RATE, "en"
         raw_specs = [
-            _unified_opening_spec("en"),
+            _unified_opening_spec("en", step_str="1 / 4"),
             {
                 "step": "2 / 4", "tag": "SIGNAL",
                 "l1": f'${base} spotted on "{hook_en}"',
@@ -838,12 +838,12 @@ def _build_signal_video_narration(res, tp1_p, tp2_p, tp3_p, p1, p2, p3, tmpdir, 
                 "sub": "",
                 "tts_text": f"Projected targets are TP1 at {t1_num} dollars, TP2 at {t2_num} dollars, and TP3 at {t3_num} dollars.",
             },
-            _unified_ending_spec("en"),
+            _unified_ending_spec("en", step_str="4 / 4"),
         ]
     else:
         voice, rate, gtts_lang = JP_TTS_VOICE, JP_TTS_RATE, "ja"
         raw_specs = [
-            _unified_opening_spec("kr_jp"),
+            _unified_opening_spec("kr_jp", step_str="1 / 4"),
             {
                 "step": "2 / 4", "tag": "SIGNAL",
                 "l1": f'${base} 종목은 "{hook_ko}" 근거로',
@@ -858,7 +858,7 @@ def _build_signal_video_narration(res, tp1_p, tp2_p, tp3_p, p1, p2, p3, tmpdir, 
                 "sub": f"目標予想：TP1 ${t1_s} · TP2 ${t2_s} · TP3 ${t3_s}",
                 "tts_text": f"TP1、{t1_num}ドル。TP2、{t2_num}ドル。TP3、{t3_num}ドルを予想しています。",
             },
-            _unified_ending_spec("kr_jp"),
+            _unified_ending_spec("kr_jp", step_str="4 / 4"),
         ]
 
     durs, paths = [], []
@@ -896,7 +896,7 @@ def _build_signal_video_narration(res, tp1_p, tp2_p, tp3_p, p1, p2, p3, tmpdir, 
             "audio_path": paths[i], "audio_start": round(starts[i], 3),
             "audio_dur": round(durs[i], 3), "audio_end": round(ends[i], 3),
             "sub_start": round(0.0 if i == 0 else starts[i] - 0.12, 3),
-            "sub_end": round(final_total_sec if i == 3 else starts[i + 1] - 0.12, 3),
+            "sub_end": round(final_total_sec if i == len(raw_specs) - 1 else starts[i + 1] - 0.12, 3),
         })
 
     return {
@@ -1444,7 +1444,14 @@ def generate_signal_chart_bytes(res):
 
 
 def _build_profit_narration_plan(close_info, entry_p, total_realized_pct, created_at, tmpdir, base_total_sec=30.5, lang="kr_jp"):
-    """익절 리플레이 영상 4단계 자막 + 음성 싱크 (kr_jp: 한/일자막+일본어음성 | en: 100% 영문자막+영어음성)"""
+    """
+    [익절 리플레이 영상 5단계 자막 + 음성 싱크]
+    - 1/5: 공통 오프닝
+    - 2/5: 포착 근거
+    - 3/5: 진입가 & 최종 수익률 마감
+    - 4/5: 엔딩 전 후원 안내 (X용 한/일: 프로필 링크 Rumble | 럼블 영어: 우측 하단 TIP 럼블월렛)
+    - 5/5: 공통 엔딩 (팔로우 + 알림설정)
+    """
     base = str(close_info.get("base_coin") or str(close_info.get("symbol", "")).replace("USDT", "")).upper()
     hook_ko = str(close_info.get("x_hook_ko") or "").strip()
     hook_jp = str(close_info.get("x_hook_jp") or "").strip()
@@ -1466,44 +1473,58 @@ def _build_profit_narration_plan(close_info, entry_p, total_realized_pct, create
         date_en = dt_utc.strftime("%b %d")
         date_en_spoken = dt_utc.strftime("%B %d")
         raw_specs = [
-            _unified_opening_spec("en"),
+            _unified_opening_spec("en", step_str="1 / 5"),
             {
-                "step": "2 / 4", "tag": "SIGNAL",
+                "step": "2 / 5", "tag": "SIGNAL",
                 "l1": f'{date_en}, spotted on "{hook_en}"',
                 "l2": f"${base} triggered on the bullish scanner",
                 "sub": "",
                 "tts_text": f"On {date_en_spoken}, {base} was spotted on the scanner based on {hook_en}.",
             },
             {
-                "step": "3 / 4", "tag": "PROFIT",
+                "step": "3 / 5", "tag": "PROFIT",
                 "l1": f"Entry ${entry_str} · Final Return +{pct_str}%",
                 "l2": "Position closed in profit ❤️",
                 "sub": "",
                 "tts_text": f"Entry price {entry_num} dollars. Closed with a final return of plus {pct_spoken} percent.",
             },
-            _unified_ending_spec("en"),
+            {
+                "step": "4 / 5", "tag": "SUPPORT",
+                "l1": "If this helped you take profit, a coffee or server tip",
+                "l2": "via TIP (Rumble Wallet) at the bottom right is a huge help ☕",
+                "sub": "",
+                "tts_text": "If this helped you take profit, supporting server costs or a cup of coffee using the TIP button with Rumble Wallet at the bottom right would be a huge help.",
+            },
+            _unified_ending_spec("en", step_str="5 / 5"),
         ]
     else:
         voice, rate, gtts_lang = JP_TTS_VOICE, JP_TTS_RATE, "ja"
         dt_kst = datetime.fromtimestamp(created_at, tz=KST)
         date_ko, date_jp = f"{dt_kst.month}월 {dt_kst.day}일", f"{dt_kst.month}月{dt_kst.day}日"
         raw_specs = [
-            _unified_opening_spec("kr_jp"),
+            _unified_opening_spec("kr_jp", step_str="1 / 5"),
             {
-                "step": "2 / 4", "tag": "SIGNAL",
+                "step": "2 / 5", "tag": "SIGNAL",
                 "l1": f'{date_ko}, "{hook_ko}" 근거로',
                 "l2": f"${base} 종목이 검색기에 포착되었습니다",
                 "sub": f"{date_jp}、「{hook_jp}」で{base}を捕捉",
                 "tts_text": f"{date_jp}、「{hook_jp}」の根拠で、{base}がスキャナーに捕捉されました。",
             },
             {
-                "step": "3 / 4", "tag": "PROFIT",
+                "step": "3 / 5", "tag": "PROFIT",
                 "l1": f"진입가격 {entry_str} 달러 · 최종 수익률 +{pct_str}%",
                 "l2": "마감되었습니다 ❤️",
                 "sub": f"エントリー ${entry_str} · 最終収益率 +{pct_str}% で決済されました ❤️",
                 "tts_text": f"エントリー価格、{entry_num}ドル。最終収益率、プラス{pct_spoken}パーセントで決済されました。",
             },
-            _unified_ending_spec("kr_jp"),
+            {
+                "step": "4 / 5", "tag": "SUPPORT",
+                "l1": "수익실현의 도움이 되셨다면, 프로필 링크(Rumble)에서",
+                "l2": "서버비·커피 한 잔 후원해주시면 큰 힘이 됩니다 ☕",
+                "sub": "利益確定のお役に立てましたら、プロフィールのRumbleリンクからサーバー代やコーヒー1杯のご支援をいただけると大きな励みになります ☕",
+                "tts_text": "利益確定のお役に立てましたら、プロフィールのランブルリンクから、サーバー代やコーヒー一杯のご支援をいただけると、大きな励みになります。",
+            },
+            _unified_ending_spec("kr_jp", step_str="5 / 5"),
         ]
 
     durs, paths = [], []
@@ -1517,20 +1538,23 @@ def _build_profit_narration_plan(close_info, entry_p, total_realized_pct, create
         durs.append(_probe_audio_duration_sec(mp3_p, default_sec=3.5))
         paths.append(mp3_p)
 
-    if not tts_ok or len(durs) != 4:
+    if not tts_ok or len(durs) != len(raw_specs):
         return [], base_total_sec, False, tts_err
 
     s0 = 0.25
     e0 = s0 + durs[0]
-    s1 = max(e0 + 0.55, 2.30)
+    s1 = max(e0 + 0.50, 2.30)
     e1 = s1 + durs[1]
-    s2 = max(e1 + 1.20, 16.20)
+    s2 = max(e1 + 1.00, 15.00)
     e2 = s2 + durs[2]
-    s3 = max(e2 + 0.85, 25.40)
+    s3 = max(e2 + 0.70, 22.00)
     e3 = s3 + durs[3]
-    final_total_sec = max(base_total_sec, e3 + 0.90)
+    s4 = max(e3 + 0.70, 28.00)
+    e4 = s4 + durs[4]
+    final_total_sec = max(base_total_sec, e4 + 0.90)
 
-    starts, ends = [s0, s1, s2, s3], [e0, e1, e2, e3]
+    starts = [s0, s1, s2, s3, s4]
+    ends = [e0, e1, e2, e3, e4]
     segments = []
     for i, sp in enumerate(raw_specs):
         segments.append({
@@ -1539,7 +1563,7 @@ def _build_profit_narration_plan(close_info, entry_p, total_realized_pct, create
             "audio_path": paths[i], "audio_start": round(starts[i], 3),
             "audio_dur": round(durs[i], 3), "audio_end": round(ends[i], 3),
             "sub_start": round(0.0 if i == 0 else starts[i] - 0.15, 3),
-            "sub_end": round(final_total_sec if i == 3 else starts[i + 1] - 0.15, 3),
+            "sub_end": round(final_total_sec if i == len(raw_specs) - 1 else starts[i + 1] - 0.15, 3),
         })
     return segments, final_total_sec, True, ""
 
@@ -1547,8 +1571,8 @@ def _build_profit_narration_plan(close_info, entry_p, total_realized_pct, create
 def generate_profit_replay_videos_bundle(close_info, include_clean=True, lang="kr_jp"):
     """
     [익절 리플레이 풀HD 세로형 1080x1440 엔진]
-    - lang="kr_jp": X용 (한/일 자막 · 일본어 음성)
-    - lang="en": 럼블 전용 (차트·자막·음성 100% 영문 · 한글/일어 0%)
+    - lang="kr_jp": X용 (5단계 한/일 자막 · 일본어 음성 · 4/5 Rumble 프로필 링크 후원 안내 포함)
+    - lang="en": 럼블 전용 (5단계 100% 영문 차트·자막·음성 · 4/5 우측 하단 TIP 럼블월렛 후원 안내 포함)
     """
     global LAST_VIDEO_ERROR
     LAST_VIDEO_ERROR = ""
@@ -1767,7 +1791,7 @@ body{{background:#131722;font-family:'Noto Sans CJK KR','Noto Sans KR','Noto San
   </div>
   <div id="bottom-panel">
     <div id="clean-card"><div class="cc-hook">📌 {html.escape(hook_card)}</div><div class="cc-grid"><div class="cc-box"><span class="cc-k">{ui_clean_lbls[0]}</span><span class="cc-v">${fmt_price(entry_p)}</span></div><div class="cc-box"><span class="cc-k">{ui_clean_lbls[1]}</span><span class="cc-v" style="color:#4cc9f0">+{max_fav_val:.1f}%</span></div><div class="cc-box"><span class="cc-k">{ui_clean_lbls[2]}</span><span class="cc-v cc-v-profit">+{total_realized_pct:.2f}%</span></div><div class="cc-box"><span class="cc-k">{ui_clean_lbls[3]}</span><span class="cc-v">{hold_str}</span></div></div></div>
-    <div id="sub-card"><div class="sub-head"><span class="sub-badge">{ui_badge}</span><span class="sub-step" id="sub-step">1 / 4</span></div><div class="sub-box"><div class="sub-l1" id="sub-l1"></div><div class="sub-l2" id="sub-l2"></div><div class="sub-jp" id="sub-jp"></div></div></div>
+    <div id="sub-card"><div class="sub-head"><span class="sub-badge">{ui_badge}</span><span class="sub-step" id="sub-step">1 / 5</span></div><div class="sub-box" id="sub-box"><div class="sub-l1" id="sub-l1"></div><div class="sub-l2" id="sub-l2"></div><div class="sub-jp" id="sub-jp"></div></div></div>
   </div>
   <div class="tv-footer"><span>{ui_footer}</span><div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div></div>
 </div><script>
@@ -1775,7 +1799,13 @@ const cAll={json.dumps(candles_js)},vAll={json.dumps(vol_js)},m5All={json.dumps(
 const entryIdx={entry_idx},exitIdx={exit_idx},entryP={entry_p},exitP={exit_p},tp1P={tp1_p},tp2P={tp2_p},tp3P={tp3_p},slP={sl_p},decimals={decimals},yMinAnchor={y_min_anchor},yMaxAnchor={y_max_anchor};
 function fmtP(v){{if(!v||v<=0)return '0.0000';return v>=1000?v.toLocaleString('en-US',{{minimumFractionDigits:2,maximumFractionDigits:2}}):v.toFixed(decimals);}}
 const HEART_SVG='<svg style="display:inline-block;width:0.95em;height:0.95em;vertical-align:-0.12em;margin-left:4px" viewBox="0 0 24 24" fill="#ff3b5c"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
-function setTextWithHeart(el,txt){{const s=String(txt||'');if(s.indexOf('❤️')===-1){{el.textContent=s;return;}}const esc=s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');el.innerHTML=esc.split('❤️').join(HEART_SVG);}}
+const COFFEE_SVG='<svg style="display:inline-block;width:1.0em;height:1.0em;vertical-align:-0.14em;margin-left:5px" viewBox="0 0 24 24" fill="none"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z" fill="#d97706" stroke="#fde68a" stroke-width="1.6"/><path d="M16 10h2.2a2.3 2.3 0 0 1 0 4.6H16" stroke="#fde68a" stroke-width="1.8" stroke-linecap="round"/><path d="M8 6.2c0-1 .8-1.4.8-2.2M11.5 6.2c0-1 .8-1.4.8-2.2" stroke="#fde68a" stroke-width="1.6" stroke-linecap="round"/><path d="M3 21h14" stroke="#fde68a" stroke-width="1.8" stroke-linecap="round"/></svg>';
+function setTextWithIcons(el,txt){{
+  const s=String(txt||'');
+  if(s.indexOf('❤️')===-1&&s.indexOf('☕')===-1){{el.textContent=s;return;}}
+  const esc=s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  el.innerHTML=esc.split('❤️').join(HEART_SVG).split('☕').join(COFFEE_SVG);
+}}
 const chart=LightweightCharts.createChart(document.getElementById('chart-box'),{{width:960,height:836,layout:{{background:{{type:'solid',color:'#131722'}},textColor:'#d1d4dc',fontSize:12}},grid:{{vertLines:{{color:'#1e222d'}},horzLines:{{color:'#1e222d'}}}},watermark:{{visible:true,fontSize:66,horzAlign:'center',vertAlign:'center',color:'rgba(209,212,220,0.14)',text:'{WATERMARK_HANDLE}',fontStyle:'bold'}},rightPriceScale:{{borderColor:'#2a2e39',scaleMargins:{{top:0.06,bottom:0.09}},entireTextOnly:true}},timeScale:{{borderColor:'#2a2e39',timeVisible:true,rightOffset:2}},localization:{{priceFormatter:fmtP}}}});
 chart.addLineSeries({{color:'rgba(0,0,0,0)',lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false}}).setData([{{time:cAll[0].time,value:yMinAnchor}},{{time:wsTail[wsTail.length-1].time,value:yMaxAnchor}}]);
 const candleSeries=chart.addCandlestickSeries({{upColor:'#26a69a',downColor:'#ef5350',borderUpColor:'#26a69a',borderDownColor:'#ef5350',wickUpColor:'#26a69a',wickDownColor:'#ef5350',priceLineVisible:false,lastValueVisible:false,priceFormat:{{type:'custom',minMove:{min_move},formatter:fmtP}}}});
@@ -1790,7 +1820,7 @@ candleSeries.setData(cAll.concat(wsTail));chart.timeScale().fitContent();
 const elO=document.getElementById('oh-o'),elH=document.getElementById('oh-h'),elL=document.getElementById('oh-l'),elC=document.getElementById('oh-c'),elTime=document.getElementById('top-time'),elM5=document.getElementById('lg-m5'),elM9=document.getElementById('lg-m9'),elM20=document.getElementById('lg-m20');
 const elHud=document.getElementById('live-hud'),elPnl=document.getElementById('pnl-val'),elPnlBox=document.getElementById('pnl-box'),elStage=document.getElementById('stage-pill'),elProg=document.getElementById('prog-fill');
 const elOverlay=document.getElementById('result-overlay'),elArcPath=document.getElementById('arc-path'),elArcHead=document.getElementById('arc-head'),elExitGuide=document.getElementById('exit-guide'),elEntryGuide=document.getElementById('entry-guide'),elDotEntry=document.getElementById('dot-entry'),elDotExit=document.getElementById('dot-exit'),elCoExit=document.getElementById('callout-exit'),elCoEntry=document.getElementById('callout-entry'),elCaretExit=document.getElementById('caret-exit'),elCaretEntry=document.getElementById('caret-entry');
-const elCleanCard=document.getElementById('clean-card'),elSubCard=document.getElementById('sub-card'),elSubStep=document.getElementById('sub-step'),elSubL1=document.getElementById('sub-l1'),elSubL2=document.getElementById('sub-l2'),elSubJp=document.getElementById('sub-jp');
+const elCleanCard=document.getElementById('clean-card'),elSubCard=document.getElementById('sub-card'),elSubBox=document.getElementById('sub-box'),elSubStep=document.getElementById('sub-step'),elSubL1=document.getElementById('sub-l1'),elSubL2=document.getElementById('sub-l2'),elSubJp=document.getElementById('sub-jp');
 let arcTotalLen=1,geometryReady=false,showExitGuide=false,showEntryGuide=false;
 
 function setupResultOverlayGeometry(){{
@@ -1839,8 +1869,23 @@ window.__setBottomMode=function(mode,subIdx){{
   if(mode==='sub'&&subMeta.length>0){{
     elCleanCard.style.display='none';elSubCard.style.display='flex';
     const seg=subMeta[Math.max(0,Math.min(subMeta.length-1,subIdx||0))];
-    elSubStep.textContent=seg.step;setTextWithHeart(elSubL1,seg.l1);setTextWithHeart(elSubL2,seg.l2);setTextWithHeart(elSubJp,seg.sub||'');
-    elSubL2.style.color=(seg.tag==='PROFIT')?'#00e676':'#ffd166';
+    elSubStep.textContent=seg.step;
+    setTextWithIcons(elSubL1,seg.l1);setTextWithIcons(elSubL2,seg.l2);setTextWithIcons(elSubJp,seg.sub||'');
+    if(seg.tag==='SUPPORT'){{
+      elSubBox.style.padding='14px 20px';
+      elSubBox.style.gap='7px';
+      elSubL1.style.fontSize='23.5px';
+      elSubL2.style.fontSize='22.5px';
+      elSubJp.style.fontSize='15.5px';
+      elSubL2.style.color='#fde68a';
+    }} else {{
+      elSubBox.style.padding='18px 22px';
+      elSubBox.style.gap='10px';
+      elSubL1.style.fontSize='27px';
+      elSubL2.style.fontSize='25px';
+      elSubJp.style.fontSize='17px';
+      elSubL2.style.color=(seg.tag==='PROFIT')?'#00e676':'#ffd166';
+    }}
   }} else {{elSubCard.style.display='none';elCleanCard.style.display='flex';}}
 }};
 const THUMB_END={thumb_end},PLAY_START={play_start},PLAY_END={play_end},postSteps=Math.max(1,exitIdx-entryIdx);
@@ -1947,7 +1992,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{{setupResultOverlayGeometry
                 if not voiced_bytes:
                     voiced_error = f"음성 합성({lang}) 오류: {v_err}"
 
-            print(f"[익절 리플레이 완료({lang})] {symbol} ({tf_label}, {len(df_win)}봉 · {VIDEO_W}x{VIDEO_H}) | TTS={'OK' if voiced_bytes else 'FAIL'} ({voiced_frames / in_fps:.1f}초)")
+            print(f"[익절 리플레이 완료({lang})] {symbol} ({tf_label}, {len(df_win)}봉 · {VIDEO_W}x{VIDEO_H}) | 5단계 · TTS={'OK' if voiced_bytes else 'FAIL'} ({voiced_frames / in_fps:.1f}초)")
             return {
                 "clean": clean_bytes, "voiced": voiced_bytes,
                 "width": VIDEO_W, "height": VIDEO_H,
