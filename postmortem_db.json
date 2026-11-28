@@ -1,6 +1,36 @@
 {
   "records": [
     {
+      "id": "TRUMPUSDT_1795443856",
+      "engine_ver": "v3",
+      "symbol": "TRUMPUSDT",
+      "track_type": "TRACK_D",
+      "score": 99,
+      "entry_price": 0.9601,
+      "stop_price": 0.76808,
+      "sl_trigger_price": 0.7605,
+      "sl_pct": 20,
+      "actual_sl_pct": -20.94,
+      "created_at": 1795443856,
+      "sl_at": 1795860035,
+      "hold_minutes": 6936,
+      "max_high_price": 0.9696,
+      "max_favorable_pct": 0.99,
+      "vol_mult": 11.05,
+      "rsi6_15m": 80.5,
+      "oi_m": 9.1,
+      "oi_ratio": 81.5,
+      "funding_pct": -0.0052,
+      "change_24h": 7.79,
+      "btc_1h_pct": 0.0,
+      "kst_block": "21-24",
+      "cause": "단기 고점 RSI 과열 추격",
+      "autopsy_done": false,
+      "autopsy_type": "",
+      "autopsy_post_high_pct": 0.0,
+      "autopsy_post_low_pct": 0.0
+    },
+    {
       "id": "KAVAUSDT_1795824128",
       "engine_ver": "v3",
       "symbol": "KAVAUSDT",
@@ -804,6 +834,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795858083,
+  "updated_at": 1795860051,
   "engine_ver": "v3"
 }
