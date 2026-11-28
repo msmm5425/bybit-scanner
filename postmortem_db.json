@@ -115,10 +115,10 @@
       "btc_1h_pct": 0.03,
       "kst_block": "21-24",
       "cause": "비트 연동 급락 및 지지선 이탈",
-      "autopsy_done": false,
-      "autopsy_type": "",
-      "autopsy_post_high_pct": 0.0,
-      "autopsy_post_low_pct": 0.0
+      "autopsy_done": true,
+      "autopsy_type": "NEUTRAL_CHOP",
+      "autopsy_post_high_pct": -5.2,
+      "autopsy_post_low_pct": -1.2
     },
     {
       "id": "MONUSDT_1795745596",
@@ -1001,6 +1001,6 @@
       "kst_block": "12-15"
     }
   ],
-  "updated_at": 1795883109,
+  "updated_at": 1795884472,
   "engine_ver": "v3"
 }
