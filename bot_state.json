@@ -3807,33 +3807,6 @@
     "SEIUSDT": 1795861711
   },
   "sl_history": {
-    "USUALUSDT_1795514236": {
-      "symbol": "USUALUSDT",
-      "track_type": "TRACK_A",
-      "score": 91,
-      "entry_price": 0.01145,
-      "stop_price": 0.010763,
-      "sl_trigger_price": 0.01045,
-      "sl_pct": 6,
-      "created_at": 1795514236,
-      "sl_at": 1795617813,
-      "hold_minutes": 1726,
-      "max_high_price": 0.0125,
-      "max_favorable_pct": 9.17,
-      "vol_mult": 5.56,
-      "rsi6_15m": 47.5,
-      "oi_m": 0.4,
-      "oi_ratio": 14.3,
-      "funding_pct": 0.005,
-      "change_24h": -1.9,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "볼린저/켈트너 초응축(2.2%) + 15m PPO(+0.18%) 전환",
-        "15m 매수 델타(CVD)·OBV 바닥 흡수 확인",
-        "[건전한 롱 매집] OI +2.2% 동반 상승(+10점)",
-        "PPO 파동 정렬(1H PPO 0선강세)"
-      ]
-    },
     "NAORISUSDT_1795118707": {
       "symbol": "NAORISUSDT",
       "track_type": "TRACK_D",
