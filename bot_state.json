@@ -3735,32 +3735,6 @@
     "DOTUSDT": 1795847327
   },
   "sl_history": {
-    "HUSDT_1795381472": {
-      "symbol": "HUSDT",
-      "track_type": "TRACK_A",
-      "score": 99,
-      "entry_price": 0.01199,
-      "stop_price": 0.011271,
-      "sl_trigger_price": 0.01127,
-      "sl_pct": 6,
-      "created_at": 1795381472,
-      "sl_at": 1795592282,
-      "hold_minutes": 3513,
-      "max_high_price": 0.0141,
-      "max_favorable_pct": 17.6,
-      "vol_mult": 2.51,
-      "rsi6_15m": 67.7,
-      "oi_m": 1.4,
-      "oi_ratio": 23.3,
-      "funding_pct": 0.005,
-      "change_24h": 7.87,
-      "btc_1h_pct": 0.0,
-      "reasons": [
-        "TTM Squeeze(BB<KC) 발사(응축폭 3.5%) + 15m PPO(+0.37%) 상방",
-        "OI 집중도 최상(23%)",
-        "PPO 파동 정렬(15m PPO 골든크로스 · 1H PPO 0선강세)"
-      ]
-    },
     "ICNTUSDT_1795570843": {
       "symbol": "ICNTUSDT",
       "track_type": "TRACK_E",
